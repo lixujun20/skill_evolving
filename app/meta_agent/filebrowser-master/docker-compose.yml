@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    user: "1000:1000"   # 改成宿主机用户的 UID:GID，避免权限问题
+    ports:
+      - "8090:80"
+    volumes:
+      - /data/meta-agent/test_file/files:/srv              # 文件目录
+      - ./database:/database
+      - ./settings.json:/config.json
+    restart: unless-stopped

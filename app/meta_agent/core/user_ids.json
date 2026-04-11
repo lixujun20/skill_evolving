@@ -1,0 +1,83 @@
+{
+    "session_to_user_info": {
+        "sid-a": {
+            "user_id": 1,
+            "password": "7JBngWYMMsT3heT_hm_5vA",
+            "assigned_at": 1770818195.7103508,
+            "expired": true
+        },
+        "sid-b": {
+            "user_id": 2,
+            "password": "mZP-xvQ5dYrx6NwK5HcAAw",
+            "assigned_at": 1770818195.7107437,
+            "expired": true
+        },
+        "sid-c": {
+            "user_id": 2,
+            "password": "vTD-vc1g0kiKIeKoljrtnQ",
+            "assigned_at": 1770818195.7126498,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjYiLCJleHAiOjE3NzA5ODY4Njd9.rwl0xU6hy0QNGVAA_lxR2TTplMkvHp8q3NzOdVfnOm8": {
+            "user_id": 1,
+            "password": "aX3PdEfphB5zWTaSgl2fkg",
+            "assigned_at": 1770862146.5067718,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjYiLCJleHAiOjE3NzEwNTg0NTZ9.-3bhKUW6A48hdiiXSI4UzvPoc4z5sEpZ3XhmtwZXYos": {
+            "user_id": 1,
+            "password": "3u0kZQ9ZEgwETNLgDLRG8Q",
+            "assigned_at": 1770878463.7063282,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjYiLCJleHAiOjE3NzEwNTg2MTN9.otTw5AC03Ui6m687BKmpNbT_0PqLYteuX4SjNGHo-uU": {
+            "user_id": 2,
+            "password": "yuqonu-58K6C6OPqD0qgZQ",
+            "assigned_at": 1770878618.1543612,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjUiLCJleHAiOjE3NzA5ODIxMTh9.ufYJAMLd5hIQlFXd1DpddDkxKwlVlDR8ct9jIucX4wk": {
+            "user_id": 1,
+            "password": "e5kgc9eIvv_M8vWOsXVB6w",
+            "assigned_at": 1770883510.5058386,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjUiLCJleHAiOjE3NzE1NjMyNDd9.3FHcfDlfVsH8hHmTJNWShmkPaJyX9hGM6fA0mybOejM": {
+            "user_id": 1,
+            "password": "ApqG3bVRjEW_J76R0Gm9kw",
+            "assigned_at": 1771383254.8536713,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjUiLCJleHAiOjE3NzI4MDcwNTN9.x2U5Mv_O-qOD6g5DeRqqZntNMm4XCiutQys7CtX3RiI": {
+            "user_id": 1,
+            "password": "B9BlIsab0u5c6Lsf6NHdxA",
+            "assigned_at": 1772627332.9737446,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjUiLCJleHAiOjE3NzI4NTgyNTN9.hF78zG3BpySZ2xQ6WKlgJFOLw9l1MO6DjuNI46zn3sE": {
+            "user_id": 1,
+            "password": "H7btMv-0_pkYtlNSK3cVew",
+            "assigned_at": 1772678285.6117623,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjUiLCJleHAiOjE3NzI4NTg3MDd9.mT5XdD9JTJWsnPR6CysC5jcByYeJydAHswkmb4qMESc": {
+            "user_id": 1,
+            "password": "Ztg9Q7fRsg4una47rPOESQ",
+            "assigned_at": 1772678710.6921523,
+            "expired": true
+        },
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjUiLCJleHAiOjE3NzI4NTg5ODR9.A8st1gXUZVgVW98zZapfnihdYk64gT-xCPqZaWth2Yw": {
+            "user_id": 1,
+            "password": "b-dgAmkZv5BPjgy2TG49WQ",
+            "assigned_at": 1772678988.3302982,
+            "expired": false
+        }
+    },
+    "used_ids": [
+        1
+    ],
+    "next_id": 1,
+    "fifo": [
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJsaXhqMjUiLCJleHAiOjE3NzI4NTg5ODR9.A8st1gXUZVgVW98zZapfnihdYk64gT-xCPqZaWth2Yw"
+    ]
+}

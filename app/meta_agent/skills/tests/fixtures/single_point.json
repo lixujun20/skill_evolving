@@ -1,0 +1,42 @@
+[
+  {
+    "id": "sp_01",
+    "skill_name": "calculate_average_grade",
+    "seed_code": "def calculate_average_grade(grades):\n    \"\"\"v1.0 stub: basic average.\"\"\"\n    return sum(grades) / len(grades)",
+    "query": "I have 30 students' quiz scores. Calculate average, median, std deviation and identify top performers (>=90) and at-risk students (<60).",
+    "noise_skills": [
+      {
+        "name": "lesson_planner",
+        "seed_code": "def plan_lesson(topic, grade_level):\n    \"\"\"v1.0 stub: basic lesson plan.\"\"\"\n    return f'Lesson plan for {topic} at grade {grade_level}'"
+      }
+    ]
+  },
+  {
+    "id": "sp_02",
+    "skill_name": "lesson_planner",
+    "seed_code": "def plan_lesson(topic, grade_level):\n    \"\"\"v1.0 stub: basic lesson plan.\"\"\"\n    return f'Lesson plan for {topic} at grade {grade_level}'",
+    "query": "Create a detailed lesson plan for teaching fractions to 4th graders, including learning objectives, step-by-step activities, and assessment criteria.",
+    "noise_skills": [
+      {
+        "name": "calculate_average_grade",
+        "seed_code": "def calculate_average_grade(grades):\n    \"\"\"v1.0 stub: basic average.\"\"\"\n    return sum(grades) / len(grades)"
+      }
+    ]
+  },
+  {
+    "id": "sp_03",
+    "skill_name": "generate_quiz",
+    "seed_code": "def generate_quiz(topic, num_questions=5):\n    \"\"\"v1.0 stub: generate a basic quiz.\"\"\"\n    return [f'Question {i+1} about {topic}' for i in range(num_questions)]",
+    "query": "Generate a 10-question multiple-choice quiz on photosynthesis for 7th graders. Each question should have 4 options, a correct answer, and a brief explanation.",
+    "noise_skills": [
+      {
+        "name": "lesson_planner",
+        "seed_code": "def plan_lesson(topic, grade_level):\n    \"\"\"v1.0 stub: basic lesson plan.\"\"\"\n    return f'Lesson plan for {topic} at grade {grade_level}'"
+      },
+      {
+        "name": "calculate_average_grade",
+        "seed_code": "def calculate_average_grade(grades):\n    \"\"\"v1.0 stub: basic average.\"\"\"\n    return sum(grades) / len(grades)"
+      }
+    ]
+  }
+]

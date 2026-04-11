@@ -1,0 +1,42 @@
+{
+  "groups": {
+    "A": {
+      "skill_name": "calculate_average_grade",
+      "seed_code": "def calculate_average_grade(grades):\n    \"\"\"v1.0 stub: basic average.\"\"\"\n    return sum(grades) / len(grades)",
+      "queries": [
+        "Calculate basic average grade for the class of 25 students.",
+        "Now I also need median, mode, std deviation, and identify failing students below 60.",
+        "Add support for weighted grades where each assignment has a different weight percentage."
+      ],
+      "noise_skills": [
+        {
+          "name": "lesson_planner",
+          "seed_code": "def plan_lesson(topic, grade_level):\n    \"\"\"v1.0 stub.\"\"\"\n    return f'Plan: {topic} for grade {grade_level}'"
+        }
+      ]
+    },
+    "B": {
+      "skill_name": "lesson_planner",
+      "seed_code": "def plan_lesson(topic, grade_level):\n    \"\"\"v1.0 stub: basic lesson plan.\"\"\"\n    return f'Basic plan for {topic} at grade {grade_level}'",
+      "queries": [
+        "Create a lesson plan for teaching fractions to 4th graders.",
+        "Make the lesson plan include learning objectives, activities, and assessment criteria.",
+        "Add support for differentiated instruction to accommodate students at different learning levels."
+      ],
+      "noise_skills": [
+        {
+          "name": "calculate_average_grade",
+          "seed_code": "def calculate_average_grade(grades):\n    \"\"\"v1.0 stub.\"\"\"\n    return sum(grades) / len(grades)"
+        }
+      ]
+    }
+  },
+  "sequence": [
+    {"seq_id": 1, "group": "A", "query_idx": 0},
+    {"seq_id": 2, "group": "B", "query_idx": 0},
+    {"seq_id": 3, "group": "A", "query_idx": 1},
+    {"seq_id": 4, "group": "B", "query_idx": 1},
+    {"seq_id": 5, "group": "A", "query_idx": 2},
+    {"seq_id": 6, "group": "B", "query_idx": 2}
+  ]
+}

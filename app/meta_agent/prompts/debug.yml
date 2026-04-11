@@ -1,0 +1,197 @@
+app:
+  description: ''
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  mode: advanced-chat
+  name: test2
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openrouter:0.0.17@0a7133317eb433041708b9231ef178a618c71e2bea6889afd02fea73565ffb8b
+    version: null
+kind: app
+version: 0.4.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - remote_url
+      - local_file
+      enabled: false
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: llm
+      id: 1755450541905-source-1758786999037-target
+      source: '1755450541905'
+      sourceHandle: source
+      target: '1758786999037'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1758786999037-source-1758809364811-target
+      source: '1758786999037'
+      sourceHandle: source
+      target: '1758809364811'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1758786999037-fail-branch-1758809373455-target
+      source: '1758786999037'
+      sourceHandle: fail-branch
+      target: '1758809373455'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: ''
+        selected: false
+        title: 开始
+        type: start
+        variables: []
+      height: 52
+      id: '1755450541905'
+      position:
+        x: 260
+        y: 277.42857142857144
+      positionAbsolute:
+        x: 260
+        y: 277.42857142857144
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: false
+          variable_selector: []
+        error_strategy: fail-branch
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: openai/gpt-5
+          provider: langgenius/openrouter/openrouter
+        prompt_template:
+        - id: 21108dae-8281-4384-b469-d53f2149f41c
+          role: system
+          text: ''
+        - id: 954390e4-b8b1-4cfe-bc20-d1619057830d
+          role: user
+          text: What is a coroutine?
+        selected: false
+        title: LLM
+        type: llm
+        vision:
+          enabled: false
+      height: 124
+      id: '1758786999037'
+      position:
+        x: 600.5714285714286
+        y: 277.42857142857144
+      positionAbsolute:
+        x: 600.5714285714286
+        y: 277.42857142857144
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: '{{#1758786999037.text#}}'
+        selected: false
+        title: 直接回复
+        type: answer
+        variables: []
+      height: 103
+      id: '1758809364811'
+      position:
+        x: 902.5714285714286
+        y: 277.42857142857144
+      positionAbsolute:
+        x: 902.5714285714286
+        y: 277.42857142857144
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: error
+        selected: true
+        title: 直接回复 2
+        type: answer
+        variables: []
+      height: 100
+      id: '1758809373455'
+      position:
+        x: 902.5714285714286
+        y: 419.42857142857144
+      positionAbsolute:
+        x: 902.5714285714286
+        y: 419.42857142857144
+      selected: true
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    viewport:
+      x: 56.000000000000114
+      y: 33.00000000000006
+      zoom: 0.7
+  rag_pipeline_variables: []

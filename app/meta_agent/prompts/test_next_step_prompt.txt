@@ -1,0 +1,25 @@
+Given the execution results of your tests, please carefully analyse the output of each tests one by one. Analyse in the following format:
+
+*** <test_name_1> ***
+(Analyses of <test_name_1>)
+<test_name_1> PASSED|FAILED!
+
+*** <test_name_2> ***
+(Analyses of <test_name_2>)
+<test_name_2> PASSED|FAILED!
+
+...
+
+*** <test_name_n> ***
+(Analyses of <test_name_n>)
+<test_name_n> PASSED|FAILED!
+
+Finally, please provide a summary of the results in the following format:
+
+To sum up, the tool \\boxed{PASSED|FAILED} the task. Failed tests are:
+(If any test failed, list the test numbers here)
+*** <test_name_f1> ***
+Explanation: (Explanation of why <test_name_f1> failed in a sentence)
+*** <test_name_f2> ***
+Explanation: (Explanation of why <test_name_f2> failed in a sentence)
+...

@@ -1,0 +1,275 @@
+You are a Python testing expert. Your task is to test a Python tool class provided to you.
+
+The tool class:
+- Implements an method called `async def execute(**kwargs)`
+- Returns a dict. If fails, will contain key `error` whose value represents the error message
+
+The provided tool code is a diff version between old and new versions. You are to decide whether any additional test code should be appended for the new version of the tool class, and add it if so.
+
+If decide to append, your test code must:
+- NOT use `unittest` or `pytest`. Print everything out (output, error...) for further analyses.
+- Instantiate tool with its classname directly. You can assume the class has been imported in advance.
+- Contain one or more test methods that call `await self.tool.execute(...)` with meaningful parameters
+- Cover all branches of execution of the tool. Cover both normal cases and error/edge cases
+- Print everything out (output, error...) for further analyses
+- Be only a Python code block — no explanations, comments, or markdown. Wrap the code block in triple backticks. 
+- Be strict about syntax correctness. The code must be ready to run as-is via `exec()` and loadable as `TestTool` from the global namespace.
+
+** Important: **You can reuse the old version test code even if you've decided to write a new one. You can assume you are **appending** to the old test code, not completely replacing it. Thus, you can reuse old functions, variables and so on.
+
+First decide whether the modified tool code requires modified test codes.
+
+If not, please generate only "\\boxed{NO MODIFICATION}" without any explanations. Otherwise, generate test code as described above.
+
+Here is an example:
+
+
+
+Name: CodeAnalyser
+
+
+Description: 
+
+A tool for performing syntactic analysis on code. It can perform analyses on Python code and return the ast of it.
+
+
+Parameters:
+
+{
+    "type": "object",
+    "properties": {
+        "code": {
+            "type": "string",
+            "description": "The code to analyze."
+        }
+    },
+    "required": ["code"],
+}
+
+
+Output schema:
+
+{
+    "type": "object",
+    "properties": {
+        "ast": {
+            "type": "ast.Module",
+            "description": "The abstract syntax tree of the code."
+        }
+    },
+    "required": ["ast"]
+}
+
+
+Code of the Tool Class:
+
+```python
+  import ast
+  from typing import Any
+
+  class CodeAnalyser(Tool):
+      name = "CodeAnalyser"
+      description = "A tool for performing syntactic analysis on code. It can perform analyses on Python code and return the abstract syntax tree (AST) of it."
+  
+      # Define parameters
+      parameters = {
+          "type": "object",
+          "properties": {
+              "code": {
+                  "type": "string",
+                  "description": "The code to analyze."
+              }
+          },
+          "required": ["code"],
+      }
+  
+      # Define output schema
+      output_schema = {
+          "type": "object",
+          "properties": {
+              "ast": {
+                  "type": "object",
+                  "description": "The abstract syntax tree (AST) of the code, represented as a Python object."
++             },
++             "node_count": {  # 新增功能：统计AST节点数量
++                 "type": "integer",
++                 "description": "The total number of nodes in the AST."
+              }
+          },
+-         "required": ["ast"]
++         "required": ["ast", "node_count"]
+?                           ++++++++++++++
+      }
+  
+      async def execute(self, code: str) -> ast.Module:
+          """
+          Perform syntactic analysis on the provided Python code and return its abstract syntax tree (AST).
+  
+          Args:
+              code (str): The Python code to analyze.
+  
+          Returns:
+              ToolResult: The result containing either a success with the AST or an error.
+          """
+          try:
+              # Validate input: Ensure code is provided and not empty
+              if not code.strip():
+                  return dict(error="No code provided. Please provide valid Python code to analyze.")
+  
+              # Try parsing the code into an AST
+              try:
+                  parsed_ast = ast.parse(code)
+              except SyntaxError as e:
+                  return dict(error=f"Syntax error while parsing the code: {str(e)}")
+              
+-             # Return success with the AST as a string (it could be converted to structured format if needed)
+-             return { "ast": ast_dict }
++             # 新增功能：统计AST节点数量
++             class NodeCounter(ast.NodeVisitor):
++                 def __init__(self):
++                     self.count = 0
++                 def visit(self, node):
++                     self.count += 1
++                     super().visit(node)
++             
++             counter = NodeCounter()
++             counter.visit(parsed_ast)
++             
++             # Return success with the AST and node count
++             return { "ast": ast.dump(parsed_ast), "node_count": counter.count }
+  
+          except Exception as e:
+              # Catch all unexpected errors
+              return dict(
+                  error=f"An unexpected error occurred: {str(e)}"
+              )
+```
+
+Current Test Code:
+```py
+import asyncio
+import json
+
+tool = CodeAnalyser()
+
+async def test_valid_code():
+    """Test normal behavior with valid Python code."""
+    print("Running: test_valid_code")
+    code = "def hello():\n    return 'Hello, World!'"
+    result = await tool.execute(code=code)
+    print("Result:")
+    print(json.dumps(result, indent=2, default=str))
+    if "error" in result:
+        print("Test Failed: Unexpected error was returned.")
+
+async def test_empty_code():
+    """Test the edge case of calling the tool with an empty string."""
+    print("Running: test_empty_code")
+    code = ""
+    result = await tool.execute(code=code)
+    print("Result:")
+    print(json.dumps(result, indent=2, default=str))
+    if "error" not in result or result["error"] != "No code provided. Please provide valid Python code to analyze.":
+        print("Test Failed: Expected error for empty code was not returned.")
+
+async def test_invalid_syntax_code():
+    """Test the edge case of code with syntax errors."""
+    print("Running: test_invalid_syntax_code")
+    code = "def invalid_syntax("
+    result = await tool.execute(code=code)
+    print("Result:")
+    print(json.dumps(result, indent=2, default=str))
+    if "error" not in result or not result["error"].startswith("Syntax error while parsing the code"):
+        print("Test Failed: Expected syntax error was not returned.")
+
+async def test_unexpected_exception():
+    """Test unexpected error handling by mocking within the tool."""
+    print("Running: test_unexpected_exception")
+
+    # Backup original method
+    original_execute = tool.execute
+
+    # Mock `execute` to simulate an unexpected exception
+    async def mock_execute(**kwargs):
+        raise RuntimeError("Simulated unexpected exception")
+
+    tool.execute = mock_execute
+
+    try:
+        code = "print('This will not be processed')"
+        result = await tool.execute(code=code)
+        print("Result:")
+        print(json.dumps(result, indent=2, default=str))
+    except RuntimeError as e:
+        print(f"Handled Mocked Exception: {e}")
+    finally:
+        # Restore original method
+        tool.execute = original_execute
+
+async def test_missing_parameters():
+    """Test what happens when required parameters are missing."""
+    print("Running: test_missing_parameters")
+    try:
+        # Do not pass "code" parameter
+        result = await tool.execute()
+        print("Result:")
+        print(json.dumps(result, indent=2, default=str))
+    except TypeError as e:
+        print("Caught TypeError as expected when missing parameters:")
+        print(e)
+
+async def test():
+    """Run all available tests."""
+    await asyncio.gather(test_valid_code(), test_empty_code(), test_invalid_syntax_code(), test_unexpected_exception(), test_missing_parameters())
+
+# Run all tests
+if __name__ == "__main__":
+    asyncio.run(test())
+```
+
+Your response:
+
+```py
+async def test_code_cnt():
+    """Test the node count feature."""
+    print("Running: test_code_cnt")
+    code = "def hello():\n    return 'Hello, World!'"
+    result = await tool.execute(code=code)
+    print("Result:")
+    print(json.dumps(result, indent=2, default=str))
+    assert result["node_count"] == 4
+
+async def test():
+    await asyncio.gather(test_valid_code(), test_empty_code(), test_invalid_syntax_code(), test_unexpected_exception(), test_missing_parameters(), test_code_cnt())
+
+# Run all tests
+if __name__ == "__main__":
+    asyncio.run(test())
+```
+
+In this example, you find a new feature(node count) in the new version of tool code. You decide to reuse old test code since other features are unchanged. You only add a new test case for the new feature, and re-define and override the main `test` function.
+
+Now please generate the test code depend on the following tool code:
+Name: {name}
+
+Description:
+
+{description}
+
+Parameters:
+
+{input_parameters}
+
+Output schema:
+
+{output_schema}
+
+Code of the tool class:
+
+{code}
+
+Current test code:
+
+{test_code}
+
+Your response (If you need to modify the test code, please provide the modified test code. Otherwise, output "\boxed{NO MODIFICATION}" only):

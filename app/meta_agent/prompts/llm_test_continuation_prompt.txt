@@ -1,0 +1,291 @@
+You are a Python testing expert. Your task is to test a Python tool class provided to you.
+
+The tool class:
+- Inherits from `MadeTool`
+- Implements an method called `execute(**kwargs)`
+- Returns a `ToolResult` object that may contain an `output` field (on success) or an `error` field (on failure)
+
+The provided tool code is a diff version between old and new versions. You are to decide whether any additional test code should be appended for the new version of the tool class, and add it if so.
+
+If decide to append, your test code must:
+- NOT use `unittest` or `pytest`. Print everything out (output, error...) for further analyses.
+- Instantiate tool with its classname directly. You can assume the class has been imported in advance.
+- Contain one or more test methods that call `self.tool.execute(...)` with meaningful parameters
+- Access expected values in `result.output` or `result.error`
+- Assert `result.output` to be a json string with consistent format of `output_schema`
+- Cover all branches of execution of the tool. Cover both normal cases and error/edge cases
+- Assume the `ToolResult` object has `.output` and `.error` fields
+- Be only a Python code block — no explanations, comments, or markdown. Wrap the code block in triple backticks. 
+- Be strict about syntax correctness. The code must be ready to run as-is via `exec()` and loadable as `TestTool` from the global namespace.
+
+** Important: **You can reuse the old version test code even if you've decided to write a new one. You can assume you are **appending** to the old test code, not completely replacing it. Thus, you can reuse old functions, variables and so on.
+
+First decide whether the modified tool code requires modified test codes.
+
+If not, please generate only "\\boxed{NO MODIFICATION}" without any explanations. Otherwise, generate test code as described above.
+
+Here is an example:
+
+Name: TextProcessingTool
+
+
+Description: 
+
+A tool for processing text. It supports rule-based sentiment analysis and LLM-based operations such as text summarization or explanation.
+
+
+
+Parameters:
+
+{
+    "type": "object",
+    "properties": {
+        "operation": {
+            "type": "string",
+            "description": "The operation to perform on the text. Must be one of: 'sentiment_analysis', 'summarization', 'explanation'.",
+            "enum": ["sentiment_analysis", "summarization", "explanation"],
+        },
+        "text": {
+            "type": "string",
+            "description": "The input text to process.",
+        },
+        "use_llm": {
+            "type": "boolean",
+            "description": "Whether to use an LLM-based approach for the operation.",
+        },
+    },
+    "required": ["operation", "text"],
+}
+
+
+Output schema:
+
+{
+    "type": "object",
+    "properties": {
+        "result": {
+            "type": "string",
+            "description": "The result of text processing."
+        }
+    },
+    "required": ["result"]
+}
+
+
+Code of the Tool Class:
+```py
+  from typing import Any, Dict
+  from pydantic import Field
+  from app.old_tool.base import MadeTool, ToolResult
+  from app.llm import LLM
+  from app.schema import Message
+  
+  class TextProcessingTool(MadeTool):
+      name: str = "TextProcessingTool"
+      description: str = (
+          "A tool for processing text. It supports rule-based sentiment analysis and LLM-based operations "
+          "such as text summarization or explanation."
+      )
+      parameters: Dict = {
+          "type": "object",
+          "properties": {
+              "operation": {
+                  "type": "string",
+                  "description": "The operation to perform on the text. Must be one of: 'sentiment_analysis', 'summarization', 'explanation'.",
+-                 "enum": ["sentiment_analysis", "summarization", "explanation"],
++                 "enum": ["sentiment_analysis", "summarization", "explanation", "grammar check"],
+?                                                                              +++++++++++++++++
+              },
+              "text": {
+                  "type": "string",
+                  "description": "The input text to process.",
+              },
+              "use_llm": {
+                  "type": "boolean",
+                  "description": "Whether to use an LLM-based approach for the operation.",
+              },
+          },
+          "required": ["operation", "text"],
+      }
+      output_schema: Dict = {
+          "type": "object",
+          "properties": {
+              "result": {
+                  "type": "string",
+                  "description": "The processed text."
+              },
+          },
+      }
+  
+      # Field for integrating the LLM
+      llm: LLM = Field(default_factory=LLM)
+  
+      async def execute(self, **kwargs) -> ToolResult:
+          operation = kwargs.get("operation")
+          text = kwargs.get("text")
+          use_llm = kwargs.get("use_llm", False)  # Default to rule-based if not specified
+  
+          if not use_llm:
+              # Rule-based operation
+              try:
+                  result = self._rule_based_processing(operation, text)
+                  return ToolResult(output=json.dumps({"result": result}))
+              except Exception as e:
+                  return ToolResult(error=str(e))
+          else:
+              # LLM-based processing
+              try:
+                  llm_request = self._build_llm_request(operation, text)
+                  llm_result = await self.llm.ask(user=[Message.user_message(llm_request)])
+                  return ToolResult(output=json.dumps({"result": llm_result}))
+              except Exception as e:
+                  return ToolResult(error=str(e))
+  
+      def _rule_based_processing(self, operation: str, text: str) -> Any:
+          """
+          Perform textual operations using predefined rules.
+          """
+          if operation == "sentiment_analysis":
+              return self._sentiment_analysis(text)
+          else:
+              raise ValueError(f"Operation {operation} is only supported with use_llm=True.")
+  
+      def _sentiment_analysis(self, text: str) -> str:
+          """
+          A simple rule-based sentiment analysis implementation.
+          """
+          positive_keywords = ["good", "great", "happy", "excellent"]
+          negative_keywords = ["bad", "sad", "terrible", "poor"]
+  
+          text_lower = text.lower()
+          positive_score = sum(text_lower.count(word) for word in positive_keywords)
+          negative_score = sum(text_lower.count(word) for word in negative_keywords)
+  
+          if positive_score > negative_score:
+              return "Positive sentiment detected in the text."
+          elif negative_score > positive_score:
+              return "Negative sentiment detected in the text."
+          else:
+              return "Neutral sentiment detected in the text."
+  
+      def _build_llm_request(self, operation: str, text: str) -> str:
+          """
+          Build a request string for the LLM operation.
+          """
+          if operation == "summarization":
+              return f"Summarize the following text: {text}"
+          elif operation == "explanation":
+              return f"Explain the meaning or context of the following text: {text}"
++         elif operation == "grammar_check":
++             return f"Check the grammar of the following text: {text}"
+          else:
+              raise ValueError(f"Invalid operation for LLM-based processing: {operation}")
+```
+
+
+Current Test Code:
+```py
+import asyncio
+from app.old_tool.base import ToolResult
+
+tool = TextProcessingTool() # Tool class has been imported in advance
+
+async def test1():
+    print("# Test case 1: Rule-based sentiment analysis")
+    result1 = await tool.execute(operation="sentiment_analysis", text="I am very happy with the product.")
+    print(result1)
+    assert isinstance(result1, ToolResult)
+    assert result1.output
+    assert json.loads(result1.output)['result'] == "Positive sentiment detected in the text."
+
+async def test2():
+    print("# Test case 2: LLM-based sentiment analysis")
+    result2 = await tool.execute(operation="sentiment_analysis", text="I am very happy with the product.", use_llm=True)
+    print(result2)
+    assert isinstance(result2, ToolResult)
+    print(result2.output)
+
+async def test3():
+    print("# Test case 3: LLM-based text summarization")
+    result3 = await tool.execute(operation="summarization", text="This is a long text that needs to be summarized.", use_llm=True)
+    print(result3)
+    assert isinstance(result3, ToolResult)
+    print(result3.output)
+
+async def test4():
+    print("# Test case 4: LLM-based text explanation")
+    result4 = await tool.execute(operation="explanation", text="This is a complex sentence that needs to be explained.", use_llm=True)
+    print(result4)
+    assert isinstance(result4, ToolResult)
+    print(result4.output)
+
+async def test5():
+    print("# Test case 5: Invalid operation")
+    try:
+        result5 = await tool.execute(operation="invalid_operation", text="This is a test.")
+    except ValueError as e:
+        assert str(e) == "Operation invalid_operation is only supported with use_llm=True."
+    else:
+        print("Test case 5 failed: ValueError not raised for invalid operation")
+        print(result5)
+
+async def test6():
+    print("# Test case 6: LLM-based processing with invalid operation")
+    try:
+        result6 = await tool.execute(operation="invalid_operation", text="This is a test.", use_llm=True)
+    except ValueError as e:
+        assert str(e) == "Invalid operation for LLM-based processing: invalid_operation"
+    else:
+        print("Test case 6 failed: ValueError not raised for invalid operation")
+        print(result6)
+
+async def test():
+    await asyncio.gather(test1(), test2(), test3(), test4(), test5(), test6())
+
+if __name__ == '__main__':
+    asyncio.run(test())
+```
+
+Your response:
+
+```py
+async def test7():
+    print("# Test case 7: LLM-based grammar check")
+    result7 = await tool.execute(operation="grammar_check", text="This is a sentence with a grammar error.", use_llm=True)
+    print(result7)
+    assert isinstance(result7, ToolResult)
+    print(result7.output)
+
+async def test():
+    await asyncio.gather(test1(), test2(), test3(), test4(), test5(), test6(), test7())
+
+if __name__ == '__main__':
+    asyncio.run(test())
+```
+
+In this example, you find a new feature (grammar check) in the new version of tool code. You decide to reuse old test code since other features are unchanged. So you only need to add a new test case for the new feature, and re-define and override the main `test` function.
+
+Now please optionally generate the test code depend on the following tool code:
+Name: {name}
+
+Description:
+
+{description}
+
+Parameters:
+
+{input_parameters}
+
+Output schema:
+
+{output_schema}
+
+Code of the tool class:
+
+{code}
+
+Current test code:
+
+{test_code}
+
+Your response (If you need to modify the test code, please provide the modified test code. Otherwise, output "\boxed{NO MODIFICATION}" only):

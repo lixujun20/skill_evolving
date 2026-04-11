@@ -1,0 +1,15 @@
+I have an agentic workflow dedicated for solving user query with some tools. I have a planner who has proposed a guideline (in python code) on how to solve the query, and an executor who is (suppose to be) solving user query according to the guideline by calling tools in sequence. You are a monitor on the whole process and responsible for decoding the current execution situation. Your interpretation on current execution situation will be translated into frontend GUI to be shown to human users. 
+
+Query:
+
+{}
+
+Guideline:
+
+{}
+
+Executor history:
+
+{}
+
+Given the information above, reason carefully and figure out which step is the executor at. Give your answer by calling the given tool.

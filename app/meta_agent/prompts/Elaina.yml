@@ -1,0 +1,1561 @@
+app:
+  description: ''
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  mode: advanced-chat
+  name: Elaina
+  use_icon_as_answer_icon: false
+dependencies:
+- current_identifier: null
+  type: marketplace
+  value:
+    marketplace_plugin_unique_identifier: langgenius/openai:0.2.3@5a7f82fa86e28332ad51941d0b491c1e8a38ead539656442f7bf4c6129cd15fa
+    version: null
+kind: app
+version: 0.5.0
+workflow:
+  conversation_variables:
+  - description: ''
+    id: 84e17ad3-7f70-41b2-9526-3df4e6c351bf
+    name: dict
+    selector:
+    - conversation
+    - dict
+    value:
+      a: '1'
+    value_type: object
+  - description: ''
+    id: 0d01b80c-75b1-47f0-893a-a437bd91cfb2
+    name: ctx
+    selector:
+    - conversation
+    - ctx
+    value: ''
+    value_type: string
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: false
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        single_chunk_attachment_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: if-else
+      id: 1755339409136-source-1755340835210-target
+      selected: false
+      source: '1755339409136'
+      sourceHandle: source
+      target: '1755340835210'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: llm
+      id: 1755340835210-true-1755340911763-target
+      selected: false
+      source: '1755340835210'
+      sourceHandle: 'true'
+      target: '1755340911763'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: answer
+      id: 1755340911763-source-1755341327444-target
+      selected: false
+      source: '1755340911763'
+      sourceHandle: source
+      target: '1755341327444'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: question-classifier
+      id: 1755340835210-9fc06db3-b7e2-438b-8f97-de734ea9c83a-1755341418092-target
+      selected: false
+      source: '1755340835210'
+      sourceHandle: 9fc06db3-b7e2-438b-8f97-de734ea9c83a
+      target: '1755341418092'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: code
+      id: 1755341418092-1755341612305-1755342089084-target
+      selected: false
+      source: '1755341418092'
+      sourceHandle: '1755341612305'
+      target: '1755342089084'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: http-request
+      id: 1755342089084-source-1755342745902-target
+      selected: false
+      source: '1755342089084'
+      sourceHandle: source
+      target: '1755342745902'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: http-request
+        targetType: variable-aggregator
+      id: 1755342745902-source-1755342887774-target
+      selected: false
+      source: '1755342745902'
+      sourceHandle: source
+      target: '1755342887774'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: http-request
+        targetType: parameter-extractor
+      id: 1755342745902-fail-branch-1755342965559-target
+      selected: false
+      source: '1755342745902'
+      sourceHandle: fail-branch
+      target: '1755342965559'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: variable-aggregator
+        targetType: loop
+      id: 1755342887774-source-1755343112015-target
+      selected: false
+      source: '1755342887774'
+      sourceHandle: source
+      target: '1755343112015'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: true
+        loop_id: '1755343112015'
+        sourceType: loop-start
+        targetType: llm
+      id: 1755343112015start-source-1755343162772-target
+      selected: false
+      source: 1755343112015start
+      sourceHandle: source
+      target: '1755343162772'
+      targetHandle: target
+      type: custom
+      zIndex: 1002
+    - data:
+        isInLoop: false
+        sourceType: parameter-extractor
+        targetType: loop
+      id: 1755342965559-source-1755343112015-target
+      selected: false
+      source: '1755342965559'
+      sourceHandle: source
+      target: '1755343112015'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: true
+        loop_id: '1755343112015'
+        sourceType: llm
+        targetType: llm
+      id: 1755343162772-source-1755343586482-target
+      selected: false
+      source: '1755343162772'
+      sourceHandle: source
+      target: '1755343586482'
+      targetHandle: target
+      type: custom
+      zIndex: 1002
+    - data:
+        isInIteration: true
+        isInLoop: false
+        iteration_id: '1755343472594'
+        sourceType: iteration-start
+        targetType: assigner
+      id: 1755344133862start-source-1755344133862017553441338620-target
+      selected: false
+      source: 1755344133862start
+      sourceHandle: source
+      target: '1755344133862017553441338620'
+      targetHandle: target
+      type: custom
+      zIndex: 1002
+    - data:
+        isInIteration: true
+        isInLoop: false
+        iteration_id: '17553441338620'
+        sourceType: assigner
+        targetType: llm
+      id: 1755344133862017553441338620-source-1755344192139-target
+      selected: false
+      source: '1755344133862017553441338620'
+      sourceHandle: source
+      target: '1755344192139'
+      targetHandle: target
+      type: custom
+      zIndex: 1002
+    - data:
+        isInLoop: false
+        sourceType: iteration
+        targetType: loop
+      id: 17553441338620-source-1755343112015-target
+      selected: false
+      source: '17553441338620'
+      sourceHandle: source
+      target: '1755343112015'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: answer
+      id: 1755342089084-fail-branch-1755420500732-target
+      selected: false
+      source: '1755342089084'
+      sourceHandle: fail-branch
+      target: '1755420500732'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: tool
+      id: 1755340835210-false-1755422930833-target
+      selected: false
+      source: '1755340835210'
+      sourceHandle: 'false'
+      target: '1755422930833'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: tool
+        targetType: answer
+      id: 1755422930833-fail-branch-1755341327444-target
+      selected: false
+      source: '1755422930833'
+      sourceHandle: fail-branch
+      target: '1755341327444'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: assigner
+      id: 1755339409136-source-1755432917287-target
+      selected: false
+      source: '1755339409136'
+      sourceHandle: source
+      target: '1755432917287'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: question-classifier
+      id: 1755340835210-cbe61442-f061-49eb-aeb6-af863f38a862-1755341418092-target
+      selected: false
+      source: '1755340835210'
+      sourceHandle: cbe61442-f061-49eb-aeb6-af863f38a862
+      target: '1755341418092'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: if-else
+        targetType: question-classifier
+      id: 1755340835210-df6b7029-cdc3-46d4-9db9-7d70d6c765d5-1755341418092-target
+      selected: false
+      source: '1755340835210'
+      sourceHandle: df6b7029-cdc3-46d4-9db9-7d70d6c765d5
+      target: '1755341418092'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: true
+        isInLoop: false
+        iteration_id: '1755435445031'
+        sourceType: iteration-start
+        targetType: code
+      id: 1755435445031start-source-1755435462222-target
+      selected: false
+      source: 1755435445031start
+      sourceHandle: source
+      target: '1755435462222'
+      targetHandle: target
+      type: custom
+      zIndex: 1002
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: tool
+        targetType: code
+      id: 1755422930833-source-1757558680681-target
+      selected: false
+      source: '1755422930833'
+      sourceHandle: source
+      target: '1757558680681'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: question-classifier
+        targetType: if-else
+      id: 1755341418092-1-1768116880656-target
+      source: '1755341418092'
+      sourceHandle: '1'
+      target: '1768116880656'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: template-transform
+        targetType: http-request
+      id: 1755342623162-source-1768118446479-target
+      source: '1755342623162'
+      sourceHandle: source
+      target: '1768118446479'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: start now
+        selected: false
+        title: 开始
+        type: start
+        variables:
+        - label: rand_value
+          max_length: 48
+          options: []
+          required: true
+          type: number
+          variable: rand_value
+        - label: my_question
+          max_length: 48
+          options: []
+          required: true
+          type: text-input
+          variable: my_question
+        - label: my_interest
+          max_length: 48
+          options:
+          - math
+          - AI
+          required: true
+          type: select
+          variable: my_interest
+      height: 189
+      id: '1755339409136'
+      position:
+        x: 30
+        y: 286.5
+      positionAbsolute:
+        x: 30
+        y: 286.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: '>'
+            id: 07ee59ca-5e68-42a5-b14f-4d82b12a7c54
+            value: '100'
+            varType: number
+            variable_selector:
+            - '1755339409136'
+            - rand_value
+          id: 'true'
+          logical_operator: and
+        - case_id: 9fc06db3-b7e2-438b-8f97-de734ea9c83a
+          conditions:
+          - comparison_operator: '>'
+            id: 6eadff33-264a-4c21-aaa8-0e12f9f01618
+            value: '50'
+            varType: number
+            variable_selector:
+            - '1755339409136'
+            - rand_value
+          id: 9fc06db3-b7e2-438b-8f97-de734ea9c83a
+          logical_operator: and
+        - case_id: cbe61442-f061-49eb-aeb6-af863f38a862
+          conditions:
+          - comparison_operator: is
+            id: fa0daa55-eaf7-4655-a571-739a68214988
+            value: '{{#conversation.dict#}}+1'
+            varType: object
+            variable_selector:
+            - conversation
+            - dict
+          logical_operator: and
+        - case_id: df6b7029-cdc3-46d4-9db9-7d70d6c765d5
+          conditions:
+          - comparison_operator: empty
+            id: c0dfb64f-54ce-4c14-a5fc-8a43acf06179
+            value: ''
+            varType: object
+            variable_selector:
+            - conversation
+            - dict
+          logical_operator: and
+        - case_id: a17e8cc0-a58c-4118-9b06-ba42982cd00d
+          conditions:
+          - comparison_operator: contains
+            id: 97fa8ef5-89ed-43db-aa19-59ca005d7499
+            value: '1'
+            varType: string
+            variable_selector:
+            - conversation
+            - ctx
+          - comparison_operator: is not
+            id: bc8a8b6c-647d-4b06-837a-e5fe978b0c81
+            value: '{{#conversation.dict#}}*1'
+            varType: object
+            variable_selector:
+            - conversation
+            - dict
+          - comparison_operator: start with
+            id: 14146a3a-efcd-40eb-b769-0a888c96dfdb
+            value: '24'
+            varType: string
+            variable_selector:
+            - conversation
+            - ctx
+          logical_operator: and
+        desc: ''
+        selected: false
+        title: 条件分支
+        type: if-else
+      height: 368
+      id: '1755340835210'
+      position:
+        x: 364
+        y: 18.350368621040445
+      positionAbsolute:
+        x: 364
+        y: 18.350368621040445
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - '1755339409136'
+          - rand_value
+        desc: ''
+        model:
+          completion_params:
+            frequency_penalty: 0
+            max_tokens: 512
+            presence_penalty: 0
+            response_format: text
+            seed: 0
+            stop:
+            - stop
+            temperature: 0.7
+            top_p: 1
+          mode: chat
+          name: gpt-4
+          provider: langgenius/openai/openai
+        prompt_template:
+        - id: e5497d7f-16e4-4c51-a4fe-beb8cfaced79
+          role: system
+          text: I'm more than {{#1755339409136.rand_value#}} years old, please give
+            me some advice to help me live longer.
+        reasoning_format: tagged
+        retry_config:
+          max_retries: 3
+          retry_enabled: true
+          retry_interval: 1000
+        selected: false
+        structured_output:
+          schema:
+            additionalProperties: false
+            properties:
+              result:
+                type: string
+            required: []
+            type: object
+        structured_output_enabled: true
+        title: LLM
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      height: 117
+      id: '1755340911763'
+      position:
+        x: 880
+        y: 286.5
+      positionAbsolute:
+        x: 880
+        y: 286.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        answer: You're kidding me, give me more userful advice.
+        desc: ''
+        selected: false
+        title: 直接回复
+        type: answer
+        variables: []
+      height: 116
+      id: '1755341327444'
+      position:
+        x: 1214
+        y: 286.5
+      positionAbsolute:
+        x: 1214
+        y: 286.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        classes:
+        - id: '1'
+          name: math problem
+        - id: '1755341612305'
+          name: computer science and technology
+        - id: '1755341748044'
+          name: physics
+        desc: ''
+        instruction: '{{#1755339409136.my_interest#}}'
+        instructions: ''
+        memory:
+          query_prompt_template: '{{#sys.query#}}
+
+
+            {{#sys.files#}}'
+          window:
+            enabled: true
+            size: 50
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4
+          provider: langgenius/openai/openai
+        query_variable_selector:
+        - '1755339409136'
+        - my_question
+        selected: false
+        title: 问题分类器
+        topics: []
+        type: question-classifier
+        vision:
+          enabled: false
+      height: 208
+      id: '1755341418092'
+      position:
+        x: 880
+        y: 445.5
+      positionAbsolute:
+        x: 880
+        y: 445.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        code: "\ndef main(arg1: str, arg2: str) -> dict:\n    return {\n        \"\
+          result\": arg1 + arg2,\n    }\n"
+        code_language: python3
+        desc: ''
+        error_strategy: fail-branch
+        outputs:
+          python_result:
+            children: null
+            type: number
+        retry_config:
+          max_retries: 3
+          retry_enabled: true
+          retry_interval: 2421
+        selected: false
+        title: 代码执行
+        type: code
+        variables:
+        - value_selector:
+          - '1755339409136'
+          - rand_value
+          value_type: number
+          variable: arg1
+        - value_selector:
+          - '1755339409136'
+          - my_question
+          value_type: string
+          variable: arg2
+      height: 117
+      id: '1755342089084'
+      position:
+        x: 1548
+        y: 529.5
+      positionAbsolute:
+        x: 1548
+        y: 529.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        selected: false
+        template: '{{ arg1 }}'
+        title: 模板转换
+        type: template-transform
+        variables:
+        - value_selector:
+          - '1755341808689'
+          - text
+          value_type: string
+          variable: arg1
+        - value_selector:
+          - '1755341808689'
+          - json
+          value_type: array[object]
+          variable: '6666'
+      height: 52
+      id: '1755342623162'
+      position:
+        x: 1882
+        y: 1066
+      positionAbsolute:
+        x: 1882
+        y: 1066
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        authorization:
+          config: null
+          type: no-auth
+        body:
+          data:
+          - id: key-value-233
+            key: as
+            type: text
+            value: bb
+          - id: key-value-252
+            key: ''
+            type: text
+            value: ''
+          type: form-data
+        desc: ''
+        error_strategy: fail-branch
+        headers: 'nihao:{{#1755342089084.python_result#}}
+
+          zaijian:{{#1755342089084.python_result#}}'
+        method: post
+        params: buhao:{{#1755342089084.error_type#}}
+        retry_config:
+          max_retries: 3
+          retry_enabled: true
+          retry_interval: 1962
+        selected: false
+        ssl_verify: true
+        timeout:
+          connect: 1
+          max_connect_timeout: 0
+          max_read_timeout: 0
+          max_write_timeout: 0
+          read: 5
+          write: 6
+        title: HTTP 请求
+        type: http-request
+        url: '{{#sys.query#}}'
+        variables: []
+      height: 160
+      id: '1755342745902'
+      position:
+        x: 1882
+        y: 436
+      positionAbsolute:
+        x: 1882
+        y: 436
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        advanced_settings:
+          group_enabled: true
+          groups:
+          - groupId: eafa8d45-648e-4ebe-84ff-965ff6452b46
+            group_name: Group1
+            output_type: string
+            variables:
+            - - '1755342745902'
+              - body
+          - groupId: c307a692-1420-4fc6-b58f-7439b4c5d083
+            group_name: Group2
+            output_type: array[object]
+            variables:
+            - - '1755342745902'
+              - files
+        desc: ''
+        output_type: any
+        selected: false
+        title: 变量聚合器
+        type: variable-aggregator
+        variables: []
+      height: 164
+      id: '1755342887774'
+      position:
+        x: 2348
+        y: 506.5
+      positionAbsolute:
+        x: 2348
+        y: 506.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        instruction: just do it
+        memory:
+          query_prompt_template: '{{#sys.query#}}
+
+
+            {{#sys.files#}}'
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: true
+            size: 67
+        model:
+          completion_params:
+            frequency_penalty: 0
+            max_tokens: 512
+            presence_penalty: 0
+            response_format: text
+            seed: 0
+            temperature: 0.7
+            top_p: 1
+          mode: chat
+          name: gpt-4
+          provider: langgenius/openai/openai
+        parameters:
+        - description: The city and state to retrieve the weather for
+          name: location
+          options: []
+          required: true
+          type: string
+        query:
+        - '1755342745902'
+        - error_message
+        reasoning_mode: prompt
+        selected: false
+        title: 参数提取器
+        type: parameter-extractor
+        variables: []
+        vision:
+          enabled: false
+      height: 88
+      id: '1755342965559'
+      position:
+        x: 2348
+        y: 711.5
+      positionAbsolute:
+        x: 2348
+        y: 711.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        break_conditions:
+        - comparison_operator: '='
+          id: 3720ff80-1bbd-400b-9384-c14e18d29530
+          value: '10'
+          varType: number
+          variable_selector:
+          - '1755343112015'
+          - i
+        desc: ''
+        error_handle_mode: terminated
+        height: 275
+        logical_operator: and
+        loop_count: 10
+        loop_variables:
+        - id: c7af72c8-7236-4b6c-8555-0b3b39b5b441
+          label: i
+          value: '0'
+          value_type: constant
+          var_type: number
+        selected: false
+        start_node_id: 1755343112015start
+        title: 循环
+        type: loop
+        width: 812
+      height: 275
+      id: '1755343112015'
+      position:
+        x: 2828.2055032513504
+        y: 535.2197734860052
+      positionAbsolute:
+        x: 2828.2055032513504
+        y: 535.2197734860052
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 812
+      zIndex: 1
+    - data:
+        desc: ''
+        isInLoop: true
+        selected: false
+        title: ''
+        type: loop-start
+      draggable: false
+      height: 48
+      id: 1755343112015start
+      parentId: '1755343112015'
+      position:
+        x: 60
+        y: 113.5
+      positionAbsolute:
+        x: 2888.2055032513504
+        y: 648.7197734860052
+      selectable: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom-loop-start
+      width: 44
+      zIndex: 1002
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - '17553441338620'
+          - output
+        default_value:
+        - key: text
+          type: string
+          value: you lose
+        desc: ''
+        error_strategy: default-value
+        isInIteration: false
+        isInLoop: true
+        loop_id: '1755343112015'
+        memory:
+          query_prompt_template: '{{#sys.query#}}
+
+
+            {{#sys.files#}}'
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: true
+            size: 50
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4
+          provider: langgenius/openai/openai
+        prompt_template:
+        - id: 7bc382d4-f1c7-4649-add7-a7b237222ee3
+          role: system
+          text: what do you want to do
+        - id: 163afe35-0d58-46ac-8dee-1f308b4aedb5
+          role: user
+          text: can you tell me some story about this number{{#1755343112015.i#}}
+        retry_config:
+          max_retries: 3
+          retry_enabled: true
+          retry_interval: 1000
+        selected: false
+        structured_output:
+          schema:
+            additionalProperties: false
+            properties:
+              result:
+                description: your grade
+                enum:
+                - weweq
+                type: string
+            required: []
+            type: object
+        structured_output_enabled: true
+        title: LLM 2
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      height: 153
+      id: '1755343162772'
+      parentId: '1755343112015'
+      position:
+        x: 204
+        y: 60
+      positionAbsolute:
+        x: 3032.2055032513504
+        y: 595.2197734860052
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 1002
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - '1755341808689'
+          - text
+        desc: ''
+        isInIteration: false
+        isInLoop: true
+        loop_id: '1755343112015'
+        memory:
+          query_prompt_template: '{{#sys.query#}}
+
+
+            {{#sys.files#}}'
+          role_prefix:
+            assistant: ''
+            user: ''
+          window:
+            enabled: true
+            size: 50
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4
+          provider: langgenius/openai/openai
+        prompt_config:
+          jinja2_variables:
+          - value_selector:
+            - '1755342887774'
+            - Group1
+            value_type: object
+            variable: command
+        prompt_template:
+        - edition_type: jinja2
+          id: 14aaafe9-06f7-4e73-884f-e8ff04f9613e
+          jinja2_text: can you tell me
+          role: system
+          text: ''
+        - id: aa874113-5907-4417-b800-e0d43a5ad9cb
+          role: user
+          text: 'no'
+        - id: 744a5dfc-473e-4286-9368-c8bedca5e2a1
+          role: assistant
+          text: help me
+        - id: 608eddd2-7364-42a6-a416-20e8b7cc68c7
+          role: user
+          text: 'yes'
+        retry_config:
+          max_retries: 3
+          retry_enabled: true
+          retry_interval: 1000
+        selected: false
+        structured_output_enabled: true
+        title: LLM 3
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      height: 117
+      id: '1755343586482'
+      parentId: '1755343112015'
+      position:
+        x: 508
+        y: 78
+      positionAbsolute:
+        x: 3336.2055032513504
+        y: 613.2197734860052
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 1002
+    - data:
+        desc: ''
+        items:
+        - input_type: variable
+          operation: over-write
+          value:
+          - '1755342965559'
+          - __is_success
+          variable_selector:
+          - '1755343112015'
+          - i
+          write_mode: over-write
+        - input_type: variable
+          operation: clear
+          value: ''
+          variable_selector:
+          - '1755343112015'
+          - i
+          write_mode: over-write
+        - input_type: constant
+          operation: set
+          value: 5
+          variable_selector:
+          - '1755343112015'
+          - i
+          write_mode: over-write
+        - input_type: constant
+          operation: +=
+          value: 4
+          variable_selector:
+          - '1755343112015'
+          - i
+          write_mode: over-write
+        selected: false
+        title: 变量赋值 2
+        type: assigner
+        version: '2'
+      height: 162
+      id: '1755343851182'
+      position:
+        x: 4384
+        y: 657.5
+      positionAbsolute:
+        x: 4384
+        y: 657.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        error_handle_mode: continue-on-error
+        height: 205
+        is_parallel: false
+        iterator_input_type: array[object]
+        iterator_selector:
+        - '1755341808689'
+        - files
+        output_selector:
+        - '1755344192139'
+        - usage
+        output_type: array[object]
+        parallel_nums: 10
+        selected: false
+        start_node_id: 1755344133862start
+        title: 迭代
+        type: iteration
+        width: 680.8571428571431
+      height: 205
+      id: '17553441338620'
+      position:
+        x: 2441.2772951750335
+        y: 1225.9285714285713
+      positionAbsolute:
+        x: 2441.2772951750335
+        y: 1225.9285714285713
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 681
+      zIndex: 1
+    - data:
+        desc: ''
+        isInIteration: true
+        isInLoop: false
+        items:
+        - input_type: variable
+          operation: over-write
+          value:
+          - '1755343472594'
+          - index
+          variable_selector:
+          - '1755343472594'
+          - item
+          write_mode: over-write
+        iteration_id: '17553441338620'
+        selected: false
+        title: 变量赋值 3
+        type: assigner
+        version: '2'
+      height: 84
+      id: '1755344133862017553441338620'
+      parentId: '17553441338620'
+      position:
+        x: 116.85714285714312
+        y: 65
+      positionAbsolute:
+        x: 2558.1344380321766
+        y: 1290.9285714285713
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 1002
+    - data:
+        desc: ''
+        isInIteration: true
+        selected: false
+        title: ''
+        type: iteration-start
+      draggable: false
+      height: 48
+      id: 1755344133862start
+      parentId: '17553441338620'
+      position:
+        x: 24
+        y: 68
+      positionAbsolute:
+        x: 2465.2772951750335
+        y: 1293.9285714285713
+      selectable: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom-iteration-start
+      width: 44
+      zIndex: 1002
+    - data:
+        context:
+          enabled: true
+          variable_selector:
+          - '17553441338620'
+          - item
+        desc: ''
+        isInIteration: true
+        isInLoop: false
+        iteration_id: '17553441338620'
+        model:
+          completion_params:
+            temperature: 0.7
+          mode: chat
+          name: gpt-4
+          provider: langgenius/openai/openai
+        prompt_template:
+        - id: 3378e28e-4802-4bc4-a348-4bac58254489
+          role: system
+          text: '55555'
+        selected: false
+        title: LLM 4
+        type: llm
+        variables: []
+        vision:
+          enabled: false
+      height: 88
+      id: '1755344192139'
+      parentId: '17553441338620'
+      position:
+        x: 422
+        y: 65
+      positionAbsolute:
+        x: 2863.2772951750335
+        y: 1290.9285714285713
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 1002
+    - data:
+        answer: fail!
+        desc: ''
+        selected: false
+        title: 直接回复 2
+        type: answer
+        variables: []
+      height: 100
+      id: '1755420500732'
+      position:
+        x: 1882
+        y: 637
+      positionAbsolute:
+        x: 1882
+        y: 637
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        error_strategy: fail-branch
+        is_team_authorization: true
+        output_schema: null
+        params:
+          location: ''
+        provider_id: 1bcf4cf9-0f93-40a1-9af7-e952cdde5031
+        provider_name: test-tool
+        provider_type: api
+        retry_config:
+          max_retries: 3
+          retry_enabled: false
+          retry_interval: 1000
+        selected: false
+        title: GetCurrentWeather
+        tool_configurations: {}
+        tool_description: Get temperature for a specific location
+        tool_label: GetCurrentWeather
+        tool_name: GetCurrentWeather
+        tool_node_version: '2'
+        tool_parameters:
+          location:
+            type: mixed
+            value: '1'
+        type: tool
+      height: 88
+      id: '1755422930833'
+      position:
+        x: 880
+        y: 693.5
+      positionAbsolute:
+        x: 880
+        y: 693.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        items:
+        - input_type: variable
+          operation: over-write
+          value: ''
+          variable_selector:
+          - conversation
+          - ctx
+          write_mode: over-write
+        - input_type: constant
+          operation: set
+          value: ''
+          variable_selector:
+          - conversation
+          - dict
+          write_mode: over-write
+        selected: false
+        title: 变量赋值 3
+        type: assigner
+        version: '2'
+      height: 110
+      id: '1755432917287'
+      position:
+        x: 364
+        y: 498.5
+      positionAbsolute:
+        x: 364
+        y: 498.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        error_handle_mode: remove-abnormal-output
+        is_parallel: false
+        iterator_input_type: array[object]
+        iterator_selector:
+        - '1755343983030'
+        - files
+        output_selector: []
+        parallel_nums: 10
+        selected: false
+        start_node_id: 1755435445031start
+        title: 迭代 2
+        type: iteration
+        width: 387
+      height: 146
+      id: '1755435445031'
+      position:
+        x: 2441.2772951750335
+        y: 1468.4946161805556
+      positionAbsolute:
+        x: 2441.2772951750335
+        y: 1468.4946161805556
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 387
+      zIndex: 1
+    - data:
+        desc: ''
+        isInIteration: true
+        selected: false
+        title: ''
+        type: iteration-start
+      draggable: false
+      height: 48
+      id: 1755435445031start
+      parentId: '1755435445031'
+      position:
+        x: 24
+        y: 68
+      positionAbsolute:
+        x: 2465.2772951750335
+        y: 1536.4946161805556
+      selectable: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom-iteration-start
+      width: 44
+      zIndex: 1002
+    - data:
+        code: "\ndef main(arg1: str, arg2: str) -> dict:\n    return {\n        \"\
+          result\": arg1 + arg2,\n    }\n"
+        code_language: python3
+        desc: ''
+        isInIteration: true
+        isInLoop: false
+        iteration_id: '1755435445031'
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: false
+        title: 代码执行 2
+        type: code
+        variables:
+        - value_selector: []
+          variable: arg1
+        - value_selector: []
+          variable: arg2
+      height: 52
+      id: '1755435462222'
+      parentId: '1755435445031'
+      position:
+        x: 128
+        y: 68
+      positionAbsolute:
+        x: 2569.2772951750335
+        y: 1536.4946161805556
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+      zIndex: 1002
+    - data:
+        code: "\ndef main(arg1: str, arg2: str) -> dict:\n    return {\n        \"\
+          result\": arg1 + arg2,\n    }\n"
+        code_language: python3
+        desc: ''
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: false
+        title: 代码执行 3
+        type: code
+        variables:
+        - value_selector:
+          - '1755422930833'
+          - json
+          value_type: array[object]
+          variable: arg1
+      height: 52
+      id: '1757558680681'
+      position:
+        x: 1244.2714841067695
+        y: 649.7945583572455
+      positionAbsolute:
+        x: 1244.2714841067695
+        y: 649.7945583572455
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        desc: ''
+        selected: false
+        template: '{{ arg1 }}'
+        title: 模板转换 2
+        type: template-transform
+        variables:
+        - value_selector: []
+          variable: arg1
+      height: 52
+      id: '1757655570469'
+      position:
+        x: 2221.548003547542
+        y: 332.4394638655802
+      positionAbsolute:
+        x: 2221.548003547542
+        y: 332.4394638655802
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: is
+            id: 88cd9d45-9be2-4a28-92f8-a2605aa95325
+            value: ''
+            varType: object
+            variable_selector:
+            - '1755341418092'
+            - usage
+          id: 'true'
+          logical_operator: and
+        selected: false
+        title: 条件分支 2
+        type: if-else
+      height: 124
+      id: '1768116880656'
+      position:
+        x: 1214
+        y: 1245.5
+      positionAbsolute:
+        x: 1214
+        y: 1245.5
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    - data:
+        authorization:
+          config: null
+          type: no-auth
+        body:
+          data: []
+          type: none
+        headers: ''
+        method: get
+        params: ''
+        retry_config:
+          max_retries: 3
+          retry_enabled: true
+          retry_interval: 100
+        selected: false
+        ssl_verify: true
+        timeout:
+          max_connect_timeout: 0
+          max_read_timeout: 0
+          max_write_timeout: 0
+        title: HTTP 请求 2
+        type: http-request
+        url: ''
+        variables: []
+      height: 81
+      id: '1768118446479'
+      position:
+        x: 2184
+        y: 1066
+      positionAbsolute:
+        x: 2184
+        y: 1066
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 242
+    viewport:
+      x: -2073.426510795338
+      y: -159.30664973790226
+      zoom: 0.8354647584173904
+  rag_pipeline_variables: []

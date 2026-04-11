@@ -1,0 +1,18 @@
+--- app/meta_agent/skills/gardener_agent.py
++++ app/meta_agent/skills/gardener_agent.py
+@@ -7,6 +7,7 @@
+ from app.meta_agent_tool import ToolCollection
+ from app.llm import LLM
+ from app.meta_agent.skills.schemas import AgentTrace, Skill, RefinedSkillResult
+ from app.meta_agent_tool.terminate import Terminate
++import logging
+ 
+ class SkillGardenerAgent(ToolCallToolCosmosAgent):
+@@ -51,6 +52,7 @@
+             name=name,
+             description=description,
+             system_prompt=GARDENER_SYSTEM_PROMPT
+         )
++        self.logger_instance = logging.getLogger(self.name)
+         self.current_trace: Optional[AgentTrace] = None
+         self.target_skill_id: Optional[int] = None

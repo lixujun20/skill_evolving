@@ -1,0 +1,246 @@
+app:
+  description: ''
+  icon: 🤖
+  icon_background: '#FFEAD5'
+  mode: advanced-chat
+  name: test2
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.1
+workflow:
+  conversation_variables:
+  - description: ''
+    id: 5ea8862d-4016-44cd-8030-99ae2e1e6d86
+    name: history
+    selector:
+    - conversation
+    - history
+    value: []
+    value_type: array[object]
+  - description: ''
+    id: a2d6be2c-c2ec-46ce-8eba-a32f77e0ea0a
+    name: ctx
+    selector:
+    - conversation
+    - ctx
+    value:
+      a: '1'
+    value_type: object
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - remote_url
+      - local_file
+      enabled: false
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: code
+      id: 1755450541905-source-1758103028720-target
+      source: '1755450541905'
+      sourceHandle: source
+      target: '1758103028720'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: answer
+      id: 1758103092990-source-1758103125915-target
+      source: '1758103092990'
+      sourceHandle: source
+      target: '1758103125915'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: code
+      id: 1758103028720-source-17587202483720-target
+      source: '1758103028720'
+      sourceHandle: source
+      target: '17587202483720'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInLoop: false
+        sourceType: code
+        targetType: code
+      id: 17587202483720-source-1758103092990-target
+      source: '17587202483720'
+      sourceHandle: source
+      target: '1758103092990'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: ''
+        selected: false
+        title: 开始
+        type: start
+        variables: []
+      height: 54
+      id: '1755450541905'
+      position:
+        x: 30
+        y: 298
+      positionAbsolute:
+        x: 30
+        y: 298
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: "import time\ndef main() -> dict:\n    time.sleep(2)\n    return {\n\
+          \        \"result\": \"e\",\n    }\n"
+        code_language: python3
+        desc: ''
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: false
+        title: 代码执行
+        type: code
+        variables: []
+      height: 54
+      id: '1758103028720'
+      position:
+        x: 327.0710160501335
+        y: 298
+      positionAbsolute:
+        x: 327.0710160501335
+        y: 298
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: "import json\ndef main(arg1: int) -> dict:\n    return {\n        \"\
+          result\": str(arg1),\n    }\n"
+        code_language: python3
+        desc: ''
+        outputs:
+          result:
+            children: null
+            type: string
+        selected: false
+        title: 代码执行 2
+        type: code
+        variables:
+        - value_selector:
+          - '17587202483720'
+          - result
+          value_type: number
+          variable: arg1
+      height: 54
+      id: '1758103092990'
+      position:
+        x: 936
+        y: 298
+      positionAbsolute:
+        x: 936
+        y: 298
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        answer: '{{#1758103092990.result#}}'
+        desc: ''
+        selected: false
+        title: 直接回复
+        type: answer
+        variables: []
+      height: 105
+      id: '1758103125915'
+      position:
+        x: 1238
+        y: 298
+      positionAbsolute:
+        x: 1238
+        y: 298
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: "import time\ndef main(arg1) -> dict:\n    return {\n        \"result\"\
+          : arg1.count('e'),\n    }\n"
+        code_language: python3
+        desc: ''
+        outputs:
+          result:
+            children: null
+            type: number
+        selected: false
+        title: 代码执行 (1)
+        type: code
+        variables:
+        - value_selector:
+          - '1758103028720'
+          - result
+          value_type: string
+          variable: arg1
+      height: 54
+      id: '17587202483720'
+      position:
+        x: 626.8902401882273
+        y: 298
+      positionAbsolute:
+        x: 626.8902401882273
+        y: 298
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    viewport:
+      x: 704.5876908136077
+      y: -80.52906972567598
+      zoom: 0.9412890496727041

@@ -1,0 +1,180 @@
+Generate a complete Python tool class to implement a specific functionality. 
+        
+Syntactic requirements:
+1. Have proper `name` and `description` attributes
+2. Implement `async def execute()` method
+3. Include proper error handling
+4. No more than 300 lines of code. If you find it hard to achieve requirements in 300 lines, output keyword "TOO COMPLEX!" and explain why.
+5. Return dict as the result. If success, return as `output_schema` requires. Else return `{"error": "error message"}`.
+
+Semantic requirements:
+1. The tool should consider and process all corner cases that could potentially occur.
+2. The tool should never be too specific to a single use case, but rather be as general as possible.
+
+Systematic requirements:
+1. If your tool implementation needs openai llm calling, implement like this:
+```python
+from app.old_tool.base import ToolResult
+from app.llm import LLM
+from app.schema import Message
+
+async def execute(self, **kwargs):
+    # Call llm
+    llm = LLM(config_name="general") # options: "general", "code", "lite". Use as needed. The cost is `code` > `general` > `lite`.
+    system_message = Message.system_message(
+        "You are a planning assistant. Your task is to summarize the completed plan."
+    ) # llm.ask only accept List[Message] as input
+
+    user_message = Message.user_message(
+        f"The plan has been completed. Here is the final plan status:\n\n{plan_text}\n\nPlease provide a summary of what was accomplished and any final thoughts."
+    )
+
+    response: str = await self.llm.ask(
+        messages=[user_message], system_msgs=[system_message]
+    ) # llm.ask return the response directly
+
+    # Alternative: If you need to call llm with images, use this:
+    # response: str = await self.llm.ask_with_images(
+    #     messages=[user_message],
+    #     image_list=['http://image/url']
+    #     system_msgs=[system_message],
+    # )
+
+    # Process response
+    # ...
+```
+
+Here is an example:
+
+
+Name: CodeAnalyser
+
+
+Description: 
+
+A tool for performing syntactic analysis on code. It can perform analyses on Python code and return the ast of it.
+
+
+Parameters:
+
+{
+    "type": "object",
+    "properties": {
+        "code": {
+            "type": "string",
+            "description": "The code to analyze."
+        }
+    },
+    "required": ["code"],
+}
+
+
+Output schema:
+
+{
+    "type": "object",
+    "properties": {
+        "ast": {
+            "type": "ast.Module",
+            "description": "The abstract syntax tree of the code."
+        }
+    },
+    "required": ["ast"]
+}
+
+
+Generated code:
+
+```python
+import ast
+from typing import Any
+
+class CodeAnalyser(Tool):
+    name = "CodeAnalyser"
+    description = "A tool for performing syntactic analysis on code. It can perform analyses on Python code and return the abstract syntax tree (AST) of it."
+
+    # Define parameters
+    parameters = {
+        "type": "object",
+        "properties": {
+            "code": {
+                "type": "string",
+                "description": "The code to analyze."
+            }
+        },
+        "required": ["code"],
+    }
+
+    # Define output schema
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "ast": {
+                "type": "object",
+                "description": "The abstract syntax tree (AST) of the code, represented as a Python object."
+            }
+        },
+        "required": ["ast"]
+    }
+
+    async def execute(self, code: str) -> ast.Module:
+        """
+        Perform syntactic analysis on the provided Python code and return its abstract syntax tree (AST).
+
+        Args:
+            code (str): The Python code to analyze.
+
+        Returns:
+            ToolResult: The result containing either a success with the AST or an error.
+        """
+        try:
+            # Validate input: Ensure code is provided and not empty
+            if not code.strip():
+                return dict(error="No code provided. Please provide valid Python code to analyze.")
+
+            # Try parsing the code into an AST
+            try:
+                parsed_ast = ast.parse(code)
+            except SyntaxError as e:
+                return dict(error=f"Syntax error while parsing the code: {str(e)}")
+            
+            # Return success with the AST as a string (it could be converted to structured format if needed)
+            return { "ast": ast_dict }
+
+        except Exception as e:
+            # Catch all unexpected errors
+            return dict(
+                error=f"An unexpected error occurred: {str(e)}"
+            )
+```
+
+Now please generate a complete and correct Python tool class following the description:
+
+
+Name: {name}
+
+Description:
+
+{description}
+
+
+Parameters:
+
+{input_parameters}
+
+
+Output schema:
+
+{output_schema}
+
+**Extra Notices**
+
+{extra_notices}
+
+* Make sure you enclose your code with ```. 
+
+* After generation, make sure to test code with tool_tester so that your generated code could be saved locally. 
+
+* However, the test results from tool_tester are only for reference. You can ignore it if you think it's not your fault (e.g. the tester encountered problems in generating test cases).
+
+Your code and tool call:

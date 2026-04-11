@@ -1,0 +1,31 @@
+You are a skillful data annotator familiar with common toolcall trajectories for LLM agentic system.
+Given a conversation history containing user query, agent toolcalls and tool results, try to reformulate this trajectory into a python code representing an equivalent procedure.
+
+########## Example 1 begins ###########
+Trajectory: 
+User: Find all science fiction movies whose director recently won a Best Director award in 2024.
+Assistant: [toolcall WebSearch(query=["2024 Best Director award"])]
+Tool: "`TypeError: WebSearch.execute()` missing 1 required argument: 'region'.`"
+Assistant: [toolcall WebSearch(query=["2024 Best Director award"], region='us')]
+Tool: {"results": [[{"url": "https://www.google.com/&2024%Best%Director%award/1672343324.html", "content": "Norlan P. Thackeray, a 34-year-old director, has won the Best Director award for the movie 'The Last Starfighter'."}]]}
+Assistant: [toolcall WebSearch(query=["science fiction movie of Norlan"], region='us')]
+Tool: {"results": [[{"url": "https://www.google.com/&science%fiction%movie%Norlan/174628830.html", "content": "Starfighter\nStar Stray\nInterstellar\nInception"}]]}
+Assistant: Based on the information retrieved from the web search, the Best Director in 2024 is Norlan P. Thackeray, who directed the movie 'The Last Starfighter'. The science fiction movies directed by Norlan P. Thackeray are 'Starfighter', 'Star Stray', 'Interstellar', and 'Inception'.
+
+Python code:
+```python
+result = WebSearch().execute(query=["2024 Best Director award"], region='us')
+best_director = ParameterExtractor().execute(input=result, parameters={"type": "object", "properties": {"best_director": {"type": "string"}}})['best_director']
+result = WebSearch().execute(query=[f"science fiction movie of {best_director}"], region='us')
+movies = ParameterExtractor().execute(input=result, parameters={"type": "object", "properties": {"science fiction movies": {"type": "array", "items": {"type": "string"}}}})['science fiction movies']
+AnswerTool().execute(history=f"{best_director} {movies}")
+```
+########## Example 1 ends ###########
+
+########## Example 2 begins ###########
+Trajectory:
+User: Plot the loss curve according to the input xlsx file.
+Assistant: [toolcall XlsxReader(file_path="loss_curve.xlsx")]
+Tool: {"results": [[{"loss": [0.1, 0.05, 0.03, 0.02, 0.01], "epoch": [1, 2, 3, 4, 5]}]]}
+Assistant: [toolcall Plotter(data=[{"loss": [0.1, 0.05, 0.03, 0.02, 0.01], "epoch": [1, 2, 3, 4, 5]}])]
+########## Example 2 ends ###########

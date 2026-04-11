@@ -1,0 +1,49 @@
+{
+  "name": "evolve_demo",
+  "accuracy": 1.0,
+  "avg_tokens": 799.6666666666666,
+  "rounds": [
+    {
+      "round_idx": 0,
+      "query": "Calculate the value of Euler's totient function phi(360). The totient function phi(n) counts the num",
+      "answer_correct": true,
+      "predicted": "96",
+      "expected": "96",
+      "tokens": 836,
+      "completion_tokens": 579,
+      "code_lines": 14,
+      "skills_used": 0,
+      "skills_total": 1,
+      "elapsed_s": 35.951940070837736,
+      "new_skills_extracted": 1
+    },
+    {
+      "round_idx": 1,
+      "query": "Calculate the value of Euler's totient function phi(360). The totient function phi(n) counts the num",
+      "answer_correct": true,
+      "predicted": "96",
+      "expected": "96",
+      "tokens": 781,
+      "completion_tokens": 349,
+      "code_lines": 5,
+      "skills_used": 1,
+      "skills_total": 1,
+      "elapsed_s": 27.337294526398182,
+      "new_skills_extracted": 1
+    },
+    {
+      "round_idx": 2,
+      "query": "Calculate the value of Euler's totient function phi(360). The totient function phi(n) counts the num",
+      "answer_correct": true,
+      "predicted": "96",
+      "expected": "96",
+      "tokens": 782,
+      "completion_tokens": 350,
+      "code_lines": 2,
+      "skills_used": 1,
+      "skills_total": 1,
+      "elapsed_s": 61.4885485349223,
+      "new_skills_extracted": 1
+    }
+  ]
+}

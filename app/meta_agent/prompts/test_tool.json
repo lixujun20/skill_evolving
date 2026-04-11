@@ -1,0 +1,82 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+      "title": "Tool API",
+      "description": "Dynamically generated API for all available tools.",
+      "version": "v1.0.0"
+    },
+    "servers": [
+      {
+        "url": "http://172.26.29.150:8000"
+      }
+    ],
+    "paths": {
+      "/execute/RestaurantSearchAndExtractTool": {
+        "post": {
+          "summary": "Searches for restaurants based on cuisine and location, and extracts their names and addresses.",
+          "operationId": "RestaurantSearchAndExtractTool",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cuisine": {
+                      "type": "object",
+                      "description": "The type of cuisine to search for (e.g., 'Thai', 'Italian').",
+                      "properties": {
+                        "cuisine_type": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["cuisine_type"]
+                    },
+                    "location": {
+                      "type": "string",
+                      "description": "The geographical location for the search (e.g., 'Beijing', 'New York')."
+                    }
+                  },
+                  "required": [
+                    "cuisine",
+                    "location"
+                  ]
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful operation",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "restaurants": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "address": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {}
+    }
+  }

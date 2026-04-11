@@ -1,0 +1,6 @@
+llm = LLMTool()
+result = await llm.execute('ask', 'What is a coroutine?')
+if result.output:
+    return_(result.output)
+else:
+    return_('error')

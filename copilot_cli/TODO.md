@@ -50,7 +50,7 @@
 
 * Math reasoning：数学问题求解 + 复杂推理 + 多步骤解答
 
-* Terminal: 终端命令执行 + 系统操作 + 复杂任务（如文件管理、系统配置）
+* Terminal Bench: 终端命令执行 + 系统操作 + 复杂任务（如文件管理、系统配置）
 
 * SkillsBench: 专门测试技能构建和复用能力的benchmark，包含多样化的任务和技能需求。
 
@@ -58,7 +58,11 @@
 
 * 基线方法：传统的agent系统，直接从query出发，完全自主决策，不进行skill提炼和复用。
 
+* 隔离skill库：每道题目各自维护skill library。
+
 * SkillsBench: 官方给了一些基线，比如claude写的skills，我们可以直接拿来对比。
+
+* Ours：所有题目共享一个skill library。
 
 3. 评估指标：
 
@@ -75,6 +79,16 @@
     * utility：同一个目标query，使用skill vs 不使用skill的性能提升程度；使用这一版skill vs 使用上一版skill的性能提升程度（需要考虑下游skill的变化）。
 
     * 文档优化：对于文档优化的更新，评估优化前后被retriever检索到的概率是否下降（需要详细讨论如何设计，主要的困难一个是一次迭代中可能不止做了文档优化，另一个是大概率需要recommendation任务中的判断方法）
+
+### 具体参数
+
+executor模型：GLM-4.7B / Claude-4-6-Sonnet
+
+retrieval embedding: Qwen3-Embedding-8B
+
+planner, extractor & tester：GLM-4.7B / Claude-4-6-Sonnet
+
+数据集：所有bench都在训练集上evolve skills，测试集上评估。简单任务多分配一些训练集（10^3+），困难任务少一点训练集（10^2+）。
 
 ### 实验结果分析
 

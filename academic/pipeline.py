@@ -296,87 +296,105 @@ async def evolve_and_test(
     train: List[Problem],
     test: List[Problem],
     experiment_name: str = "train_test",
+    n_epochs: int = 1,
+    skip_baseline: bool = False,
+    agent_model: Optional[str] = None,
+    extract_model: Optional[str] = None,
 ) -> dict:
     """
-    Phase 1: Evolve skills by solving training problems.
+    Phase 1: Evolve skills by solving training problems (possibly multiple epochs).
     Phase 2: Evaluate on test problems WITH evolved skills.
-    Phase 3: Also evaluate on test problems WITHOUT skills (baseline).
+    Phase 3: Also evaluate on test problems WITHOUT skills (baseline), unless skipped.
     Returns a dict with all three result sets.
     """
+    import random as _random
+    from academic.config import AGENT_MODEL, EXTRACT_MODEL
+    _agent_model = agent_model or AGENT_MODEL
+    _extract_model = extract_model or EXTRACT_MODEL
     store = SkillStore()
 
-    # ── Phase 1: Evolve ──────────────────────────────────────────────────
-    logger.info(f"=== EVOLVE PHASE: {len(train)} problems ===")
+    # ── Phase 1: Evolve (multi-epoch) ────────────────────────────────────
+    total_train_rounds = len(train) * n_epochs
+    logger.info(f"=== EVOLVE PHASE: {len(train)} problems × {n_epochs} epochs = {total_train_rounds} rounds ===")
     evolve_result = ExperimentResult(name=f"{experiment_name}_evolve")
 
-    for i, prob in enumerate(train):
-        t0 = time.monotonic()
-        logger.info(f"[evolve {i+1}/{len(train)}] skills={len(store)} | {prob.id}")
+    round_counter = 0
+    for epoch in range(n_epochs):
+        # Shuffle training data each epoch (different order)
+        epoch_train = list(train)
+        _random.Random(42 + epoch).shuffle(epoch_train)
+        logger.info(f"--- Epoch {epoch+1}/{n_epochs} ({len(epoch_train)} problems) ---")
 
-        relevant = store.retrieve(prob.question, top_k=5)
-        for sk in relevant:
-            sk.usage_count += 1
+        for i, prob in enumerate(epoch_train):
+            t0 = time.monotonic()
+            logger.info(f"[evolve e{epoch+1} {i+1}/{len(epoch_train)} (total {round_counter+1}/{total_train_rounds})] skills={len(store)} | {prob.id}")
 
-        trace = await solve(prob.question, relevant, store=store)
-        correct = check_answer(trace.final_answer, prob.answer)
-        if correct:
+            relevant = store.retrieve(prob.question, top_k=5)
             for sk in relevant:
-                sk.success_count += 1
+                sk.usage_count += 1
 
-        # Extract skills even from incorrect solutions (patterns may still be useful)
-        if trace.code_blocks:
-            new_skills = await extract_skills(
-                query=prob.question,
-                code_blocks=trace.code_blocks,
-                outputs=trace.outputs,
-                existing_skills_prompt=store.build_skills_prompt(),
-            )
-            # Test each skill before adding to store
-            accepted = []
-            for sk in new_skills:
-                tr = test_skill(sk, store)
-                if tr.passed:
-                    old = store.get(sk.name)
-                    old_ver = old.version if old else 0
-                    store.add(sk)
-                    cur = store.get(sk.name)
-                    if old_ver > 0:
-                        logger.info(
-                            f"    skill '{sk.name}' updated v{old_ver}→v{cur.version}"
-                            f"  deps={cur.dependencies}"
-                        )
+            trace = await solve(prob.question, relevant, store=store, llm_config=_agent_model)
+            correct = check_answer(trace.final_answer, prob.answer)
+            if correct:
+                for sk in relevant:
+                    sk.success_count += 1
+
+            # Extract skills even from incorrect solutions (patterns may still be useful)
+            if trace.code_blocks:
+                new_skills = await extract_skills(
+                    query=prob.question,
+                    code_blocks=trace.code_blocks,
+                    outputs=trace.outputs,
+                    existing_skills_prompt=store.build_skills_prompt(),
+                    llm_config=_extract_model,
+                )
+                # Test each skill before adding to store
+                accepted = []
+                for sk in new_skills:
+                    tr = test_skill(sk, store)
+                    if tr.passed:
+                        old = store.get(sk.name)
+                        old_ver = old.version if old else 0
+                        store.add(sk)
+                        cur = store.get(sk.name)
+                        if old_ver > 0:
+                            logger.info(
+                                f"    skill '{sk.name}' updated v{old_ver}→v{cur.version}"
+                                f"  deps={cur.dependencies}"
+                            )
+                        else:
+                            logger.info(
+                                f"    skill '{sk.name}' added v1  deps={cur.dependencies}"
+                            )
+                        accepted.append(sk)
                     else:
-                        logger.info(
-                            f"    skill '{sk.name}' added v1  deps={cur.dependencies}"
-                        )
-                    accepted.append(sk)
-                else:
-                    logger.info(f"    skill '{sk.name}' REJECTED by tester: {tr.error}")
-            new_skills = accepted
-        else:
-            new_skills = []
+                        logger.info(f"    skill '{sk.name}' REJECTED by tester: {tr.error}")
+                new_skills = accepted
+            else:
+                new_skills = []
 
-        # Handle stale skills (lazy update)
-        stale_results = test_stale_skills(store)
-        for sr in stale_results:
-            if not sr.passed:
-                logger.info(f"    stale skill '{sr.skill_name}' rolled back: {sr.error}")
+            # Handle stale skills (lazy update)
+            stale_results = test_stale_skills(store)
+            for sr in stale_results:
+                if not sr.passed:
+                    logger.info(f"    stale skill '{sr.skill_name}' rolled back: {sr.error}")
 
-        elapsed = time.monotonic() - t0
-        code_lines = sum(c.count("\n") + 1 for c in trace.code_blocks)
-        evolve_result.rounds.append(RoundMetrics(
-            round_idx=i, query=prob.question[:100],
-            answer_correct=correct, predicted=trace.final_answer,
-            expected=prob.answer, tokens=trace.total_tokens,
-            completion_tokens=trace.completion_tokens,
-            code_lines=code_lines, skills_used=len(relevant),
-            skills_total=len(store), elapsed_s=elapsed,
-            new_skills_extracted=len(new_skills),
-        ))
-        logger.info(
-            f"  → correct={correct}  tokens={trace.total_tokens}  "
-            f"skills_now={len(store)}"
-        )
+            elapsed = time.monotonic() - t0
+            code_lines = sum(c.count("\n") + 1 for c in trace.code_blocks)
+            evolve_result.rounds.append(RoundMetrics(
+                round_idx=round_counter, query=prob.question[:100],
+                answer_correct=correct, predicted=trace.final_answer,
+                expected=prob.answer, tokens=trace.total_tokens,
+                completion_tokens=trace.completion_tokens,
+                code_lines=code_lines, skills_used=len(relevant),
+                skills_total=len(store), elapsed_s=elapsed,
+                new_skills_extracted=len(new_skills),
+            ))
+            logger.info(
+                f"  → correct={correct}  tokens={trace.total_tokens}  "
+                f"skills_now={len(store)}"
+            )
+            round_counter += 1
 
     # Save evolved skill store
     store_path = RESULTS_DIR / f"{experiment_name}_skills.json"
@@ -395,7 +413,7 @@ async def evolve_and_test(
     for i, prob in enumerate(test):
         t0 = time.monotonic()
         relevant = store.retrieve(prob.question, top_k=5)
-        trace = await solve(prob.question, relevant, store=store)
+        trace = await solve(prob.question, relevant, store=store, llm_config=_agent_model)
         correct = check_answer(trace.final_answer, prob.answer)
         elapsed = time.monotonic() - t0
         code_lines = sum(c.count("\n") + 1 for c in trace.code_blocks)
@@ -411,24 +429,28 @@ async def evolve_and_test(
         logger.info(f"  [{i+1}] correct={correct}  tokens={trace.total_tokens}")
 
     # ── Phase 3: Test WITHOUT skills (baseline) ───────────────────────────
-    logger.info(f"=== TEST (baseline, no skills): {len(test)} problems ===")
-    test_without = ExperimentResult(name=f"{experiment_name}_test_baseline")
-    for i, prob in enumerate(test):
-        t0 = time.monotonic()
-        trace = await solve(prob.question, [])  # empty skills
-        correct = check_answer(trace.final_answer, prob.answer)
-        elapsed = time.monotonic() - t0
-        code_lines = sum(c.count("\n") + 1 for c in trace.code_blocks)
-        test_without.rounds.append(RoundMetrics(
-            round_idx=i, query=prob.question[:100],
-            answer_correct=correct, predicted=trace.final_answer,
-            expected=prob.answer, tokens=trace.total_tokens,
-            completion_tokens=trace.completion_tokens,
-            code_lines=code_lines, skills_used=0,
-            skills_total=0, elapsed_s=elapsed,
-            new_skills_extracted=0,
-        ))
-        logger.info(f"  [{i+1}] correct={correct}  tokens={trace.total_tokens}")
+    if skip_baseline:
+        logger.info("=== BASELINE SKIPPED (reusing existing results) ===")
+        test_without = ExperimentResult(name=f"{experiment_name}_test_baseline")
+    else:
+        logger.info(f"=== TEST (baseline, no skills): {len(test)} problems ===")
+        test_without = ExperimentResult(name=f"{experiment_name}_test_baseline")
+        for i, prob in enumerate(test):
+            t0 = time.monotonic()
+            trace = await solve(prob.question, [], llm_config=_agent_model)  # empty skills
+            correct = check_answer(trace.final_answer, prob.answer)
+            elapsed = time.monotonic() - t0
+            code_lines = sum(c.count("\n") + 1 for c in trace.code_blocks)
+            test_without.rounds.append(RoundMetrics(
+                round_idx=i, query=prob.question[:100],
+                answer_correct=correct, predicted=trace.final_answer,
+                expected=prob.answer, tokens=trace.total_tokens,
+                completion_tokens=trace.completion_tokens,
+                code_lines=code_lines, skills_used=0,
+                skills_total=0, elapsed_s=elapsed,
+                new_skills_extracted=0,
+            ))
+            logger.info(f"  [{i+1}] correct={correct}  tokens={trace.total_tokens}")
 
     # Save all results
     evolve_result.save()

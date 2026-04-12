@@ -142,7 +142,7 @@ def _parse_skills(text: str, source_problem: str) -> List[Skill]:
                 name=name,
                 description=desc,
                 code=code,
-                source_problems=[source_problem[:200]],
+                source_problems=[source_problem],
                 test_code=test_code,
             ))
 

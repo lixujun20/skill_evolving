@@ -1,0 +1,67 @@
+[
+  {
+    "name": "gaussian_mul",
+    "description": "Multiplies two Gaussian integers represented as tuples (real, imag).",
+    "code": "def gaussian_mul(z1, z2):\n    \"\"\"Multiplies two Gaussian integers (a+bi) and (c+di).\"\"\"\n    a, b = z1\n    c, d = z2\n    return (a * c - b * d, a * d + b * c)",
+    "source_problems": [
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert gaussian_mul((1, 1), (1, -1)) == (2, 0)\nassert gaussian_mul((1, 2), (3, 4)) == (-5, 10)"
+  },
+  {
+    "name": "gaussian_pow",
+    "description": "Computes the nth power of a Gaussian integer (a+bi)^n using binary exponentiation.",
+    "code": "def gaussian_pow(a, b, n):\n    \"\"\"Computes (a + bi)^n using binary exponentiation.\"\"\"\n    res = (1, 0)\n    base = (a, b)\n    while n > 0:\n        if n % 2 == 1:\n            res = gaussian_mul(res, base)\n        base = gaussian_mul(base, base)\n        n //= 2\n    return res",
+    "source_problems": [
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [
+      "gaussian_mul"
+    ],
+    "stale": false,
+    "test_code": "assert gaussian_pow(1, 1, 2) == (0, 2)\nassert gaussian_pow(1, 1, 13) == (-64, -64)"
+  },
+  {
+    "name": "gaussian_mod_sq",
+    "description": "Computes the squared modulus of a Gaussian integer a^2 + b^2.",
+    "code": "def gaussian_mod_sq(a, b):\n    \"\"\"Computes the squared modulus of a Gaussian integer a+bi.\"\"\"\n    return a * a + b * b",
+    "source_problems": [
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert gaussian_mod_sq(3, 4) == 25\nassert gaussian_mod_sq(-65, -64) == 8321"
+  },
+  {
+    "name": "product_roots_unity",
+    "description": "Computes the product of a polynomial evaluated at all n-th roots of unity given the polynomial's roots.",
+    "code": "def product_roots_unity(roots, n):\n    \"\"\"\n    Computes product_{k=0}^{n-1} P(w^k) where w is primitive n-th root of unity\n    and roots are the roots of polynomial P(x).\n    Formula: prod (r^n - 1) for r in roots.\n    \"\"\"\n    prod = (1, 0)\n    for r in roots:\n        # Compute r^n - 1\n        r_pow = gaussian_pow(r[0], r[1], n)\n        term = (r_pow[0] - 1, r_pow[1])\n        prod = gaussian_mul(prod, term)\n    return prod",
+    "source_problems": [
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [
+      "gaussian_pow",
+      "gaussian_mul"
+    ],
+    "stale": false,
+    "test_code": "# Roots of x^2 - 2x + 2 are 1+i and 1-i. Product for n=13 should be 8321.\nassert product_roots_unity([(1, 1), (1, -1)], 13) == (8321, 0)"
+  }
+]

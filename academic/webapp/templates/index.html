@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill Explorer — Tool Evolution</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <header>
+    <h1>🧠 Skill Explorer</h1>
+    <div class="lib-selector">
+      <label for="lib-select">📚 Library:</label>
+      <select id="lib-select"></select>
+      <span id="lib-info" class="lib-info"></span>
+    </div>
+  </header>
+
+  <!-- Stats Bar -->
+  <div id="stats-bar" class="stats-bar"></div>
+
+  <!-- Main Layout -->
+  <div class="main-layout">
+    <!-- Left: Skill List -->
+    <aside class="skill-list-panel">
+      <div class="search-box">
+        <input type="text" id="search" placeholder="🔍 Search skills..." autocomplete="off">
+      </div>
+      <div class="sort-controls">
+        <select id="sort-by">
+          <option value="name">Name</option>
+          <option value="usage" selected>Usage ↓</option>
+          <option value="success">Success Rate</option>
+          <option value="deps">Dependencies</option>
+        </select>
+      </div>
+      <ul id="skill-list" class="skill-list"></ul>
+    </aside>
+
+    <!-- Right: Skill Detail -->
+    <main class="detail-panel">
+      <div id="detail-placeholder" class="placeholder">
+        <p>← Select a skill to view details</p>
+      </div>
+      <div id="detail-content" class="detail-content" style="display:none">
+        <div class="detail-header">
+          <h2 id="detail-name"></h2>
+          <span id="detail-version" class="badge"></span>
+        </div>
+        <p id="detail-desc" class="detail-desc"></p>
+
+        <!-- Metadata -->
+        <div class="meta-grid">
+          <div class="meta-card">
+            <div class="meta-label">Usage</div>
+            <div class="meta-value" id="meta-usage">0</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Success</div>
+            <div class="meta-value" id="meta-success">0</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Success Rate</div>
+            <div class="meta-value" id="meta-rate">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Dependencies</div>
+            <div class="meta-value" id="meta-deps">0</div>
+          </div>
+        </div>
+
+        <!-- Dependencies -->
+        <div id="deps-section" style="display:none">
+          <h3>Dependencies</h3>
+          <div id="deps-list" class="deps-list"></div>
+        </div>
+
+        <!-- Source Problems -->
+        <div id="source-section" style="display:none">
+          <h3>Source Problem</h3>
+          <div id="source-problem" class="source-problem"></div>
+        </div>
+
+        <!-- Code -->
+        <h3>Implementation</h3>
+        <pre><code id="detail-code" class="language-python"></code></pre>
+
+        <!-- Test Code -->
+        <div id="test-section">
+          <h3>Test Code
+            <button id="btn-run-test" class="btn btn-run" title="Run test">▶ Run</button>
+          </h3>
+          <pre><code id="detail-test" class="language-python"></code></pre>
+        </div>
+
+        <!-- Custom Runner -->
+        <h3>Custom Runner
+          <button id="btn-run-custom" class="btn btn-run" title="Run custom code">▶ Run</button>
+        </h3>
+        <textarea id="custom-code" class="code-editor" placeholder="# Write custom code using this skill...&#10;result = skill_name(args)&#10;print(result)"></textarea>
+
+        <!-- Output -->
+        <div id="output-section" class="output-section">
+          <h3>🖥️ Output</h3>
+          <pre id="run-output" class="run-output"></pre>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Dependency Graph -->
+  <section class="graph-section">
+    <h2>🔗 Dependency Graph</h2>
+    <div id="graph-container" style="position:relative; width:100%; height:500px; background:var(--bg); border-radius:6px; overflow:hidden;">
+      <svg id="graph-svg" width="100%" height="100%"></svg>
+      <div id="graph-tooltip" class="graph-tooltip"></div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

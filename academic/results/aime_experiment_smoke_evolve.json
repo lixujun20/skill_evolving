@@ -1,0 +1,35 @@
+{
+  "name": "aime_experiment_smoke_evolve",
+  "accuracy": 1.0,
+  "avg_tokens": 7640.5,
+  "rounds": [
+    {
+      "round_idx": 0,
+      "query": "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\",
+      "answer_correct": true,
+      "predicted": "321",
+      "expected": "321",
+      "tokens": 5154,
+      "completion_tokens": 4884,
+      "code_lines": 6,
+      "skills_used": 0,
+      "skills_total": 4,
+      "elapsed_s": 214.67940286174417,
+      "new_skills_extracted": 4
+    },
+    {
+      "round_idx": 1,
+      "query": "Let $A$, $B$, $C$, and $D$ be point on the hyperbola $\\frac{x^2}{20}- \\frac{y^2}{24} = 1$ such that ",
+      "answer_correct": true,
+      "predicted": "480",
+      "expected": "480",
+      "tokens": 10127,
+      "completion_tokens": 9379,
+      "code_lines": 2,
+      "skills_used": 4,
+      "skills_total": 4,
+      "elapsed_s": 150.9445914728567,
+      "new_skills_extracted": 0
+    }
+  ]
+}

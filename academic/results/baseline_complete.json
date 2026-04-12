@@ -1,0 +1,581 @@
+{
+  "existing_results": [
+    {
+      "idx": 1,
+      "correct": true,
+      "tokens": 33080
+    },
+    {
+      "idx": 2,
+      "correct": true,
+      "tokens": 9045
+    },
+    {
+      "idx": 3,
+      "correct": true,
+      "tokens": 20860
+    },
+    {
+      "idx": 4,
+      "correct": true,
+      "tokens": 20111
+    },
+    {
+      "idx": 5,
+      "correct": true,
+      "tokens": 7367
+    },
+    {
+      "idx": 6,
+      "correct": true,
+      "tokens": 17506
+    },
+    {
+      "idx": 7,
+      "correct": true,
+      "tokens": 3753
+    },
+    {
+      "idx": 8,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 9,
+      "correct": true,
+      "tokens": 19352
+    },
+    {
+      "idx": 10,
+      "correct": true,
+      "tokens": 2905
+    },
+    {
+      "idx": 11,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 12,
+      "correct": true,
+      "tokens": 11017
+    },
+    {
+      "idx": 13,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 14,
+      "correct": true,
+      "tokens": 4901
+    },
+    {
+      "idx": 15,
+      "correct": true,
+      "tokens": 1755
+    },
+    {
+      "idx": 16,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 17,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 18,
+      "correct": false,
+      "tokens": 0
+    }
+  ],
+  "new_results": [
+    {
+      "idx": 19,
+      "correct": true,
+      "tokens": 7601,
+      "completion_tokens": 7199,
+      "predicted": "106",
+      "expected": "106",
+      "elapsed_s": 61.98508602194488,
+      "problem_id": "Problem_4"
+    },
+    {
+      "idx": 20,
+      "correct": true,
+      "tokens": 2096,
+      "completion_tokens": 1774,
+      "predicted": "16",
+      "expected": "16",
+      "elapsed_s": 16.986373056657612,
+      "problem_id": "Problem_3"
+    },
+    {
+      "idx": 21,
+      "correct": false,
+      "tokens": 9911,
+      "completion_tokens": 9432,
+      "predicted": "92",
+      "expected": "82",
+      "elapsed_s": 113.70011378638446,
+      "problem_id": "Problem_3"
+    },
+    {
+      "idx": 22,
+      "correct": false,
+      "tokens": 16303,
+      "completion_tokens": 16000,
+      "predicted": null,
+      "expected": "104",
+      "elapsed_s": 239.4194290759042,
+      "problem_id": "Problem_14"
+    },
+    {
+      "idx": 23,
+      "correct": true,
+      "tokens": 11501,
+      "completion_tokens": 11219,
+      "predicted": "279",
+      "expected": "279",
+      "elapsed_s": 135.88353735022247,
+      "problem_id": "Problem_5"
+    },
+    {
+      "idx": 24,
+      "correct": true,
+      "tokens": 15727,
+      "completion_tokens": 15450,
+      "predicted": "907",
+      "expected": "907",
+      "elapsed_s": 134.57294666953385,
+      "problem_id": "Problem_10"
+    },
+    {
+      "idx": 25,
+      "correct": true,
+      "tokens": 8421,
+      "completion_tokens": 8113,
+      "predicted": "77",
+      "expected": "77",
+      "elapsed_s": 262.6274369675666,
+      "problem_id": "Problem_8"
+    },
+    {
+      "idx": 26,
+      "correct": true,
+      "tokens": 9026,
+      "completion_tokens": 8713,
+      "predicted": "62",
+      "expected": "62",
+      "elapsed_s": 66.69485309068114,
+      "problem_id": "Problem_9"
+    },
+    {
+      "idx": 27,
+      "correct": false,
+      "tokens": 0,
+      "completion_tokens": 0,
+      "predicted": null,
+      "expected": "149",
+      "elapsed_s": 300.0514705404639,
+      "problem_id": "Problem_9"
+    },
+    {
+      "idx": 28,
+      "correct": true,
+      "tokens": 1721,
+      "completion_tokens": 1478,
+      "predicted": "70",
+      "expected": "70",
+      "elapsed_s": 41.05547406896949,
+      "problem_id": "Problem_1"
+    },
+    {
+      "idx": 29,
+      "correct": true,
+      "tokens": 2329,
+      "completion_tokens": 2065,
+      "predicted": "117",
+      "expected": "117",
+      "elapsed_s": 30.045783035457134,
+      "problem_id": "Problem_4"
+    },
+    {
+      "idx": 30,
+      "correct": true,
+      "tokens": 8090,
+      "completion_tokens": 7124,
+      "predicted": "293",
+      "expected": "293",
+      "elapsed_s": 217.5717037199065,
+      "problem_id": "Problem_6"
+    }
+  ],
+  "all_baseline": [
+    {
+      "idx": 1,
+      "correct": true,
+      "tokens": 33080
+    },
+    {
+      "idx": 2,
+      "correct": true,
+      "tokens": 9045
+    },
+    {
+      "idx": 3,
+      "correct": true,
+      "tokens": 20860
+    },
+    {
+      "idx": 4,
+      "correct": true,
+      "tokens": 20111
+    },
+    {
+      "idx": 5,
+      "correct": true,
+      "tokens": 7367
+    },
+    {
+      "idx": 6,
+      "correct": true,
+      "tokens": 17506
+    },
+    {
+      "idx": 7,
+      "correct": true,
+      "tokens": 3753
+    },
+    {
+      "idx": 8,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 9,
+      "correct": true,
+      "tokens": 19352
+    },
+    {
+      "idx": 10,
+      "correct": true,
+      "tokens": 2905
+    },
+    {
+      "idx": 11,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 12,
+      "correct": true,
+      "tokens": 11017
+    },
+    {
+      "idx": 13,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 14,
+      "correct": true,
+      "tokens": 4901
+    },
+    {
+      "idx": 15,
+      "correct": true,
+      "tokens": 1755
+    },
+    {
+      "idx": 16,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 17,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 18,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 19,
+      "correct": true,
+      "tokens": 7601,
+      "completion_tokens": 7199,
+      "predicted": "106",
+      "expected": "106",
+      "elapsed_s": 61.98508602194488,
+      "problem_id": "Problem_4"
+    },
+    {
+      "idx": 20,
+      "correct": true,
+      "tokens": 2096,
+      "completion_tokens": 1774,
+      "predicted": "16",
+      "expected": "16",
+      "elapsed_s": 16.986373056657612,
+      "problem_id": "Problem_3"
+    },
+    {
+      "idx": 21,
+      "correct": false,
+      "tokens": 9911,
+      "completion_tokens": 9432,
+      "predicted": "92",
+      "expected": "82",
+      "elapsed_s": 113.70011378638446,
+      "problem_id": "Problem_3"
+    },
+    {
+      "idx": 22,
+      "correct": false,
+      "tokens": 16303,
+      "completion_tokens": 16000,
+      "predicted": null,
+      "expected": "104",
+      "elapsed_s": 239.4194290759042,
+      "problem_id": "Problem_14"
+    },
+    {
+      "idx": 23,
+      "correct": true,
+      "tokens": 11501,
+      "completion_tokens": 11219,
+      "predicted": "279",
+      "expected": "279",
+      "elapsed_s": 135.88353735022247,
+      "problem_id": "Problem_5"
+    },
+    {
+      "idx": 24,
+      "correct": true,
+      "tokens": 15727,
+      "completion_tokens": 15450,
+      "predicted": "907",
+      "expected": "907",
+      "elapsed_s": 134.57294666953385,
+      "problem_id": "Problem_10"
+    },
+    {
+      "idx": 25,
+      "correct": true,
+      "tokens": 8421,
+      "completion_tokens": 8113,
+      "predicted": "77",
+      "expected": "77",
+      "elapsed_s": 262.6274369675666,
+      "problem_id": "Problem_8"
+    },
+    {
+      "idx": 26,
+      "correct": true,
+      "tokens": 9026,
+      "completion_tokens": 8713,
+      "predicted": "62",
+      "expected": "62",
+      "elapsed_s": 66.69485309068114,
+      "problem_id": "Problem_9"
+    },
+    {
+      "idx": 27,
+      "correct": false,
+      "tokens": 0,
+      "completion_tokens": 0,
+      "predicted": null,
+      "expected": "149",
+      "elapsed_s": 300.0514705404639,
+      "problem_id": "Problem_9"
+    },
+    {
+      "idx": 28,
+      "correct": true,
+      "tokens": 1721,
+      "completion_tokens": 1478,
+      "predicted": "70",
+      "expected": "70",
+      "elapsed_s": 41.05547406896949,
+      "problem_id": "Problem_1"
+    },
+    {
+      "idx": 29,
+      "correct": true,
+      "tokens": 2329,
+      "completion_tokens": 2065,
+      "predicted": "117",
+      "expected": "117",
+      "elapsed_s": 30.045783035457134,
+      "problem_id": "Problem_4"
+    },
+    {
+      "idx": 30,
+      "correct": true,
+      "tokens": 8090,
+      "completion_tokens": 7124,
+      "predicted": "293",
+      "expected": "293",
+      "elapsed_s": 217.5717037199065,
+      "problem_id": "Problem_6"
+    }
+  ],
+  "test_with_skills": [
+    {
+      "idx": 1,
+      "correct": true,
+      "tokens": 13948
+    },
+    {
+      "idx": 2,
+      "correct": true,
+      "tokens": 8713
+    },
+    {
+      "idx": 3,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 4,
+      "correct": true,
+      "tokens": 7945
+    },
+    {
+      "idx": 5,
+      "correct": true,
+      "tokens": 12909
+    },
+    {
+      "idx": 6,
+      "correct": true,
+      "tokens": 14049
+    },
+    {
+      "idx": 7,
+      "correct": true,
+      "tokens": 3692
+    },
+    {
+      "idx": 8,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 9,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 10,
+      "correct": true,
+      "tokens": 3339
+    },
+    {
+      "idx": 11,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 12,
+      "correct": true,
+      "tokens": 10834
+    },
+    {
+      "idx": 13,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 14,
+      "correct": true,
+      "tokens": 5486
+    },
+    {
+      "idx": 15,
+      "correct": true,
+      "tokens": 2450
+    },
+    {
+      "idx": 16,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 17,
+      "correct": true,
+      "tokens": 20277
+    },
+    {
+      "idx": 18,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 19,
+      "correct": true,
+      "tokens": 8130
+    },
+    {
+      "idx": 20,
+      "correct": true,
+      "tokens": 2693
+    },
+    {
+      "idx": 21,
+      "correct": true,
+      "tokens": 7618
+    },
+    {
+      "idx": 22,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 23,
+      "correct": true,
+      "tokens": 6262
+    },
+    {
+      "idx": 24,
+      "correct": true,
+      "tokens": 19001
+    },
+    {
+      "idx": 25,
+      "correct": true,
+      "tokens": 4285
+    },
+    {
+      "idx": 26,
+      "correct": false,
+      "tokens": 0
+    },
+    {
+      "idx": 27,
+      "correct": true,
+      "tokens": 13022
+    },
+    {
+      "idx": 28,
+      "correct": true,
+      "tokens": 1836
+    },
+    {
+      "idx": 29,
+      "correct": true,
+      "tokens": 3160
+    },
+    {
+      "idx": 30,
+      "correct": false,
+      "tokens": 0
+    }
+  ],
+  "notes": "Problems 1-18 from SiliconFlow (GLM-4.7), 19-30 from BigModel (GLM-4.7)"
+}

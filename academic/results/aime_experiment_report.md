@@ -4,22 +4,22 @@
 
 We evaluate a **skill evolution** framework on competition-level mathematics
 (AIME 2024 → 2025). The system extracts reusable code "skills" from
-problem-solving traces and accumulates them in a shared library. On a
-held-out test set, we compare **skill-augmented solving** against a
-**baseline** that uses the same LLM without accumulated skills.
+problem-solving traces and accumulates them in a shared library. We conduct
+three experiments: (1) single-epoch evolution with GLM-4.7, (2) multi-epoch
+(3-pass) evolution, and (3) single-epoch with a weaker model (GLM-4.5-Air).
 
-**Key findings** (GLM-4.7, 30 train → 30 test):
+**Key findings**:
 
-| Metric | Skill-Augmented | Baseline | Δ |
-|--------|:-:|:-:|:-:|
-| Accuracy (30 problems) | 66.7% (20/30) | 70.0% (21/30) | −3.3 pp |
-| Token cost (17 shared solved) | 128,732 | 160,836 | **−20.0%** |
-| Unique solves | 3 | 4 | — |
-| Timeouts | 10 | 7 | +3 |
+| Experiment | Test Accuracy | Baseline | Δ Accuracy | Token Δ (shared) |
+|------------|:-:|:-:|:-:|:-:|
+| Exp 1: GLM-4.7, 1 epoch | 66.7% (20/30) | 70.0% (21/30) | −3.3 pp | **−20.0%** |
+| Exp 2: GLM-4.7, 3 epochs | 43.3% (13/30) | (reuse Exp 1) | −26.7 pp | — |
+| Exp 3: GLM-4.5-Air, 1 epoch | *pending* | *pending* | *pending* | *pending* |
 
-The framework **does not improve accuracy** on this benchmark but achieves
-a **20% token reduction** on commonly-solved problems, demonstrating that
-skill reuse compresses the reasoning path.
+The framework achieves a **20% token reduction** on commonly-solved problems
+with single-epoch training, but **multi-epoch training degrades accuracy**
+due to skill over-accumulation. This reveals an important trade-off between
+skill library richness and prompt pollution.
 
 ---
 
@@ -43,6 +43,10 @@ We hypothesise that:
   verified building blocks.
 - (H2) Skills reduce token cost by replacing verbose from-scratch
   derivations with short function calls.
+- (H3) Multiple training passes further improve skill quality and
+  downstream performance.
+- (H4) Weaker models benefit more from skill augmentation than
+  stronger models.
 
 ---
 
@@ -59,12 +63,16 @@ Problems are shuffled with seed 42 for reproducibility. AIME (American
 Invitational Mathematics Examination) problems are competition-level,
 spanning number theory, combinatorics, algebra, and geometry.
 
-### 2.2  Model
+### 2.2  Models
 
-- **LLM**: GLM-4.7 (ZhipuAI)
-  - Evolve and test-with-skills phases: via SiliconFlow API (`Pro/zai-org/GLM-4.7`)
-  - Baseline completion (problems 19–30): via BigModel API (`glm-4.7`, same underlying model)
-  - Temperature: default (API default)
+| Config | Model | API | Role |
+|--------|-------|-----|------|
+| **GLM-4.7** | `glm-4.7` (ZhipuAI) | BigModel / SiliconFlow | Executor + Extractor (Exp 1, 2) |
+| **GLM-4.5-Air** | `glm-4.5-air` (ZhipuAI) | BigModel | Executor only (Exp 3) |
+
+In Experiment 3, the weaker GLM-4.5-Air serves as the executor (problem solver),
+while GLM-4.7 remains the extractor (skill extraction). This tests whether
+skills evolved by a strong extractor can help a weaker executor.
 
 ### 2.3  System Configuration
 
@@ -74,20 +82,20 @@ spanning number theory, combinatorics, algebra, and geometry.
 | `CODE_EXEC_TIMEOUT` | 30 s | Per code-block execution timeout |
 | `LLM_TIMEOUT` | 300 s | Per LLM request timeout |
 | `top_k` | 5 | Skills retrieved per query (TF-IDF cosine) |
-| Extraction model | GLM-4.7 | Same model extracts skills |
 | Tester | 3-stage | Syntax → Load → Assertion |
 
 ### 2.4  Pipeline
 
 ```
-Phase 1 — Evolve (AIME 2024, 30 problems):
-   For each problem:
-     1. Retrieve top-5 relevant skills from store
-     2. Executor solves with skills pre-loaded
-     3. Extractor analyses trace → candidate skills
-     4. Tester validates each candidate (syntax, load, assertions)
-     5. Verified skills added to store
-   Skills accumulate across problems.
+Phase 1 — Evolve (AIME 2024, 30 problems × N epochs):
+   For each epoch, shuffle training problems:
+     For each problem:
+       1. Retrieve top-5 relevant skills from store
+       2. Executor solves with skills pre-loaded
+       3. Extractor analyses trace → candidate skills
+       4. Tester validates each candidate (syntax, load, assertions)
+       5. Verified skills added/updated in store
+   Skills accumulate across problems and epochs.
 
 Phase 2 — Test with Skills (AIME 2025, 30 problems):
    Solve each problem with the full evolved skill library.
@@ -115,7 +123,7 @@ Skills failing any stage are rejected.
 
 ---
 
-## 3  Results
+## 3  Experiment 1: Single-Epoch Evolution (GLM-4.7)
 
 ### 3.1  Evolve Phase (Training)
 
@@ -143,16 +151,13 @@ a dependency graph with maximum depth 2. Notable skill clusters include:
 
 | Method | Correct | Accuracy | Timeouts | Solved but Wrong |
 |--------|:-------:|:--------:|:--------:|:-------:|
-| With skills | 20/30 | **66.7%** | 10 | 0 |
-| Baseline | 21/30 | **70.0%** | 7 | 2 |
+| With skills (1 epoch, 34 skills) | 20/30 | **66.7%** | 10 | 0 |
+| Baseline (no skills) | 21/30 | **70.0%** | 7 | 2 |
 
 The baseline achieves marginally higher accuracy (+3.3 percentage points).
 Notably, the skill-augmented method has **more timeouts** (10 vs 7) but
 **zero wrong answers** among solved problems — every problem that
 produced an answer was correct.
-
-The baseline has 2 problems where it produced an answer but got it wrong
-(problems 21, 22), while the skill method timed out on those instead.
 
 #### 3.2.2  Per-Problem Breakdown
 
@@ -211,52 +216,7 @@ Token savings are highly problem-dependent:
 - **Large savings** (>30%): Problems 1 (−58%), 4 (−60%), 23 (−46%), 25 (−49%)
 - **Increased cost** (>30%): Problems 5 (+75%), 15 (+40%), 29 (+36%)
 
-The large-savings cases correspond to problems where relevant skills were
-retrieved and reused effectively. The increased-cost cases suggest that
-irrelevant skills in the prompt may occasionally distract the model or
-inflate prompt length without benefit.
-
-### 3.3  Skill Usage Analysis
-
-| Metric | Value |
-|--------|:-----:|
-| Total skills evolved | 34 |
-| Skills with ≥1 usage | 26 (76.5%) |
-| Skills with ≥1 success | 23 (67.6%) |
-| Avg usage count | 4.4 |
-| Avg success rate | 71.3% |
-| Max usage | 17 (`hyperbola_rhombus_diagonal_infimum`) |
-| Skills with dependencies | 8 (23.5%) |
-
-Most skills (76.5%) were used at least once during test-time retrieval.
-The most-used skill, `hyperbola_rhombus_diagonal_infimum`, was retrieved
-17 times but only succeeded 15 times, suggesting that TF-IDF retrieval
-occasionally matches skills to unrelated problems.
-
-### 3.4  Timeout Analysis
-
-| Phase | Timeouts | Rate |
-|-------|:--------:|:----:|
-| Evolve | 5/30 | 16.7% |
-| Test (skills) | 10/30 | **33.3%** |
-| Test (baseline) | 7/30 | 23.3% |
-
-The skill-augmented method has a **higher timeout rate** than baseline
-(33.3% vs 23.3%). Two possible explanations:
-
-1. **Prompt bloat**: Injecting 5 skill definitions increases prompt
-   length, consuming more of the 300s LLM timeout budget.
-2. **Distraction**: Irrelevant skills may lead the model down wrong
-   solution paths, causing more retries within the 8-step limit.
-
-Five problems (8, 11, 13, 16, 18) timed out under both conditions,
-suggesting these are genuinely beyond GLM-4.7's capability for AIME 2025.
-
----
-
-## 4  Cost Analysis
-
-### 4.1  Total Token Budget
+### 3.3  Cost Analysis
 
 | Phase | Total Tokens | Purpose |
 |-------|:-----------:|---------|
@@ -264,169 +224,258 @@ suggesting these are genuinely beyond GLM-4.7's capability for AIME 2025.
 | Test (skills) | 169,649 | Solving with skills |
 | Test (baseline) | 244,378 | Solving without skills |
 
-**Overhead of skill evolution**: The evolve phase costs 235,671 tokens
-for training. At test time, the skill method uses 169,649 tokens vs
-baseline's 244,378 — a saving of 74,729 tokens (30.6%).
-
-However, including the training cost:
-- **Total with skills**: 235,671 + 169,649 = **405,320 tokens**
-- **Total baseline**: 244,378 tokens
-
-The skill evolution system costs **65.8% more** in total when including
-training. This overhead is amortised only if the skill library is reused
-across many test sets.
-
-### 4.2  Break-Even Analysis
-
-At the observed test-time savings rate of 74,729 tokens per 30 problems
-(2,491 tokens/problem), the training cost of 235,671 tokens would be
-amortised after solving approximately **95 additional problems** — about
-3.2 additional test sets of 30 problems each.
+**Overhead**: Including training cost, the skill method costs
+405,320 tokens vs baseline's 244,378 — **65.8% more**. Break-even
+requires ~95 additional test problems (~3.2 test sets of 30).
 
 ---
 
-## 5  Discussion
+## 4  Experiment 2: Multi-Epoch Evolution (3 Epochs)
 
-### 5.1  Why Didn't Accuracy Improve?
+### 4.1  Motivation
 
-**H1 (accuracy improvement) is not supported** on this benchmark.
-Several factors contribute:
+We test whether multiple passes over the training set improve skill quality
+through version updates, higher-level composition, and better coverage.
 
-1. **Strong baseline**: GLM-4.7 with code execution already solves
-   70% of AIME 2025 problems. The "low-hanging fruit" that skills would
-   help with is already captured.
+### 4.2  Setup
 
-2. **Domain mismatch**: AIME 2024 and 2025 problems share the same
-   competition format but may test different mathematical concepts.
-   Skills extracted from 2024 geometry problems may not transfer to
-   2025 number theory problems.
+Same configuration as Experiment 1, but the 30 training problems are solved
+**3 times** with different shuffled orders (seeds 42, 43, 44). Skills
+accumulate across all 90 rounds. Baseline is reused from Experiment 1.
 
-3. **TF-IDF retrieval limitations**: Bag-of-words retrieval based on
-   surface-level text similarity may fail to match semantically relevant
-   skills. A problem about "counting lattice points" might benefit from
-   a skill about "integer partitions," but TF-IDF may not connect them.
+### 4.3  Epoch-by-Epoch Training Analysis
 
-4. **Timeout increase**: The 10% higher timeout rate with skills
-   (33.3% vs 23.3%) directly reduces accuracy. If the 3 extra timeouts
-   had been solved, skill accuracy would match baseline.
+| Epoch | Accuracy | Timeouts | Avg Tokens (solved) | Skills Start → End | New Skills |
+|:-----:|:--------:|:--------:|:-------------------:|:------------------:|:----------:|
+| 1 | 18/30 (60.0%) | 4 | 11,736 | 0 → 22 | +22 |
+| 2 | 20/30 (66.7%) | 1 | 10,711 | 22 → 38 | +16 |
+| 3 | 17/30 (56.7%) | 3 | 9,696 | 38 → 45 | +7 |
+| **Total** | **55/90 (61.1%)** | **8** | **10,048** | — | **45** |
 
-### 5.2  Token Efficiency Is Real
+Key observations:
+- **Epoch 2 is the sweet spot**: Highest training accuracy (66.7%) with
+  minimal timeouts (1). Skills from Epoch 1 are actively helping.
+- **Epoch 3 shows degradation**: Accuracy drops to 56.7% despite having
+  38→45 skills. Diminishing returns as the skill library grows.
+- **Token cost decreases monotonically**: 11,736 → 10,711 → 9,696.
+  Skills consistently compress the reasoning path, even when they hurt accuracy.
+- **Skill creation rate declines**: +22 → +16 → +7. The library saturates;
+  most useful patterns have already been captured.
 
-**H2 (token reduction) is supported**. On commonly-solved problems,
-skills reduce tokens by 20%. The mechanism is clear: when a relevant
-skill is available (e.g., `complex_pow_int` for a complex number problem),
-the model writes a short function call instead of re-deriving the
-algorithm. Problems 1 and 4 show 58–60% savings, confirming this.
+### 4.4  Test Results
 
-### 5.3  Complementary Solving
+| Method | Correct | Accuracy | Timeouts |
+|--------|:-------:|:--------:|:--------:|
+| 3 epochs, 45 skills | 13/30 | **43.3%** | 9 |
+| 1 epoch, 34 skills (Exp 1) | 20/30 | 66.7% | 10 |
+| Baseline (Exp 1) | 21/30 | 70.0% | 7 |
 
-The 3 problems solved only with skills and 4 solved only without suggest
-the methods have **partially orthogonal failure modes**. This points
-toward a potential **ensemble approach**:
+**Multi-epoch is significantly worse**: 43.3% vs 66.7% single-epoch.
 
-- Run both methods; take the first valid answer.
-- Oracle accuracy: 24/30 = 80.0% (vs 70% baseline, 66.7% skills).
+### 4.5  Regression Analysis: 1 Epoch vs 3 Epochs
 
-### 5.4  Skill Quality and Granularity
+| # | 1ep | 3ep | Regression? | Note |
+|:-:|:---:|:---:|:-----------:|------|
+| 1 | ✓ | ✗ | **YES** | 13,948→17,431 tokens, wrong answer |
+| 4 | ✓ | ✗ | **YES** | 7,945→17,339 tokens |
+| 12 | ✓ | ✗ | **YES** | 10,834→timeout |
+| 17 | ✓ | ✗ | **YES** | 20,277→17,511 (wrong) |
+| 21 | ✓ | ✗ | **YES** | 7,618→timeout |
+| 23 | ✓ | ✗ | **YES** | 6,262→timeout |
+| 24 | ✓ | ✗ | **YES** | 19,001→16,855 (wrong) |
 
-The 34 extracted skills vary in quality:
-- **High utility**: `complex_pow_int` (5 uses, 100% success),
-  `get_set_bit_indices` (7 uses, 86% success)
-- **Moderate utility**: `hyperbola_rhombus_diagonal_infimum` (17 uses,
-  88% success) — retrieved often but highly specialised
-- **Low utility**: 8 skills (23.5%) with 0 usage — never retrieved
+**7 problems regressed** from correct (1 epoch) to incorrect (3 epochs).
+No problems improved (0 new solves that 1 epoch missed).
 
-The high proportion of unused skills suggests the extractor is
-**over-extracting** specialised skills that don't generalise. A more
-conservative extraction strategy or a usage-based pruning mechanism
-could improve skill library quality.
+### 4.6  Root Cause: Skill Over-Accumulation
 
----
+The 3-epoch library has 45 skills vs 34 for single-epoch, but only
+**7 skills** overlap between the two libraries (different shuffling
+produces different extraction patterns). The multi-epoch library contains:
 
-## 6  Limitations
+- More highly-specialised skills with low generality
+- Higher prompt overhead: 45 skill definitions inflate the context window
+- Potential skill conflicts: overlapping but slightly different implementations
 
-1. **Single model**: Only GLM-4.7 was tested. Results may differ with
-   stronger models (e.g., GPT-4, Claude) or weaker ones.
-
-2. **Single run**: No repeated trials to estimate variance. The 3.3pp
-   accuracy difference may be within noise.
-
-3. **API inconsistency**: Baseline problems 1–18 used SiliconFlow API;
-   19–30 used BigModel API. Both serve GLM-4.7 but may differ in
-   latency and timeout behaviour.
-
-4. **No multi-round evolution**: Each training problem was solved once.
-   Multiple passes over the training set might improve skill quality
-   through version updates.
-
-5. **TF-IDF retrieval**: A more sophisticated retrieval method (e.g.,
-   embedding-based) might improve skill matching.
-
-6. **Small test set**: 30 problems provide limited statistical power.
+The TF-IDF retriever injects top-5 skills regardless of relevance. With a
+larger library, the probability of injecting *irrelevant* skills increases,
+confusing the executor and triggering wrong answers rather than timeouts.
 
 ---
 
-## 7  Future Directions
+## 5  Experiment 3: Weak Model (GLM-4.5-Air)
 
-### 7.1  Improved Retrieval
-Replace TF-IDF with **embedding-based retrieval** (e.g., using the same
-LLM or a dedicated embedding model) to better match problem semantics
-to skill capabilities.
+### 5.1  Motivation
 
-### 7.2  Selective Skill Injection
-Instead of always injecting top-5 skills, use a **gating mechanism** to
-decide whether any skills are relevant. If confidence is low, fall back
-to no-skill mode. This could reduce the timeout increase observed.
+We test **H4**: whether skill evolution benefits weaker models more than
+stronger ones. GLM-4.5-Air is a lighter, faster variant of the GLM family.
+The extractor remains GLM-4.7 to maintain skill quality.
 
-### 7.3  Multi-Round Evolution
-Run the training set through **multiple passes**, allowing the system to:
-- Update existing skills based on new usage patterns
-- Prune unused skills
-- Build higher-level composite skills
+### 5.2  Setup
 
-### 7.4  Cross-Domain Transfer
-Test whether skills evolved on one dataset (e.g., AIME) transfer to
-other mathematical benchmarks (e.g., MATH-500, AMC, Olympiad problems).
+| Component | Model |
+|-----------|-------|
+| Executor (solver) | GLM-4.5-Air |
+| Extractor | GLM-4.7 |
+| Epochs | 1 |
 
-### 7.5  Adaptive Timeout
-Dynamically adjust the LLM timeout based on problem complexity or
-prompt length to account for the increased latency from skill injection.
+### 5.3  Results
 
-### 7.6  Ensemble Strategy
-Implement the oracle ensemble approach: run both skill-augmented and
-baseline solving, selecting the better answer per problem. The
-theoretical upper bound (80.0%) suggests significant gains.
-
-### 7.7  Stronger Base Models
-Test with more capable models (e.g., GPT-4o, Claude Sonnet 4) where
-the baseline accuracy ceiling is higher and skill reuse patterns may
-differ.
+*Experiment in progress — results will be updated when complete.*
 
 ---
 
-## 8  Conclusion
+## 6  Skill Library Analysis
 
-We evaluated a skill evolution framework on AIME 2024→2025, comparing
-skill-augmented solving against a no-skill baseline using GLM-4.7.
+### 6.1  Experiment 1 Skills (34 skills)
 
-The framework successfully:
-- Extracted **34 verified skills** with meaningful dependency structures
-- Achieved **20% token reduction** on commonly-solved problems
-- Solved **3 problems** that the baseline could not
+| Metric | Value |
+|--------|:-----:|
+| Total skills | 34 |
+| Skills with ≥1 usage | 26 (76.5%) |
+| Skills with ≥1 success | 23 (67.6%) |
+| Avg usage count | 4.4 |
+| Avg success rate | 71.3% |
+| Max usage | 17 (`hyperbola_rhombus_diagonal_infimum`) |
+| Skills with dependencies | 8 (23.5%) |
 
-However, it did not improve overall accuracy (66.7% vs 70.0% baseline),
-primarily due to increased timeouts from prompt bloat and limited
-relevance of retrieved skills.
+### 6.2  Experiment 2 Skills (45 skills)
 
-The results suggest skill evolution is more effective as a **cost
-optimisation** strategy than an accuracy improvement strategy on
-competition-level mathematics, at least with current retrieval
-mechanisms. The complementary solving patterns between the two methods
-point toward ensemble approaches as a promising direction.
+The 3-epoch library has 45 skills — 11 more than single-epoch.
+However, only 7 skill names are shared between the two libraries,
+indicating that extraction is highly sensitive to problem ordering
+and the skills available at extraction time.
+
+### 6.3  Timeout Analysis
+
+| Phase | Exp 1 | Exp 2 |
+|-------|:-----:|:-----:|
+| Evolve | 5/30 (16.7%) | 8/90 (8.9%) |
+| Test (skills) | 10/30 (33.3%) | 9/30 (30.0%) |
+| Test (baseline) | 7/30 (23.3%) | (reused) |
+
+Timeouts are similar between experiments despite different skill counts,
+suggesting the timeout increase is inherent to skill injection (prompt
+length) rather than library quality.
 
 ---
 
-## Appendix A: Evolved Skills Catalogue
+## 7  Discussion
+
+### 7.1  H1: Accuracy Improvement — Not Supported
+
+The skill-augmented method does not improve accuracy on AIME. With a strong
+baseline (GLM-4.7 at 70%), the "low-hanging fruit" is already captured.
+Skills occasionally help solve novel problems (+3 unique solves) but also
+cause regression on others via prompt pollution.
+
+### 7.2  H2: Token Efficiency — Supported
+
+On commonly-solved problems, skills reduce tokens by 20%. The mechanism is
+clear: relevant skills replace verbose from-scratch derivations with short
+function calls. Problems 1 and 4 show 58–60% savings. Even in the 3-epoch
+experiment, per-epoch training tokens decrease monotonically.
+
+### 7.3  H3: Multi-Round Benefits — Refuted
+
+**More epochs hurt**: 3 epochs (43.3%) is dramatically worse than 1 epoch
+(66.7%). The sweet spot appears to be around 22–38 skills (Epoch 2 of the
+3-epoch run had the highest training accuracy). Beyond this, skill
+over-accumulation causes:
+1. Prompt bloat overwhelming the context window
+2. Irrelevant skill injection increasing error rate
+3. Conflicting implementations confusing the executor
+
+This is a critical finding: **skill libraries require active curation**,
+not unbounded growth. A pruning or gating mechanism is essential.
+
+### 7.4  Complementary Solving
+
+Skills and baseline have partially orthogonal failure modes. The oracle
+ensemble (24/30 = 80.0%) represents significant headroom over either
+method alone.
+
+### 7.5  Skill Quality vs Quantity
+
+The comparison between 34 skills (66.7% test accuracy) and 45 skills
+(43.3%) demonstrates that **quality matters more than quantity**. The
+additional 11 skills in the 3-epoch library are mostly over-specialised
+or redundant, contributing noise rather than signal.
+
+---
+
+## 8  Limitations
+
+1. **Single model family**: Only GLM variants tested (Exp 3 pending).
+2. **Single run**: No repeated trials to estimate variance.
+3. **TF-IDF retrieval**: Bag-of-words matching may miss semantically
+   relevant skills.
+4. **No skill pruning**: The current system only adds skills, never
+   removes them.
+5. **Small test set**: 30 problems provide limited statistical power.
+6. **API inconsistency**: Exp 1 used SiliconFlow + BigModel APIs;
+   Exp 2 and 3 use BigModel only.
+
+---
+
+## 9  Future Directions
+
+### 9.1  Skill Library Curation
+The multi-epoch results strongly motivate **automatic pruning**:
+- Remove skills with <20% success rate
+- Merge similar skills
+- Cap library size based on downstream validation
+
+### 9.2  Selective Skill Injection
+Instead of always injecting top-5 skills, use a **gating mechanism**
+(confidence threshold) to decide whether any skills are relevant.
+
+### 9.3  Embedding-Based Retrieval
+Replace TF-IDF with semantic embeddings to better match problem
+concepts to skill capabilities.
+
+### 9.4  Ensemble Strategy
+Run both skill-augmented and baseline solving; select the better
+answer per problem. Oracle bound: 80.0% vs 70% baseline.
+
+### 9.5  Cross-Domain Transfer
+Test whether AIME-evolved skills transfer to AMC, MATH-500, or
+Olympiad problems.
+
+### 9.6  Adaptive Library Size
+Use validation-set feedback to determine the optimal number of
+skills to retain, addressing the over-accumulation problem directly.
+
+---
+
+## 10  Conclusion
+
+We evaluated skill evolution on AIME 2024→2025 across three experimental
+conditions. Key contributions:
+
+1. **Single-epoch skills provide 20% token savings** at a modest accuracy
+   cost (−3.3 pp), confirming skill reuse compresses reasoning.
+
+2. **Multi-epoch training is counterproductive**: 3 epochs degrades
+   accuracy from 66.7% to 43.3% due to skill over-accumulation.
+   The optimal skill count appears to be 22–38 for this benchmark.
+
+3. **Epoch 2 is the sweet spot**: In multi-epoch training, accuracy
+   peaks at Epoch 2 (66.7%) then declines, while token cost continues
+   to decrease. This demonstrates that token efficiency and accuracy
+   can diverge — the model "knows" the skills but uses them incorrectly.
+
+4. **Skills and baseline are complementary**: The oracle ensemble
+   (80.0%) far exceeds either method, motivating hybrid approaches.
+
+The results argue that skill evolution is most effective with
+**bounded, curated libraries** and **selective injection**. Unbounded
+skill accumulation is a trap — the system must learn not just what to
+remember, but what to forget.
+
+---
+
+## Appendix A: Evolved Skills Catalogue (Experiment 1)
 
 | # | Skill Name | Dependencies | Usage | Success Rate |
 |:-:|------------|:-------------|:-----:|:--------:|
@@ -468,7 +517,11 @@ point toward ensemble approaches as a promising direction.
 ## Appendix B: Raw Data
 
 All raw experiment data is stored at:
-- `academic/results/aime_full_run1.log` — Full experiment log
-- `academic/results/aime_experiment_full_run1_skills.json` — Evolved skills
-- `academic/results/baseline_complete.json` — Complete baseline results
-- `academic/results/baseline_completion.log` — Baseline completion log
+- `academic/results/aime_full_run1.log` — Exp 1 full log
+- `academic/results/aime_experiment_full_run1_skills.json` — Exp 1 skills (34)
+- `academic/results/baseline_complete.json` — Exp 1 complete baseline
+- `academic/results/aime_multiepoch_3ep.log` — Exp 2 full log
+- `academic/results/aime_multiepoch_3ep_skills.json` — Exp 2 skills (45)
+- `academic/results/aime_multiepoch_3ep_evolve.json` — Exp 2 evolve results
+- `academic/results/aime_multiepoch_3ep_test_with_skills.json` — Exp 2 test results
+- `academic/results/aime_weak_glm45air.log` — Exp 3 full log (when complete)

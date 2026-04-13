@@ -7,11 +7,14 @@ Key mechanisms (v2):
   - Skill composition: skills can call each other; `dependencies` is auto-detected via AST
   - Lazy update: when a skill is updated, all dependents are marked `stale`
   - Persistence: JSON-based, backward compatible with v1 format
+  - Embedding retrieval: uses BigModel embedding-3 for semantic matching (with TF-IDF fallback)
 """
 from __future__ import annotations
 
 import ast
+import asyncio
 import json
+import logging
 import math
 import re
 import time
@@ -19,6 +22,10 @@ from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
+
+import numpy as np
+
+logger = logging.getLogger("tool_evolving")
 
 
 # ── Data classes ──────────────────────────────────────────────────────────────
@@ -47,6 +54,7 @@ class Skill:
     dependencies: List[str] = field(default_factory=list)   # names of skills this one calls
     stale: bool = False                                     # True when a dependency was updated
     test_code: str = ""                                     # assertion code for testing
+    embedding: Optional[List[float]] = field(default=None, repr=False)  # cached embedding vector
 
     @property
     def success_rate(self) -> float:
@@ -97,6 +105,7 @@ class SkillStore:
             if skill.test_code:
                 existing.test_code = skill.test_code
             existing.stale = False
+            existing.embedding = None  # clear cached embedding — needs re-embedding
             # Re-detect dependencies and mark dependents stale
             existing.dependencies = self._detect_dependencies(existing)
             self._mark_dependents_stale(existing.name)
@@ -210,19 +219,121 @@ class SkillStore:
                         queue.append(dep)
         return self.topological_sort(list(needed.values()))
 
-    # ── Retrieval (TF-IDF cosine) ─────────────────────────────────────────
-    def retrieve(self, query: str, top_k: int = 5) -> List[Skill]:
-        """Return most relevant skills for *query* using bag-of-words cosine."""
+    # ── Retrieval ─────────────────────────────────────────────────────────
+
+    def _skill_text(self, skill: Skill) -> str:
+        """Build the text representation of a skill for embedding/matching."""
+        return (
+            f"{skill.name}: {skill.description}\n"
+            f"source: {' '.join(skill.source_problems[:3])}\n"
+            f"code:\n{skill.code}"
+        )
+
+    async def _get_embedding(self, text: str) -> Optional[List[float]]:
+        """Get embedding vector via BigModel API."""
+        try:
+            from openai import AsyncOpenAI
+            from app.config import config
+            emb_cfg = config.llm.get("embedding")
+            if not emb_cfg:
+                return None
+            client = AsyncOpenAI(
+                api_key=emb_cfg.api_key,
+                base_url=emb_cfg.base_url,
+            )
+            # Truncate to avoid API limits (embedding-3 supports ~8k tokens)
+            truncated = text[:8000]
+            resp = await client.embeddings.create(
+                model=emb_cfg.model,
+                input=[truncated],
+            )
+            return resp.data[0].embedding
+        except Exception as e:
+            logger.warning(f"Embedding API failed: {e}")
+            return None
+
+    async def _get_embeddings_batch(self, texts: List[str]) -> List[Optional[List[float]]]:
+        """Batch embedding call for multiple texts."""
+        try:
+            from openai import AsyncOpenAI
+            from app.config import config
+            emb_cfg = config.llm.get("embedding")
+            if not emb_cfg:
+                return [None] * len(texts)
+            client = AsyncOpenAI(
+                api_key=emb_cfg.api_key,
+                base_url=emb_cfg.base_url,
+            )
+            truncated = [t[:8000] for t in texts]
+            resp = await client.embeddings.create(
+                model=emb_cfg.model,
+                input=truncated,
+            )
+            return [item.embedding for item in resp.data]
+        except Exception as e:
+            logger.warning(f"Batch embedding failed: {e}")
+            return [None] * len(texts)
+
+    async def ensure_embeddings(self) -> None:
+        """Compute embeddings for any skills missing them."""
+        missing = [s for s in self._skills.values() if s.embedding is None]
+        if not missing:
+            return
+        texts = [self._skill_text(s) for s in missing]
+        embeddings = await self._get_embeddings_batch(texts)
+        for skill, emb in zip(missing, embeddings):
+            if emb is not None:
+                skill.embedding = emb
+        cached = sum(1 for s in self._skills.values() if s.embedding is not None)
+        logger.info(f"Embeddings: {cached}/{len(self._skills)} skills cached")
+
+    async def retrieve(self, query: str, top_k: int = 5) -> List[Skill]:
+        """Return most relevant skills using embedding cosine similarity.
+        Falls back to TF-IDF if embeddings are unavailable."""
         if not self._skills:
             return []
 
+        # Try embedding-based retrieval
+        await self.ensure_embeddings()
+        query_emb = await self._get_embedding(query)
+
+        if query_emb is not None:
+            query_vec = np.array(query_emb)
+            scored: List[tuple] = []
+            for skill in self._skills.values():
+                if skill.embedding is not None:
+                    skill_vec = np.array(skill.embedding)
+                    sim = float(np.dot(query_vec, skill_vec) / (
+                        np.linalg.norm(query_vec) * np.linalg.norm(skill_vec) + 1e-10
+                    ))
+                    scored.append((sim, skill))
+                else:
+                    scored.append((0.0, skill))
+            scored.sort(key=lambda t: t[0], reverse=True)
+            if len(self._skills) <= top_k:
+                return [s for _, s in scored]
+            return [s for _, s in scored[:top_k] if _ > 0.0]
+
+        # Fallback: TF-IDF bag-of-words
+        logger.info("Falling back to TF-IDF retrieval")
+        return self._retrieve_tfidf(query, top_k)
+
+    def retrieve_sync(self, query: str, top_k: int = 5) -> List[Skill]:
+        """Synchronous wrapper for retrieve (uses TF-IDF if no event loop)."""
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're in an async context, we can't use run_until_complete
+            # Fall back to TF-IDF for sync calls
+            return self._retrieve_tfidf(query, top_k)
+        except RuntimeError:
+            return asyncio.run(self.retrieve(query, top_k))
+
+    def _retrieve_tfidf(self, query: str, top_k: int = 5) -> List[Skill]:
+        """TF-IDF bag-of-words retrieval (fallback)."""
         query_tokens = _tokenize(query)
         scored: List[tuple] = []
         for skill in self._skills.values():
-            doc_text = (
-                skill.description + " " + skill.name + " " +
-                " ".join(skill.source_problems)
-            )
+            doc_text = self._skill_text(skill)
             doc_tokens = _tokenize(doc_text)
             sim = _cosine(query_tokens, doc_tokens)
             scored.append((sim, skill))
@@ -234,7 +345,11 @@ class SkillStore:
 
     # ── Persistence ───────────────────────────────────────────────────────
     def save(self, path: Path) -> None:
-        data = [asdict(s) for s in self._skills.values()]
+        data = []
+        for s in self._skills.values():
+            d = asdict(s)
+            d.pop("embedding", None)  # don't persist large embedding vectors
+            data.append(d)
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
     @classmethod

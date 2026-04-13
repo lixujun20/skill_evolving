@@ -208,7 +208,7 @@ async def evolve_single(
         logger.info(f"[round {i+1}/{n_rounds}] skills={len(store)}")
 
         # Retrieve relevant skills
-        relevant = store.retrieve(query, top_k=5)
+        relevant = await store.retrieve(query, top_k=5)
         for sk in relevant:
             sk.usage_count += 1
 
@@ -226,7 +226,7 @@ async def evolve_single(
                 query=query,
                 code_blocks=trace.code_blocks,
                 outputs=trace.outputs,
-                existing_skills_prompt=store.build_skills_prompt(),
+                existing_skills_prompt=store.build_skills_prompt(relevant),
             )
             # Test each skill before adding to store
             accepted = []
@@ -329,7 +329,7 @@ async def evolve_and_test(
             t0 = time.monotonic()
             logger.info(f"[evolve e{epoch+1} {i+1}/{len(epoch_train)} (total {round_counter+1}/{total_train_rounds})] skills={len(store)} | {prob.id}")
 
-            relevant = store.retrieve(prob.question, top_k=5)
+            relevant = await store.retrieve(prob.question, top_k=5)
             for sk in relevant:
                 sk.usage_count += 1
 
@@ -345,7 +345,7 @@ async def evolve_and_test(
                     query=prob.question,
                     code_blocks=trace.code_blocks,
                     outputs=trace.outputs,
-                    existing_skills_prompt=store.build_skills_prompt(),
+                    existing_skills_prompt=store.build_skills_prompt(relevant),
                     llm_config=_extract_model,
                 )
                 # Test each skill before adding to store
@@ -412,7 +412,7 @@ async def evolve_and_test(
     test_with = ExperimentResult(name=f"{experiment_name}_test_with_skills")
     for i, prob in enumerate(test):
         t0 = time.monotonic()
-        relevant = store.retrieve(prob.question, top_k=5)
+        relevant = await store.retrieve(prob.question, top_k=5)
         trace = await solve(prob.question, relevant, store=store, llm_config=_agent_model)
         correct = check_answer(trace.final_answer, prob.answer)
         elapsed = time.monotonic() - t0

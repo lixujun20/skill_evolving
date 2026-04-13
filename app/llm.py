@@ -907,17 +907,17 @@ class LLM:
                     temperature if temperature is not None else self.temperature
                 )
 
-            # 如果是bigmodel，只保留params中的model和messages
+            # 如果是bigmodel，只保留params中的model、messages和关键参数
             if self.api_type == "bigmodel":
                 params = {
                     "model": self.model,
                     "messages": all_messages,
-                    "max_tokens": self.max_tokens
+                    "max_tokens": self.max_tokens,
+                    "temperature": temperature if temperature is not None else self.temperature,
                 }
 
             # Handle non-streaming request
             if not stream:
-                print(params.get("model"))
                 response = await self.client.chat.completions.create(**params)
 
                 if not response.choices or not response.choices[0].message.content:
@@ -1108,7 +1108,9 @@ class LLM:
             if self.api_type == "bigmodel":
                 params = {
                     "model": "GLM-4.1V-Thinking-Flash",
-                    "messages": all_messages
+                    "messages": all_messages,
+                    "max_tokens": self.max_tokens,
+                    "temperature": temperature if temperature is not None else self.temperature,
                 }
             # Handle non-streaming request
             if not stream:

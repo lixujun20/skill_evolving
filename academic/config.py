@@ -22,8 +22,8 @@ RESULTS_DIR.mkdir(exist_ok=True)
 #   EXTRACT_MODEL — the "skill extractor" that analyses traces → skills
 #
 # Override via env vars if needed.
-AGENT_MODEL: str = os.environ.get("TE_AGENT_MODEL", "silicon_flow")
-EXTRACT_MODEL: str = os.environ.get("TE_EXTRACT_MODEL", "silicon_flow")
+AGENT_MODEL: str = os.environ.get("TE_AGENT_MODEL", "bigmodel")
+EXTRACT_MODEL: str = os.environ.get("TE_EXTRACT_MODEL", "bigmodel")
 
 # ── Execution ─────────────────────────────────────────────────────────────────
 CODE_EXEC_TIMEOUT: int = int(os.environ.get("TE_EXEC_TIMEOUT", "30"))

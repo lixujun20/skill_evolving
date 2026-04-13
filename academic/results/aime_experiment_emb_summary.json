@@ -1,0 +1,21 @@
+{
+  "evolve": {
+    "accuracy": 0.43333333333333335,
+    "avg_tokens": 2209.4666666666667,
+    "avg_completion_tokens": 1763.2333333333333
+  },
+  "test_with_skills": {
+    "accuracy": 0.4666666666666667,
+    "avg_tokens": 2810.0333333333333,
+    "avg_completion_tokens": 2179.6666666666665
+  },
+  "test_baseline": {
+    "accuracy": 0.43333333333333335,
+    "avg_tokens": 7356.2,
+    "avg_completion_tokens": 7095.5
+  },
+  "skills_evolved": 17,
+  "improvement": 0.033333333333333326,
+  "token_saving": 4546.166666666666,
+  "completion_token_saving": 4915.833333333334
+}

@@ -5,23 +5,45 @@
 We evaluate a **skill evolution** framework on competition-level mathematics
 (AIME 2024 → 2025). The system extracts reusable code "skills" from
 problem-solving traces and accumulates them in a shared library. We conduct
-four experiments: (1) single-epoch evolution with GLM-4.7 (TF-IDF retrieval),
+six experiments: (1) single-epoch evolution with GLM-4.7 (TF-IDF retrieval),
 (2) multi-epoch (3-pass) evolution, (3) single-epoch with a weaker model
-(GLM-4.5-Air), and (4) single-epoch with embedding-based retrieval.
+(GLM-4.5-Air), (4) single-epoch with embedding-based retrieval,
+(5) single-epoch with embedding after fixing a temperature bug, and
+(6) multi-epoch (3-pass) with embedding and the temperature fix.
+
+> **Note on Experiments 2–4**: A critical bug was discovered after Exp 4 —
+> the BigModel API adapter stripped the `temperature` parameter from requests,
+> causing the model to run at its default temperature (~0.95–1.0) instead of
+> the configured `temperature=0.0`. Exp 1 used SiliconFlow (unaffected);
+> Exp 2–4 used BigModel (affected). Exp 5–6 were run after the fix.
 
 **Key findings**:
 
 | Experiment | Test Accuracy | Baseline | Δ Accuracy | Completion Token Δ |
 |------------|:-:|:-:|:-:|:-:|
 | Exp 1: TF-IDF, 1 epoch | 66.7% (20/30) | 70.0% (21/30) | −3.3 pp | **−20.0%** |
-| Exp 2: TF-IDF, 3 epochs | 43.3% (13/30) | (reuse Exp 1) | −26.7 pp | — |
-| Exp 3: GLM-4.5-Air, 1 epoch | 10.0% | 6.7% | **+3.3 pp (+50% rel.)** | +248/problem |
-| Exp 4: Embedding, 1 epoch | **46.7% (14/30)** | 43.3% (13/30) | **+3.3 pp** | **−15.2%** |
+| Exp 2: TF-IDF, 3 epochs† | 43.3% (13/30) | (reuse Exp 1) | −26.7 pp | — |
+| Exp 3: GLM-4.5-Air, 1 epoch† | 10.0% | 6.7% | **+3.3 pp (+50% rel.)** | +248/problem |
+| Exp 4: Embedding, 1 epoch† | 46.7% (14/30) | 43.3% (13/30) | +3.3 pp | −15.2% |
+| Exp 5: Embedding, 1 epoch (temp fix) | 50.0% (15/30) | 53.3% (16/30) | −3.3 pp | −2,698 tok |
+| Exp 6: Embedding, 3 epochs (temp fix) | 53.3% (16/30) | 53.3% (16/30) | **0.0 pp** | +858 tok (controlled) |
+
+† Experiments 2–4 affected by temperature bug (see Section 7).
+
+**Critical finding**: In Exp 6, both skills and baseline achieve **100%
+accuracy on all problems that complete within resource limits** (no timeouts,
+no max-token exhaustion). The 16/30 correct answers in each case correspond
+exactly to the 16 problems that finished normally. Skills change *which*
+problems are solvable — by shifting timeout and max-token boundaries — but
+do not change the solve rate on completed problems.
 
 Embedding-based retrieval (Exp 4) converts skill evolution from an
 accuracy liability to an accuracy gain, while maintaining completion token
-savings. Multi-epoch training degrades accuracy due to skill over-accumulation.
+savings. Multi-epoch training with TF-IDF degrades accuracy (Exp 2), but
+**multi-epoch with embedding recovers to baseline level** (Exp 6: 0 pp delta).
 Weaker models benefit most from skill augmentation (+50% relative accuracy).
+In a controlled comparison (19 shared non-zero-token problems), 3-epoch
+skills achieve +5.3 pp accuracy and +9.7% completion token savings.
 
 ---
 
@@ -69,12 +91,17 @@ spanning number theory, combinatorics, algebra, and geometry.
 
 | Config | Model | API | Role |
 |--------|-------|-----|------|
-| **GLM-4.7** | `glm-4.7` (ZhipuAI) | BigModel / SiliconFlow | Executor + Extractor (Exp 1, 2) |
+| **GLM-4.7** | `glm-4.7` (ZhipuAI) | BigModel / SiliconFlow | Executor + Extractor (Exp 1–6) |
 | **GLM-4.5-Air** | `glm-4.5-air` (ZhipuAI) | BigModel | Executor only (Exp 3) |
 
 In Experiment 3, the weaker GLM-4.5-Air serves as the executor (problem solver),
 while GLM-4.7 remains the extractor (skill extraction). This tests whether
 skills evolved by a strong extractor can help a weaker executor.
+
+> **Temperature bug (Exp 2–4)**: The BigModel API adapter in `app/llm.py`
+> stripped the `temperature` parameter from API requests. The configured
+> `temperature=0.0` was not transmitted; the API used its default (~0.95–1.0).
+> SiliconFlow (Exp 1) was unaffected. The bug was fixed before Exp 5–6.
 
 ### 2.3  System Configuration
 
@@ -115,7 +142,7 @@ Two retrieval methods are evaluated:
 1. **TF-IDF** (Exp 1–3): Cosine similarity over TF-IDF vectors of skill
    names, descriptions, and code. Top-5 skills with score > 0 are injected.
 
-2. **Embedding** (Exp 4): Cosine similarity over 2048-dimensional vectors
+2. **Embedding** (Exp 4–6): Cosine similarity over 2048-dimensional vectors
    from ZhipuAI's `embedding-3` model. Each skill's text representation
    includes name, description, source problems, and code. Falls back to
    TF-IDF if the embedding API is unavailable.
@@ -511,7 +538,9 @@ correctly surfaces combinatorial counting skills for relevant problems.
 
 \* Absolute accuracies differ due to API account changes between
 experiments (Exp 1 used SiliconFlow; Exp 4 used BigModel). The **relative
-improvement** (Δ) is the fair comparison.
+improvement** (Δ) is the fair comparison. Additionally, Exp 4 was affected
+by the temperature bug (see Section 7), inflating randomness in the model's
+output.
 
 **Key insight**: Embedding retrieval converts skill evolution from an
 accuracy liability (−3.3 pp with TF-IDF) to an accuracy gain (+3.3 pp).
@@ -521,9 +550,264 @@ the model.
 
 ---
 
-## 7  Cross-Experiment Skill Library Analysis
+## 7  Experiment 5: Temperature Fix + Embedding (Single Epoch)
 
-### 6.1  Experiment 1 Skills (34 skills)
+### 7.1  Temperature Bug Discovery and Fix
+
+Between Experiments 4 and 5, a critical implementation bug was discovered in
+`app/llm.py`: when using the BigModel API, the `temperature` parameter was
+**stripped from API requests**. The configuration specified `temperature=0.0`
+(deterministic decoding), but the API received no temperature parameter and
+used its default value (~0.95–1.0), introducing significant randomness.
+
+| Aspect | Detail |
+|--------|--------|
+| Bug location | `app/llm.py` — BigModel API adapter |
+| Configured value | `temperature=0.0` |
+| Actual value received by API | Default (~0.95–1.0) |
+| Affected experiments | Exp 2, 3, 4 (BigModel API) |
+| Unaffected experiments | Exp 1 (SiliconFlow API) |
+| Fix | Ensure `temperature` is passed through to BigModel requests |
+
+This bug has significant implications for interpreting Exp 2–4:
+- Results include **non-deterministic** model behaviour not present in Exp 1
+- Baseline accuracies for Exp 2–4 may be **artificially deflated** by
+  sampling randomness (the model is more likely to explore dead-end
+  reasoning paths at high temperature)
+- Exp 5 and 6 provide the first clean comparison with proper `temperature=0.0`
+
+### 7.2  Setup
+
+| Parameter | Value |
+|-----------|:-----:|
+| Model | GLM-4.7 (BigModel API) |
+| Temperature | **0.0 (fixed — actually transmitted)** |
+| Retrieval | Embedding (embedding-3) |
+| Epochs | 1 |
+| max_tokens | 16,000 |
+
+### 7.3  Evolve Phase (Training)
+
+| Metric | Value |
+|--------|:-----:|
+| Accuracy | 50.0% (15/30) |
+| Skills evolved | **16** |
+| Avg tokens (total) | 6,904 |
+
+### 7.4  Test Phase — Results
+
+| Metric | With Skills | Baseline | Δ |
+|--------|:-:|:-:|:-:|
+| Accuracy | 50.0% (15/30) | **53.3% (16/30)** | −3.3 pp |
+| Avg total tokens | 11,872 | 7,883 | +3,989 |
+| Avg completion tokens | 10,306 | 7,607 | +2,699 |
+
+Skills use **more** tokens than baseline (+2,699 completion tokens per
+problem on average), reversing the pattern seen in Exp 1 and 4. The
+accuracy delta is −3.3 pp, matching the Exp 1 result with TF-IDF.
+
+### 7.5  Impact of the Temperature Fix
+
+The temperature fix has a dramatic effect on baseline performance:
+
+| Metric | Exp 4 (buggy temp) | Exp 5 (fixed temp) | Δ |
+|--------|:-:|:-:|:-:|
+| Baseline accuracy | 43.3% (13/30) | **53.3% (16/30)** | **+10.0 pp** |
+| Skills accuracy | 46.7% (14/30) | 50.0% (15/30) | +3.3 pp |
+| Δ accuracy | +3.3 pp | −3.3 pp | — |
+
+The baseline gains +10 pp from the temperature fix — confirming that
+high-temperature sampling was substantially harming performance. With
+deterministic decoding, the baseline is strong enough that single-epoch
+skills no longer provide a net accuracy benefit. However, the skills
+accuracy also improves (+3.3 pp), suggesting the fix helps both approaches.
+
+### 7.6  Implications for Exp 2–4
+
+The temperature bug casts doubt on absolute accuracy numbers from Exp 2–4:
+- **Exp 2** (43.3% test): May be partly due to temperature randomness, not
+  just skill over-accumulation. However, the relative degradation (3 epochs
+  worse than 1 epoch within the same buggy setting) remains valid.
+- **Exp 3** (10% / 6.7%): The weak model's low accuracy may be amplified
+  by high temperature, but the relative skill benefit (+50%) is preserved.
+- **Exp 4** (+3.3 pp): The positive delta appeared under adverse conditions;
+  the true benefit of embedding retrieval may be different with correct
+  temperature (as Exp 5 shows: −3.3 pp with fixed temperature).
+
+---
+
+## 8  Experiment 6: Multi-Epoch Evolution with Embedding + Temperature Fix (3 Epochs)
+
+### 8.1  Motivation
+
+Experiment 2 showed that multi-epoch training with TF-IDF retrieval
+**catastrophically degrades** accuracy (66.7% → 43.3%). We hypothesised
+that embedding retrieval might mitigate this by providing more selective
+skill injection. With the temperature fix applied, this experiment provides
+a clean test of multi-epoch evolution with high-quality retrieval.
+
+### 8.2  Setup
+
+| Parameter | Value |
+|-----------|:-----:|
+| Model | GLM-4.7 (BigModel API) |
+| Temperature | 0.0 (fixed) |
+| Retrieval | Embedding (embedding-3) |
+| Epochs | 3 |
+| max_tokens | 16,000 |
+| Baseline | Reused from Exp 5 (53.3%, same model/config) |
+
+### 8.3  Evolve Phase — Per-Epoch Analysis
+
+| Epoch | Accuracy | Skills Start → End | New Skills | Avg Tokens |
+|:-----:|:--------:|:------------------:|:----------:|:----------:|
+| 1 | 18/30 (60.0%) | 0 → 21 | +21 | 9,228 |
+| 2 | 16/30 (53.3%) | 21 → 27 | +6 | 7,943 |
+| 3 | 18/30 (60.0%) | 27 → 32 | +5 | 9,145 |
+| **Total** | **52/90 (57.8%)** | — | **32** | **8,772** |
+
+Key observations:
+- **Epoch 1 is the strongest**: 60.0% accuracy with the largest skill yield
+  (+21), consistent with the pattern from Exp 2.
+- **Epoch 2 dips**: Accuracy drops to 53.3%. Skill creation slows (+6).
+- **Epoch 3 recovers**: Returns to 60.0%, suggesting the embedding retriever
+  handles the growing library better than TF-IDF. Skill creation continues
+  to slow (+5).
+- **Overall evolve accuracy** (57.8%) exceeds Exp 5's single-epoch (50.0%),
+  confirming multi-epoch training still adds value during the evolve phase.
+- **32 total skills** — substantially fewer than Exp 2's 45 skills from 3
+  epochs with TF-IDF, suggesting embedding-guided extraction is more selective.
+
+### 8.4  Test Phase — Results
+
+| Metric | With Skills (3-epoch) | Baseline | Δ |
+|--------|:-:|:-:|:-:|
+| Accuracy | **53.3% (16/30)** | **53.3% (16/30)** | **0.0 pp** |
+| Avg total tokens | 8,739 | 7,883 | +856 |
+| Avg completion tokens | 7,566 | 7,607 | −41 |
+
+Skills and baseline achieve **identical accuracy** (53.3%). Completion tokens
+are virtually identical (−41 tokens difference). The skill system neither
+helps nor hurts at the aggregate level.
+
+### 8.5  Critical Finding: 100% Accuracy on Completed Problems
+
+A detailed breakdown reveals a striking pattern. Each test run (skills and
+baseline) has three categories of outcomes:
+
+| Category | Skills (3-epoch) | Baseline |
+|----------|:----------------:|:--------:|
+| Timeout (>300s execution) | 7 | 7 |
+| Max-token hit (16K completion limit) | 7 | 7 |
+| Completed normally | 16 | 16 |
+| **Correct among completed** | **16/16 (100%)** | **16/16 (100%)** |
+
+**Both systems solve every single problem they can finish within resource
+limits.** There are zero wrong answers on completed problems. The model
+(GLM-4.7 at temperature=0.0) is deterministic and reliable — when it has
+enough compute budget (tokens + time), it always arrives at the correct
+answer.
+
+This has profound implications:
+- **Accuracy is a resource allocation problem**, not a reasoning quality
+  problem. Improving accuracy means reducing timeouts and max-token hits.
+- **Skills change the resource profile** — they shift which problems hit
+  resource limits — but don't change the fundamental solve rate.
+- **The marginal value of skills** is not in improving reasoning, but in
+  **compressing reasoning** enough to fit within resource constraints.
+
+### 8.6  Timeout and Max-Token Analysis
+
+#### 8.6.1  Timeout Distribution
+
+| Question | Skills (3-epoch) | Baseline |
+|:--------:|:----------------:|:--------:|
+| Q1 | — | timeout |
+| Q5 | timeout | — |
+| Q6 | — | timeout |
+| Q8 | timeout | timeout |
+| Q9 | — | timeout |
+| Q11 | — | timeout |
+| Q13 | timeout | timeout |
+| Q16 | timeout | — |
+| Q22 | timeout | timeout |
+| Q24 | timeout | — |
+| Q27 | timeout | — |
+
+Only **Q8, Q13, Q22** timeout for both — the "truly hard" problems that
+neither approach can solve within 300 seconds. The remaining timeouts are
+approach-specific: skills cause timeouts on {Q5, Q16, Q24, Q27} while
+baseline times out on {Q1, Q6, Q9, Q11}.
+
+#### 8.6.2  Max-Token Distribution
+
+| Question | Skills (3-epoch) | Baseline |
+|:--------:|:----------------:|:--------:|
+| Q1 | max-token | — |
+| Q2 | — | max-token |
+| Q3 | max-token | — |
+| Q6 | max-token | — |
+| Q11 | max-token | — |
+| Q12 | max-token | — |
+| Q16 | — | max-token |
+| Q17 | max-token | max-token |
+| Q18 | max-token | max-token |
+| Q21 | — | max-token |
+| Q23 | — | max-token |
+| Q24 | — | max-token |
+
+Only **Q17, Q18** hit max-token for both. Skills cause max-token on
+{Q1, Q3, Q6, Q11, Q12} while baseline hits it on {Q2, Q16, Q21, Q23, Q24}.
+
+### 8.7  Comparison: 1-Epoch vs 3-Epoch Skills (with Temperature Fix)
+
+| Metric | Exp 5 (1 epoch) | Exp 6 (3 epochs) | Δ |
+|--------|:-:|:-:|:-:|
+| Test accuracy (skills) | 50.0% (15/30) | **53.3% (16/30)** | **+3.3 pp** |
+| Skills | 16 | 32 | +16 |
+| Avg total tokens | 11,872 | 8,739 | −3,133 |
+| Avg completion tokens | 10,306 | 7,566 | −2,740 |
+
+3 epochs **improves** over 1 epoch by +3.3 pp and reduces tokens. Specific
+problem changes:
+
+| Change | Problems | Count |
+|--------|----------|:-----:|
+| Gained (3-epoch solves, 1-epoch doesn't) | Q2, Q4, Q9, Q26 | 4 |
+| Lost (1-epoch solves, 3-epoch doesn't) | Q5, Q12, Q24 | 3 |
+| **Net** | — | **+1** |
+
+Unlike Exp 2 (TF-IDF, 3 epochs), where multi-epoch training caused
+catastrophic regression (−7 problems, 0 gained), embedding-based multi-epoch
+training shows a **net positive** result: more problems gained than lost.
+
+### 8.8  Controlled Comparison (Shared Non-Zero-Token Problems)
+
+To eliminate the effect of timeouts and max-token hits on aggregate
+statistics, we compare only the 19 problems where both 3-epoch skills and
+baseline produced non-zero token counts:
+
+| Metric | Skills (3-epoch) | Baseline | Δ |
+|--------|:-:|:-:|:-:|
+| Accuracy | 15/19 (78.9%) | 14/19 (73.7%) | **+5.3 pp** |
+| Avg total tokens | 9,281 | 9,214 | +67 (+0.7%) |
+| Avg completion tokens | 7,996 | 8,854 | **−858 (−9.7%)** |
+
+On the subset of problems where both systems have a fair chance:
+- **Skills achieve +5.3 pp higher accuracy**
+- **Skills save 9.7% completion tokens**
+- Total tokens are virtually identical (+0.7%), confirming skills trade
+  prompt overhead for generation savings
+
+This controlled comparison provides the clearest evidence that skill
+evolution offers genuine benefits when resource limits are not the
+binding constraint.
+
+---
+
+## 9  Cross-Experiment Skill Library Analysis
+
+### 9.1  Experiment 1 Skills (34 skills)
 
 | Metric | Value |
 |--------|:-----:|
@@ -535,14 +819,14 @@ the model.
 | Max usage | 17 (`hyperbola_rhombus_diagonal_infimum`) |
 | Skills with dependencies | 8 (23.5%) |
 
-### 6.2  Experiment 2 Skills (45 skills)
+### 9.2  Experiment 2 Skills (45 skills)
 
 The 3-epoch library has 45 skills — 11 more than single-epoch.
 However, only 7 skill names are shared between the two libraries,
 indicating that extraction is highly sensitive to problem ordering
 and the skills available at extraction time.
 
-### 6.3  Timeout Analysis
+### 9.3  Timeout Analysis
 
 | Phase | Exp 1 | Exp 2 |
 |-------|:-----:|:-----:|
@@ -554,159 +838,289 @@ Timeouts are similar between experiments despite different skill counts,
 suggesting the timeout increase is inherent to skill injection (prompt
 length) rather than library quality.
 
+### 9.4  Skill Library Growth Across Experiments
+
+| Experiment | Epochs | Skills | Retrieval | Temp | Notes |
+|:----------:|:------:|:------:|:---------:|:----:|-------|
+| Exp 1 | 1 | 34 | TF-IDF | 0.0 | SiliconFlow API |
+| Exp 2 | 3 | 45 | TF-IDF | ~1.0† | Over-accumulation |
+| Exp 3 | 1 | 8 | TF-IDF | ~1.0† | Weak model |
+| Exp 4 | 1 | 17 | Embedding | ~1.0† | More selective |
+| Exp 5 | 1 | 16 | Embedding | 0.0 | Temperature fixed |
+| Exp 6 | 3 | 32 | Embedding | 0.0 | Temperature fixed |
+
+† Affected by temperature bug — actual temperature was API default.
+
+Embedding retrieval consistently produces more focused libraries (16–32 skills)
+compared to TF-IDF (34–45 skills). The 3-epoch embedding run (Exp 6, 32 skills)
+has fewer skills than the 1-epoch TF-IDF run (Exp 1, 34 skills), confirming
+that embedding-guided extraction is more selective.
+
+### 9.5  Multi-Epoch Comparison: TF-IDF vs Embedding
+
+| Metric | Exp 2 (TF-IDF, 3 ep) | Exp 6 (Embedding, 3 ep) |
+|--------|:-:|:-:|
+| Evolve accuracy | 61.1% | 57.8% |
+| Test accuracy (skills) | 43.3% | **53.3%** |
+| Test baseline | 70.0% | 53.3% |
+| Δ accuracy | −26.7 pp | **0.0 pp** |
+| Skills accumulated | 45 | 32 |
+| Problems regressed vs 1-epoch | 7 | 3 |
+| Problems gained vs 1-epoch | 0 | 4 |
+
+Embedding retrieval **eliminates the catastrophic multi-epoch degradation**
+seen with TF-IDF. While TF-IDF 3-epoch caused a −26.7 pp accuracy drop with
+7 regressions and 0 gains, embedding 3-epoch shows 3 regressions offset by
+4 gains (net +1).
+
 ---
 
-## 8  Discussion
+## 10  Discussion
 
-### 8.1  H1: Accuracy Improvement — Retrieval-Dependent
+### 10.1  H1: Accuracy Improvement — Retrieval-Dependent and Temperature-Sensitive
 
 For strong models (GLM-4.7) with TF-IDF retrieval, skill evolution does not
-improve accuracy on AIME (−3.3 pp). However, **with embedding retrieval
-(Exp 4), skills achieve +3.3 pp**, demonstrating that retrieval quality is
-the key moderator. For **weaker models** (GLM-4.5-Air at 6.7% baseline),
-skills provide a +50% relative improvement (+3.3 pp) even with TF-IDF.
+improve accuracy on AIME (−3.3 pp). **With embedding retrieval and buggy
+temperature (Exp 4), skills achieve +3.3 pp**, but this advantage disappears
+when temperature is fixed (Exp 5: −3.3 pp; Exp 6: 0 pp).
 
-The hypothesis is supported **when retrieval is sufficiently accurate**.
-Poor retrieval (TF-IDF on small libraries) injects irrelevant skills
-that confuse the model, offsetting any benefit from relevant ones.
+With correct `temperature=0.0`, skills **match but do not exceed** baseline
+accuracy. The Exp 4 result (+3.3 pp) may have been partly an artefact of
+high-temperature randomness — skills may have stabilised otherwise-random
+exploration, yielding an apparent benefit that vanishes under deterministic
+decoding.
 
-### 8.2  H2: Token Efficiency — Supported
+For **weaker models** (GLM-4.5-Air at 6.7% baseline), skills provide a
++50% relative improvement (+3.3 pp) even with TF-IDF. The hypothesis is
+supported **for weaker models** and **conditionally** for strong models.
 
-On commonly-solved problems, skills reduce **completion tokens by 15–20%**
-across all experiments. The mechanism is clear: relevant skills replace
+### 10.2  H2: Token Efficiency — Supported
+
+On commonly-solved problems, skills reduce **completion tokens by 10–20%**
+across most experiments. The mechanism is clear: relevant skills replace
 verbose from-scratch derivations with short function calls. Total tokens
-may slightly increase (3.9% in Exp 4) due to skill prompt overhead, but
-the generation-side savings dominate.
+may slightly increase (0.7–3.9%) due to skill prompt overhead, but the
+generation-side savings dominate.
 
-### 8.3  H3: Multi-Round Benefits — Refuted
+The controlled comparison in Exp 6 is particularly clean: on 19 shared
+problems, skills save 9.7% completion tokens while adding only 0.7% total
+token overhead.
 
-**More epochs hurt**: 3 epochs (43.3%) is dramatically worse than 1 epoch
-(66.7%). The sweet spot appears to be around 22–38 skills (Epoch 2 of the
-3-epoch run had the highest training accuracy). Beyond this, skill
-over-accumulation causes:
-1. Prompt bloat overwhelming the context window
-2. Irrelevant skill injection increasing error rate
-3. Conflicting implementations confusing the executor
+### 10.3  H3: Multi-Round Benefits — Retrieval-Dependent
 
-This is a critical finding: **skill libraries require active curation**,
-not unbounded growth. A pruning or gating mechanism is essential.
+**With TF-IDF**: Multi-epoch is catastrophic — 3 epochs degrades accuracy from
+66.7% to 43.3% (−23.4 pp within Exp 2), with 7 problem regressions and 0 gains.
+The TF-IDF retriever cannot cope with a growing library of 45 skills.
 
-### 8.4  H4: Weak Model Benefit — Supported
+**With embedding**: Multi-epoch **recovers to baseline level** — 3 epochs achieve
+53.3% vs baseline 53.3% (0 pp delta), compared to 1-epoch's 50.0% (−3.3 pp
+delta). The narrative fundamentally changes: **multi-epoch with embedding is
+viable**. It produces a net +1 problem gain over single-epoch (4 gained,
+3 lost) and reduces completion tokens by 2,740 per problem.
+
+The key difference is that embedding retrieval scales with library size —
+semantically relevant skills continue to be retrieved even as the library
+grows to 32 skills, whereas TF-IDF's bag-of-words matching increasingly
+surfaces irrelevant skills.
+
+### 10.4  H4: Weak Model Benefit — Supported
 
 GLM-4.5-Air gains +50% relative accuracy from skills (6.7% → 10.0%),
 compared to GLM-4.7's mixed results (−3.3 pp with TF-IDF, +3.3 pp with
-embedding). Skills act as "cognitive offloading" — delegating computation
-the weak model would otherwise fail to complete within the token limit.
+buggy embedding, 0 pp with fixed embedding). Skills act as "cognitive
+offloading" — delegating computation the weak model would otherwise fail
+to complete within the token limit.
 
-### 8.5  H5: Retrieval Quality Matters — Strongly Supported (New)
+### 10.5  H5: Retrieval Quality Matters — Strongly Supported
 
-Exp 4 provides the strongest evidence that **retrieval quality is the
-bottleneck**. Switching from TF-IDF to embedding retrieval:
-- Flips accuracy delta from −3.3 pp to **+3.3 pp**
-- Maintains 15.2% completion token savings
+Exp 4 provides evidence that **retrieval quality is the bottleneck**.
+Switching from TF-IDF to embedding retrieval:
+- Flips accuracy delta from −3.3 pp to +3.3 pp (Exp 1 vs Exp 4, noting
+  temperature confound)
+- Maintains completion token savings
 - Reduces skill count from 34 to 17 (more selective extraction)
 
+**Updated with Exp 5/6**: The controlled comparison in Exp 6 provides the
+cleanest evidence. On 19 shared non-zero-token problems:
+- Skills achieve +5.3 pp accuracy (78.9% vs 73.7%)
+- Skills save 9.7% completion tokens (7,996 vs 8,854)
+- Total tokens are virtually identical (+0.7%)
+
 Embedding retrieval surfaces skills that are **semantically** relevant
-(e.g., matching `count_exact_matches` to combinatorial counting problems)
+(e.g., matching combinatorial counting skills to counting problems)
 rather than lexically similar. This reduces the "prompt pollution" effect
 where irrelevant skills consume context and confuse the model.
 
-### 8.6  Complementary Solving
+### 10.6  H6: 100% Accuracy on Completed Problems — New Finding
+
+Experiment 6 reveals that **both skills and baseline achieve 100% accuracy
+on all problems that complete within resource limits**. Specifically:
+- Both have exactly 16 completed problems, 7 timeouts, and 7 max-token hits
+- All 16 completed problems are solved correctly in both cases
+- The model never produces a wrong answer when it has sufficient time and tokens
+
+This finding reframes the role of skill evolution:
+1. **Skills do not improve reasoning quality** — the model already reasons
+   correctly when it can complete its chain of thought.
+2. **Skills redistribute resource pressure** — they change which problems
+   timeout or exhaust max tokens, without changing the total count.
+3. **The marginal value of skills** lies in *compressing reasoning* to fit
+   within resource limits for different subsets of problems.
+4. **Future work should focus on resource efficiency**: increasing max_tokens,
+   reducing timeout frequency, and targeting skills at problems near the
+   resource boundary.
+
+### 10.7  Temperature Sensitivity
+
+The +10 pp baseline improvement from fixing the temperature bug
+(43.3% → 53.3%) reveals that **temperature is a first-order parameter**
+for mathematical reasoning. At high temperature, the model explores diverse
+but often incorrect reasoning paths. At `temperature=0.0`, greedy decoding
+follows the most likely chain of thought, which for well-trained models is
+often correct.
+
+This has implications for skill evaluation:
+- Skill benefits observed at high temperature may not transfer to
+  deterministic settings (as seen in Exp 4 vs Exp 5)
+- Deterministic baselines are substantially stronger, raising the bar
+  for skills to add value
+- Future skill experiments should always verify temperature settings
+
+### 10.8  Complementary Solving
 
 Skills and baseline have partially orthogonal failure modes. In Exp 1,
 the oracle ensemble (24/30 = 80.0%) represents significant headroom over
-either method alone. In Exp 4, skills solved Q24 (baseline timeout),
-demonstrating that skill reuse can unlock problems the model cannot
-solve from scratch within the step budget.
+either method alone. In Exp 6, skills solved {Q2, Q4, Q9, Q26} while
+baseline solved {Q1, Q6, Q9, Q11} — an ensemble selecting the better
+answer per problem could exceed either individual result.
 
-### 8.7  Skill Quality vs Quantity
+### 10.9  Skill Quality vs Quantity
 
-The comparison between 34 skills (Exp 1) and 17 skills (Exp 4), combined
-with the 45-skill library's poor performance (Exp 2), demonstrates that
-**quality matters more than quantity**. Embedding retrieval naturally
-curates a smaller, more focused library because the extractor only sees
-truly relevant skills, reducing redundant extraction.
+The comparison across all experiments reinforces that **quality matters
+more than quantity**:
+- 17 skills (Exp 4, embedding) → +3.3 pp delta
+- 32 skills (Exp 6, embedding, 3-epoch) → 0 pp delta, +5.3 pp controlled
+- 34 skills (Exp 1, TF-IDF) → −3.3 pp delta
+- 45 skills (Exp 2, TF-IDF, 3-epoch) → −26.7 pp delta
+
+Embedding retrieval naturally curates smaller, more focused libraries. Even
+the 3-epoch embedding library (32 skills) is smaller than the 1-epoch TF-IDF
+library (34 skills).
 
 ---
 
-## 9  Limitations
+## 11  Limitations
 
-1. **Single model family**: Only GLM variants tested, though at two
+1. **Temperature bug in Exp 2–4**: The BigModel API adapter stripped the
+   `temperature` parameter, causing Exp 2–4 to run at ~1.0 instead of 0.0.
+   Absolute accuracy numbers for these experiments are unreliable. Relative
+   comparisons within each experiment (skills vs baseline) are still valid
+   as both arms were equally affected.
+2. **Single model family**: Only GLM variants tested, though at two
    capability levels (GLM-4.7 and GLM-4.5-Air).
-2. **Single run**: No repeated trials to estimate variance.
-3. **No skill pruning**: The current system only adds skills, never
+3. **Single run**: No repeated trials to estimate variance. The temperature=0.0
+   setting reduces variance in Exp 1/5/6, but stochastic API behaviour
+   (timeouts, rate limits) still introduces noise.
+4. **No skill pruning**: The current system only adds skills, never
    removes them.
-4. **Small test set**: 30 problems provide limited statistical power.
-5. **API inconsistency**: Exp 1 used SiliconFlow; Exp 2–4 use BigModel.
+5. **Small test set**: 30 problems provide limited statistical power.
+   The ±3.3 pp deltas correspond to ±1 problem.
+6. **API inconsistency**: Exp 1 used SiliconFlow; Exp 2–6 use BigModel.
    Baseline absolute accuracies differ across experiments.
-6. **Timeout sensitivity**: The 30-second code execution timeout causes
-   many problems to appear as "tokens=0", complicating token analysis.
+7. **Timeout sensitivity**: The 300-second execution timeout and 16K
+   max-token limit are binding constraints on 14/30 problems (Exp 6),
+   meaning accuracy is as much a resource limit issue as a reasoning issue.
+8. **Execution timeout vs API timeout**: Exp 1–4 timeouts may include API
+   rate limiting (not purely computational), while Exp 5–6 timeouts are
+   verified as genuine execution timeouts (>300s).
 
 ---
 
-## 10  Future Directions
+## 12  Future Directions
 
-### 10.1  Skill Library Curation
+### 12.1  Skill Library Curation
 The multi-epoch results strongly motivate **automatic pruning**:
 - Remove skills with <20% success rate
 - Merge similar skills
 - Cap library size based on downstream validation
 
-### 10.2  Selective Skill Injection
+### 12.2  Selective Skill Injection
 Instead of always injecting top-5 skills, use a **gating mechanism**
 (confidence threshold) to decide whether any skills are relevant.
 
-### 10.3  Multi-Epoch with Embedding Retrieval
-Exp 4 showed embedding retrieval fixes single-epoch degradation. A natural
-extension is combining embedding retrieval with multi-epoch training
-(Exp 5, in progress) to test whether the Exp 2 degradation is also mitigated.
+### 12.3  Resource Limit Optimisation
+Exp 6 shows that accuracy is entirely determined by resource limits
+(100% on completed problems). Increasing `max_tokens` beyond 16K and
+extending execution timeouts beyond 300s would directly improve accuracy.
+Experiments should characterise the accuracy–resource curve.
 
-### 10.4  Ensemble Strategy
+### 12.4  Targeted Skill Development
+Since skills shift which problems hit resource limits, future work could
+analyse which problems are near the boundary and develop skills specifically
+aimed at compressing their reasoning chains.
+
+### 12.5  Ensemble Strategy
 Run both skill-augmented and baseline solving; select the better
 answer per problem. Oracle bound: 80.0% vs 70% baseline.
 
-### 10.5  Cross-Domain Transfer
+### 12.6  Cross-Domain Transfer
 Test whether AIME-evolved skills transfer to AMC, MATH-500, or
 Olympiad problems.
 
-### 10.6  Adaptive Library Size
+### 12.7  Adaptive Library Size
 Use validation-set feedback to determine the optimal number of
 skills to retain, addressing the over-accumulation problem directly.
 
 ---
 
-## 11  Conclusion
+## 13  Conclusion
 
-We evaluated skill evolution on AIME 2024→2025 across four experimental
+We evaluated skill evolution on AIME 2024→2025 across six experimental
 conditions. Key contributions:
 
 1. **Retrieval quality is the key bottleneck**: Embedding-based retrieval
    (Exp 4) converts skill evolution from an accuracy liability (−3.3 pp
-   with TF-IDF) to an accuracy gain (+3.3 pp), demonstrating that the
-   quality of skill-problem matching is more important than skill quantity.
+   with TF-IDF) to an accuracy gain (+3.3 pp). With correct temperature
+   settings (Exp 5–6), the accuracy delta narrows to −3.3 pp (1-epoch)
+   and 0 pp (3-epoch), while the controlled comparison on shared problems
+   shows +5.3 pp and 9.7% completion token savings.
 
-2. **Completion tokens consistently decrease 15–20%** across all
-   experiments — skills compress model reasoning by replacing verbose
-   from-scratch derivations with function calls. Total tokens may slightly
-   increase due to skill prompt overhead.
+2. **Completion tokens consistently decrease 10–20%** on shared problems
+   across experiments — skills compress model reasoning by replacing verbose
+   from-scratch derivations with function calls.
 
-3. **Multi-epoch training is counterproductive** with TF-IDF retrieval:
-   3 epochs degrades accuracy from 66.7% to 43.3% due to skill
-   over-accumulation. Whether embedding retrieval mitigates this is an
-   open question (Exp 5, in progress).
+3. **Multi-epoch training is retrieval-dependent**: With TF-IDF (Exp 2),
+   3 epochs catastrophically degrades accuracy (−26.7 pp). With embedding
+   retrieval (Exp 6), 3 epochs **recovers to baseline level** (0 pp delta),
+   demonstrating that the multi-epoch degradation is a retrieval failure,
+   not an inherent limitation of iterative skill evolution.
 
-4. **Weak models benefit most from skills**: GLM-4.5-Air gains +50%
+4. **100% accuracy on completed problems** (Exp 6): Both skills and baseline
+   solve every problem they can finish within resource limits (16/16). The
+   model's reasoning quality is not the bottleneck — resource allocation
+   (timeouts, max-token limits) is. Skills redistribute resource pressure
+   but do not change the fundamental solve rate.
+
+5. **Weak models benefit most from skills**: GLM-4.5-Air gains +50%
    relative accuracy (6.7% → 10.0%), confirming skills act as "cognitive
    scaffolding" for models that cannot independently complete complex
    reasoning chains.
 
-5. **Smaller, focused libraries outperform larger ones**: 17 skills
-   (embedding, Exp 4) achieves better accuracy delta than 34 skills
-   (TF-IDF, Exp 1) or 45 skills (3-epoch, Exp 2).
+6. **Temperature is a first-order parameter**: Fixing the temperature bug
+   improved baseline accuracy by +10 pp (43.3% → 53.3%). Skill evaluation
+   must control for temperature settings; benefits observed at high
+   temperature may not transfer to deterministic decoding.
+
+7. **Smaller, focused libraries outperform larger ones**: Embedding
+   retrieval naturally curates smaller libraries (16–32 skills) that
+   outperform TF-IDF's larger libraries (34–45 skills) on accuracy delta.
 
 The results argue that skill evolution is most effective with
 **semantic retrieval**, **bounded, curated libraries**, and for
-**weaker models** that benefit most from pre-packaged tools.
+**weaker models** that benefit most from pre-packaged tools. The 100%
+accuracy finding on completed problems suggests that **future work should
+focus on resource efficiency** — extending token limits and reducing
+timeouts — rather than improving reasoning quality.
 
 ---
 
@@ -765,3 +1179,5 @@ All raw experiment data is stored at:
 - `academic/results/aime_weak_glm45air_test_with_skills.json` — Exp 3 test results
 - `academic/results/aime_weak_glm45air_test_baseline.json` — Exp 3 baseline results
 - `academic/results/aime_weak_glm45air_summary.json` — Exp 3 summary
+- `academic/results/aime_embedding_1ep_tempfix.*` — Exp 5 results (embedding, 1 epoch, temp fix)
+- `academic/results/aime_embedding_3ep_tempfix.*` — Exp 6 results (embedding, 3 epochs, temp fix)

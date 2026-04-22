@@ -1,0 +1,13 @@
+{
+  "mode": "baseline",
+  "tag": "debug",
+  "n_problems": 2,
+  "n_runs_per_problem": 2,
+  "total_correct": 0,
+  "total_runs": 4,
+  "accuracy_micro": 0.0,
+  "accuracy_macro": 0.0,
+  "avg_total_tokens": 2593.0,
+  "avg_completion_tokens": 2048.0,
+  "total_elapsed_s": 223.2
+}

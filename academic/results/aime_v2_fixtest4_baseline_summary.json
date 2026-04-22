@@ -1,0 +1,13 @@
+{
+  "mode": "baseline",
+  "tag": "fixtest4",
+  "n_problems": 2,
+  "n_runs_per_problem": 1,
+  "total_correct": 2,
+  "total_runs": 2,
+  "accuracy_micro": 1.0,
+  "accuracy_macro": 1.0,
+  "avg_total_tokens": 10420.0,
+  "avg_completion_tokens": 9875.0,
+  "total_elapsed_s": 1519.6
+}

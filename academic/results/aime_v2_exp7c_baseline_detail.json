@@ -1,0 +1,1525 @@
+{
+  "mode": "baseline",
+  "tag": "exp7c",
+  "n_problems": 30,
+  "n_runs_per_problem": 4,
+  "total_correct": 0,
+  "total_runs": 0,
+  "accuracy_micro": 0.0,
+  "accuracy_macro": 0.0,
+  "avg_total_tokens": 0.0,
+  "avg_completion_tokens": 0.0,
+  "problems": [
+    {
+      "problem_idx": 0,
+      "problem_id": "Problem_5",
+      "question": "Suppose $\\triangle ABC$ has angles $\\angle BAC = 84^\\circ$, $\\angle ABC = 60^\\circ$, and $\\angle ACB = 36^\\circ$. Let $D",
+      "expected": "336",
+      "n_runs": 4,
+      "n_correct": 1,
+      "accuracy": 0.25,
+      "avg_total_tokens": 15861.2,
+      "avg_completion_tokens": 15051.2,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 0,
+          "run_idx": 0,
+          "problem_id": "Problem_5",
+          "question": "Suppose $\\triangle ABC$ has angles $\\angle BAC = 84^\\circ$, $\\angle ABC = 60^\\circ$, and $\\angle ACB = 36^\\circ$. Let $D$, $E$, and $F$ be the midpoints of sides $\\overline{BC}$, $\\overline{AC}$, and $\\overline{AB}$, respectively. The circumcircle of $\\triangle DEF$ intersects $\\overline{BD}$, $\\overline{AE}$, and $\\overline{AF}$ at points $G$, $H$, and $J$, respectively. The points $G$, $D$, $E$, $H$, $J$, and $F$ divide the circumcircle of $\\triangle DEF$ into six minor arcs, as shown. Find $\\wideparen{DE} + 2 \\cdot \\wideparen{HJ} + 3 \\cdot \\wideparen{FG}$, where the arcs are measured in degrees.\n\n\\begin{tikzpicture}[scale=1.2]\n    \\coordinate (B) at (0,0);\n    \\coordinate (C) at (6,0);\n    \\coordinate (A) at (1.78,3.07);\n    \n    \\coordinate (D) at ($(B)!0.5!(C)$);\n    \\coordinate (E) at ($(A)!0.5!(C)$);\n    \\coordinate (F) at ($(A)!0.5!(B)$);\n    \n    \\draw (A) -- (B) -- (C) -- cycle;\n\n    \\fill (A) circle (2pt) node[above] {$A$};\n    \\fill (B) circle (2pt) node[below] {$B$};\n    \\fill (C) circle (2pt) node[below] {$C$};\n\n    \\fill (D) circle (2pt) node[below] {$D$};\n    \\fill (E) circle (2pt) node[right] {$E$};\n    \\fill (F) circle (2pt) node[left] {$F$};\n\n    \\draw (D) -- (E) -- (F) -- cycle;\n\n    \\coordinate (O) at (2.39,1.38);\n    \n    \\draw (O) circle (1.51);\n\n    \\coordinate (G) at (1.72, 0.03);\n    \\coordinate (J) at (1.5, 2.6);\n    \\coordinate (H) at (2.08, 2.85);\n\n    \\fill (G) circle (2pt) node[below] {$G$};\n    \\fill (H) circle (2pt) node[above] {$H$};\n    \\fill (J) circle (2pt) node[above left] {$J$};\n\\end{tikzpicture}",
+          "expected": "336",
+          "predicted": "336",
+          "correct": true,
+          "total_tokens": 13015,
+          "completion_tokens": 12205,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 431.5,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\nimport math\n\n# Define angles in degrees\ndeg = math.pi / 180.0\n\n# Compute sin and cos of needed angles\nsin36 = math.sin(36 * deg)\ncos36 = math.cos(36 * deg)\nsin60 = math.sin(60 * deg)\ncos60 = math.cos(60 * deg)\n\n# Place triangle: B = (0,0), C = (1,0)\nB = (0.0, 0.0)\nC = (1.0, 0.0)\n\n# Compute b = length CA\nb = 1.0 / (sin36 / math.sqrt(3.0) + cos36)\n\n# Coordinates of A\nA_x = 1.0 - b * cos36\nA_y = b * sin36\nA = (A_x, A_y)\n\n# Midpoints\nD = ((B[0] + C[0]) / 2.0, (B[1] + C[1]) / 2.0)  # (0.5, 0)\nE = ((A_x + C[0]) / 2.0, (A_y + C[1]) / 2.0)\nF = ((A_x + B[0]) / 2.0, (A_y + B[1]) / 2.0)\n\n# Function to compute circumcenter of three points\ndef circumcenter(p1, p2, p3):\n    x1, y1 = p1\n    x2, y2 = p2\n    x3, y3 = p3\n    d = 2.0 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))\n    if abs(d) < 1e-12:\n        raise ValueError(\"Points are collinear\")\n    ux = ((x1*x1 + y1*y1) * (y2 - y3) +\n          (x2*x2 + y2*y2) * (y3 - y1) +\n          (x3*x3 + y3*y3) * (y1 - y2)) / d\n    uy = ((x1*x1 + y1*y1) * (x3 - x2) +\n          (x2*x2 + y2*y2) * (x1 - x3) +\n          (x3*x3 + y3*y3) * (x2 - x1)) / d\n    return (ux, uy)\n\n# Nine-point center (circumcenter of D, E, F)\nN = circumcenter(D, E, F)\n\n# Radius\nr = math.hypot(D[0] - N[0], D[1] - N[1])\n\n# ----- Find G (other intersection of BD with nine-point circle) -----\n# Line BD is y=0. Solve (x - Nx)^2 + Ny^2 = r^2\ndisc = r*r - N[1]*N[1]  # = (0.5 - Nx)^2 exactly\nsqrt_disc = math.sqrt(disc)\nt1 = N[0] + sqrt_disc\nt2 = N[0] - sqrt_disc\n# D is at x=0.5\nif abs(t1 - 0.5) < 1e-9:\n    G_x = t2\nelse:\n    G_x = t1\nG = (G_x, 0.0)\n\n# ----- Find H (other intersection of AE with nine-point circle) -----\n# Parameter: A + s*(E - A). s=1 gives E.\nv = (E[0] - A[0], E[1] - A[1])\na = v[0]*v[0] + v[1]*v[1]\n# |A-N|^2 - r^2\nc_val = (A[0]-N[0])**2 + (A[1]-N[1])**2 - r*r\n# Since s=1 is a root, the other root is c / a\ns_H = c_val / a\nH = (A[0] + s_H * v[0], A[1] + s_H * v[1])\n\n# ----- Find J (other intersection of AF with nine-point circle) -----\nw = (F[0] - A[0], F[1] - A[1])\na2 = w[0]*w[0] + w[1]*w[1]\n# same c_val because A is same\nt_J = c_val / a2\nJ = (A[0] + t_J * w[0], A[1] + t_J * w[1])\n\n# ----- Compute angles (in degrees) on the nine-point circle -----\ndef angle_of(P):\n    dx = P[0] - N[0]\n    dy = P[1] - N[1]\n    ang = math.degrees(math.atan2(dy, dx))\n    if ang < 0:\n        ang += 360.0\n    return ang\n\nangles = {\n    'G': angle_of(G),\n    'D': angle_of(D),\n    'E': angle_of(E),\n    'H': angle_of(H),\n    'J': angle_of(J),\n    'F': angle_of(F)\n}\n\n# Function to get minor arc between two points\ndef minor_arc(label1, label2):\n    a1 = angles[label1]\n    a2 = angles[label2]\n    diff = abs(a1 - a2)\n    if diff > 180.0:\n        diff = 360.0 - diff\n    return diff\n\narc_DE = minor_arc('D', 'E')\narc_HJ = minor_arc('H', 'J')\narc_FG = minor_arc('F', 'G')\n\n# Compute the required sum\nS = arc_DE + 2.0 * arc_HJ + 3.0 * arc_FG\n\n# Round to nearest integer (should be exact)\nS_rounded = round(S)\n\nprint(f\"ANSWER: {S_rounded}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "import math\n\n# Define angles in degrees\ndeg = math.pi / 180.0\n\n# Compute sin and cos of needed angles\nsin36 = math.sin(36 * deg)\ncos36 = math.cos(36 * deg)\nsin60 = math.sin(60 * deg)\ncos60 = math.cos(60 * deg)\n\n# Place triangle: B = (0,0), C = (1,0)\nB = (0.0, 0.0)\nC = (1.0, 0.0)\n\n# Compute b = length CA\nb = 1.0 / (sin36 / math.sqrt(3.0) + cos36)\n\n# Coordinates of A\nA_x = 1.0 - b * cos36\nA_y = b * sin36\nA = (A_x, A_y)\n\n# Midpoints\nD = ((B[0] + C[0]) / 2.0, (B[1] + C[1]) / 2.0)  # (0.5, 0)\nE = ((A_x + C[0]) / 2.0, (A_y + C[1]) / 2.0)\nF = ((A_x + B[0]) / 2.0, (A_y + B[1]) / 2.0)\n\n# Function to compute circumcenter of three points\ndef circumcenter(p1, p2, p3):\n    x1, y1 = p1\n    x2, y2 = p2\n    x3, y3 = p3\n    d = 2.0 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2))\n    if abs(d) < 1e-12:\n        raise ValueError(\"Points are collinear\")\n    ux = ((x1*x1 + y1*y1) * (y2 - y3) +\n          (x2*x2 + y2*y2) * (y3 - y1) +\n          (x3*x3 + y3*y3) * (y1 - y2)) / d\n    uy = ((x1*x1 + y1*y1) * (x3 - x2) +\n          (x2*x2 + y2*y2) * (x1 - x3) +\n          (x3*x3 + y3*y3) * (x2 - x1)) / d\n    return (ux, uy)\n\n# Nine-point center (circumcenter of D, E, F)\nN = circumcenter(D, E, F)\n\n# Radius\nr = math.hypot(D[0] - N[0], D[1] - N[1])\n\n# ----- Find G (other intersection of BD with nine-point circle) -----\n# Line BD is y=0. Solve (x - Nx)^2 + Ny^2 = r^2\ndisc = r*r - N[1]*N[1]  # = (0.5 - Nx)^2 exactly\nsqrt_disc = math.sqrt(disc)\nt1 = N[0] + sqrt_disc\nt2 = N[0] - sqrt_disc\n# D is at x=0.5\nif abs(t1 - 0.5) < 1e-9:\n    G_x = t2\nelse:\n    G_x = t1\nG = (G_x, 0.0)\n\n# ----- Find H (other intersection of AE with nine-point circle) -----\n# Parameter: A + s*(E - A). s=1 gives E.\nv = (E[0] - A[0], E[1] - A[1])\na = v[0]*v[0] + v[1]*v[1]\n# |A-N|^2 - r^2\nc_val = (A[0]-N[0])**2 + (A[1]-N[1])**2 - r*r\n# Since s=1 is a root, the other root is c / a\ns_H = c_val / a\nH = (A[0] + s_H * v[0], A[1] + s_H * v[1])\n\n# ----- Find J (other intersection of AF with nine-point circle) -----\nw = (F[0] - A[0], F[1] - A[1])\na2 = w[0]*w[0] + w[1]*w[1]\n# same c_val because A is same\nt_J = c_val / a2\nJ = (A[0] + t_J * w[0], A[1] + t_J * w[1])\n\n# ----- Compute angles (in degrees) on the nine-point circle -----\ndef angle_of(P):\n    dx = P[0] - N[0]\n    dy = P[1] - N[1]\n    ang = math.degrees(math.atan2(dy, dx))\n    if ang < 0:\n        ang += 360.0\n    return ang\n\nangles = {\n    'G': angle_of(G),\n    'D': angle_of(D),\n    'E': angle_of(E),\n    'H': angle_of(H),\n    'J': angle_of(J),\n    'F': angle_of(F)\n}\n\n# Function to get minor arc between two points\ndef minor_arc(label1, label2):\n    a1 = angles[label1]\n    a2 = angles[label2]\n    diff = abs(a1 - a2)\n    if diff > 180.0:\n        diff = 360.0 - diff\n    return diff\n\narc_DE = minor_arc('D', 'E')\narc_HJ = minor_arc('H', 'J')\narc_FG = minor_arc('F', 'G')\n\n# Compute the required sum\nS = arc_DE + 2.0 * arc_HJ + 3.0 * arc_FG\n\n# Round to nearest integer (should be exact)\nS_rounded = round(S)\n\nprint(f\"ANSWER: {S_rounded}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 336\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 0,
+          "run_idx": 1,
+          "problem_id": "Problem_5",
+          "question": "Suppose $\\triangle ABC$ has angles $\\angle BAC = 84^\\circ$, $\\angle ABC = 60^\\circ$, and $\\angle ACB = 36^\\circ$. Let $D$, $E$, and $F$ be the midpoints of sides $\\overline{BC}$, $\\overline{AC}$, and $\\overline{AB}$, respectively. The circumcircle of $\\triangle DEF$ intersects $\\overline{BD}$, $\\overline{AE}$, and $\\overline{AF}$ at points $G$, $H$, and $J$, respectively. The points $G$, $D$, $E$, $H$, $J$, and $F$ divide the circumcircle of $\\triangle DEF$ into six minor arcs, as shown. Find $\\wideparen{DE} + 2 \\cdot \\wideparen{HJ} + 3 \\cdot \\wideparen{FG}$, where the arcs are measured in degrees.\n\n\\begin{tikzpicture}[scale=1.2]\n    \\coordinate (B) at (0,0);\n    \\coordinate (C) at (6,0);\n    \\coordinate (A) at (1.78,3.07);\n    \n    \\coordinate (D) at ($(B)!0.5!(C)$);\n    \\coordinate (E) at ($(A)!0.5!(C)$);\n    \\coordinate (F) at ($(A)!0.5!(B)$);\n    \n    \\draw (A) -- (B) -- (C) -- cycle;\n\n    \\fill (A) circle (2pt) node[above] {$A$};\n    \\fill (B) circle (2pt) node[below] {$B$};\n    \\fill (C) circle (2pt) node[below] {$C$};\n\n    \\fill (D) circle (2pt) node[below] {$D$};\n    \\fill (E) circle (2pt) node[right] {$E$};\n    \\fill (F) circle (2pt) node[left] {$F$};\n\n    \\draw (D) -- (E) -- (F) -- cycle;\n\n    \\coordinate (O) at (2.39,1.38);\n    \n    \\draw (O) circle (1.51);\n\n    \\coordinate (G) at (1.72, 0.03);\n    \\coordinate (J) at (1.5, 2.6);\n    \\coordinate (H) at (2.08, 2.85);\n\n    \\fill (G) circle (2pt) node[below] {$G$};\n    \\fill (H) circle (2pt) node[above] {$H$};\n    \\fill (J) circle (2pt) node[above left] {$J$};\n\\end{tikzpicture}",
+          "expected": "336",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16810,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 571.9,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 0,
+          "run_idx": 2,
+          "problem_id": "Problem_5",
+          "question": "Suppose $\\triangle ABC$ has angles $\\angle BAC = 84^\\circ$, $\\angle ABC = 60^\\circ$, and $\\angle ACB = 36^\\circ$. Let $D$, $E$, and $F$ be the midpoints of sides $\\overline{BC}$, $\\overline{AC}$, and $\\overline{AB}$, respectively. The circumcircle of $\\triangle DEF$ intersects $\\overline{BD}$, $\\overline{AE}$, and $\\overline{AF}$ at points $G$, $H$, and $J$, respectively. The points $G$, $D$, $E$, $H$, $J$, and $F$ divide the circumcircle of $\\triangle DEF$ into six minor arcs, as shown. Find $\\wideparen{DE} + 2 \\cdot \\wideparen{HJ} + 3 \\cdot \\wideparen{FG}$, where the arcs are measured in degrees.\n\n\\begin{tikzpicture}[scale=1.2]\n    \\coordinate (B) at (0,0);\n    \\coordinate (C) at (6,0);\n    \\coordinate (A) at (1.78,3.07);\n    \n    \\coordinate (D) at ($(B)!0.5!(C)$);\n    \\coordinate (E) at ($(A)!0.5!(C)$);\n    \\coordinate (F) at ($(A)!0.5!(B)$);\n    \n    \\draw (A) -- (B) -- (C) -- cycle;\n\n    \\fill (A) circle (2pt) node[above] {$A$};\n    \\fill (B) circle (2pt) node[below] {$B$};\n    \\fill (C) circle (2pt) node[below] {$C$};\n\n    \\fill (D) circle (2pt) node[below] {$D$};\n    \\fill (E) circle (2pt) node[right] {$E$};\n    \\fill (F) circle (2pt) node[left] {$F$};\n\n    \\draw (D) -- (E) -- (F) -- cycle;\n\n    \\coordinate (O) at (2.39,1.38);\n    \n    \\draw (O) circle (1.51);\n\n    \\coordinate (G) at (1.72, 0.03);\n    \\coordinate (J) at (1.5, 2.6);\n    \\coordinate (H) at (2.08, 2.85);\n\n    \\fill (G) circle (2pt) node[below] {$G$};\n    \\fill (H) circle (2pt) node[above] {$H$};\n    \\fill (J) circle (2pt) node[above left] {$J$};\n\\end{tikzpicture}",
+          "expected": "336",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16810,
+          "completion_tokens": 16000,
+          "n_steps": 4,
+          "n_code_blocks": 0,
+          "elapsed_s": 1724.4,
+          "steps": [
+            {
+              "step": 0,
+              "type": "retry",
+              "content": "Timeout attempt 1, wait 30s"
+            },
+            {
+              "step": 1,
+              "type": "retry",
+              "content": "Timeout attempt 2, wait 60s"
+            },
+            {
+              "step": 2,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 3,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 0,
+          "run_idx": 3,
+          "problem_id": "Problem_5",
+          "question": "Suppose $\\triangle ABC$ has angles $\\angle BAC = 84^\\circ$, $\\angle ABC = 60^\\circ$, and $\\angle ACB = 36^\\circ$. Let $D$, $E$, and $F$ be the midpoints of sides $\\overline{BC}$, $\\overline{AC}$, and $\\overline{AB}$, respectively. The circumcircle of $\\triangle DEF$ intersects $\\overline{BD}$, $\\overline{AE}$, and $\\overline{AF}$ at points $G$, $H$, and $J$, respectively. The points $G$, $D$, $E$, $H$, $J$, and $F$ divide the circumcircle of $\\triangle DEF$ into six minor arcs, as shown. Find $\\wideparen{DE} + 2 \\cdot \\wideparen{HJ} + 3 \\cdot \\wideparen{FG}$, where the arcs are measured in degrees.\n\n\\begin{tikzpicture}[scale=1.2]\n    \\coordinate (B) at (0,0);\n    \\coordinate (C) at (6,0);\n    \\coordinate (A) at (1.78,3.07);\n    \n    \\coordinate (D) at ($(B)!0.5!(C)$);\n    \\coordinate (E) at ($(A)!0.5!(C)$);\n    \\coordinate (F) at ($(A)!0.5!(B)$);\n    \n    \\draw (A) -- (B) -- (C) -- cycle;\n\n    \\fill (A) circle (2pt) node[above] {$A$};\n    \\fill (B) circle (2pt) node[below] {$B$};\n    \\fill (C) circle (2pt) node[below] {$C$};\n\n    \\fill (D) circle (2pt) node[below] {$D$};\n    \\fill (E) circle (2pt) node[right] {$E$};\n    \\fill (F) circle (2pt) node[left] {$F$};\n\n    \\draw (D) -- (E) -- (F) -- cycle;\n\n    \\coordinate (O) at (2.39,1.38);\n    \n    \\draw (O) circle (1.51);\n\n    \\coordinate (G) at (1.72, 0.03);\n    \\coordinate (J) at (1.5, 2.6);\n    \\coordinate (H) at (2.08, 2.85);\n\n    \\fill (G) circle (2pt) node[below] {$G$};\n    \\fill (H) circle (2pt) node[above] {$H$};\n    \\fill (J) circle (2pt) node[above left] {$J$};\n\\end{tikzpicture}",
+          "expected": "336",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16810,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 317.9,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 1,
+      "problem_id": "Problem_15",
+      "question": "Let $N$ denote the number of ordered triples of positive integers $(a,b,c)$ such that $a,b,c\\leq3^6$ and $a^3+b^3+c^3$ i",
+      "expected": "735",
+      "n_runs": 4,
+      "n_correct": 3,
+      "accuracy": 0.75,
+      "avg_total_tokens": 13264.8,
+      "avg_completion_tokens": 12984.8,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 1,
+          "run_idx": 0,
+          "problem_id": "Problem_15",
+          "question": "Let $N$ denote the number of ordered triples of positive integers $(a,b,c)$ such that $a,b,c\\leq3^6$ and $a^3+b^3+c^3$ is a multiple of $3^7$. Find the remainder when $N$ is divided by $1000$.",
+          "expected": "735",
+          "predicted": "735",
+          "correct": true,
+          "total_tokens": 15691,
+          "completion_tokens": 15411,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 404.3,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\nMOD = 3**7          # 2187\nMAX = 3**6          # 729\n\n# frequency of cubes modulo MOD for numbers not divisible by 27 (i.e., U)\nfreq = [0] * MOD\nfor a in range(1, MAX + 1):\n    if a % 27 != 0:                 # a ∈ U\n        r = (a * a * a) % MOD\n        freq[r] += 1\n\n# M2: ordered pairs (a,b) ∈ U^2 with a^3 + b^3 ≡ 0 (mod MOD)\nM2 = 0\nfor r in range(MOD):\n    s = (-r) % MOD\n    M2 += freq[r] * freq[s]\n\n# M0: ordered triples (a,b,c) ∈ U^3 with a^3 + b^3 + c^3 ≡ 0 (mod MOD)\nM0 = 0\nfor r in range(MOD):\n    fr = freq[r]\n    if fr == 0:\n        continue\n    for s in range(MOD):\n        fs = freq[s]\n        if fs == 0:\n            continue\n        t = (-r - s) % MOD\n        M0 += fr * fs * freq[t]\n\n# N = all triples\nN = 27**3 + 81 * M2 + M0\n\nprint(f\"ANSWER: {N % 1000}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "MOD = 3**7          # 2187\nMAX = 3**6          # 729\n\n# frequency of cubes modulo MOD for numbers not divisible by 27 (i.e., U)\nfreq = [0] * MOD\nfor a in range(1, MAX + 1):\n    if a % 27 != 0:                 # a ∈ U\n        r = (a * a * a) % MOD\n        freq[r] += 1\n\n# M2: ordered pairs (a,b) ∈ U^2 with a^3 + b^3 ≡ 0 (mod MOD)\nM2 = 0\nfor r in range(MOD):\n    s = (-r) % MOD\n    M2 += freq[r] * freq[s]\n\n# M0: ordered triples (a,b,c) ∈ U^3 with a^3 + b^3 + c^3 ≡ 0 (mod MOD)\nM0 = 0\nfor r in range(MOD):\n    fr = freq[r]\n    if fr == 0:\n        continue\n    for s in range(MOD):\n        fs = freq[s]\n        if fs == 0:\n            continue\n        t = (-r - s) % MOD\n        M0 += fr * fs * freq[t]\n\n# N = all triples\nN = 27**3 + 81 * M2 + M0\n\nprint(f\"ANSWER: {N % 1000}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 735\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 1,
+          "run_idx": 1,
+          "problem_id": "Problem_15",
+          "question": "Let $N$ denote the number of ordered triples of positive integers $(a,b,c)$ such that $a,b,c\\leq3^6$ and $a^3+b^3+c^3$ is a multiple of $3^7$. Find the remainder when $N$ is divided by $1000$.",
+          "expected": "735",
+          "predicted": "735",
+          "correct": true,
+          "total_tokens": 12736,
+          "completion_tokens": 12456,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 266.7,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\nM = 3**7\nf = [0] * M\n\n# count frequencies of cubes modulo M\nfor a in range(1, 730):\n    r = pow(a, 3, M)\n    f[r] += 1\n\n# list residues with positive frequency\nnonzero = [(r, cnt) for r, cnt in enumerate(f) if cnt]\n\ntotal = 0\nfor x, fx in nonzero:\n    for y, fy in nonzero:\n        z = (-x - y) % M\n        fz = f[z]\n        total += fx * fy * fz\n\nprint(f\"ANSWER: {total % 1000}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "M = 3**7\nf = [0] * M\n\n# count frequencies of cubes modulo M\nfor a in range(1, 730):\n    r = pow(a, 3, M)\n    f[r] += 1\n\n# list residues with positive frequency\nnonzero = [(r, cnt) for r, cnt in enumerate(f) if cnt]\n\ntotal = 0\nfor x, fx in nonzero:\n    for y, fy in nonzero:\n        z = (-x - y) % M\n        fz = f[z]\n        total += fx * fy * fz\n\nprint(f\"ANSWER: {total % 1000}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 735\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 1,
+          "run_idx": 2,
+          "problem_id": "Problem_15",
+          "question": "Let $N$ denote the number of ordered triples of positive integers $(a,b,c)$ such that $a,b,c\\leq3^6$ and $a^3+b^3+c^3$ is a multiple of $3^7$. Find the remainder when $N$ is divided by $1000$.",
+          "expected": "735",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16280,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 287.2,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 1,
+          "run_idx": 3,
+          "problem_id": "Problem_15",
+          "question": "Let $N$ denote the number of ordered triples of positive integers $(a,b,c)$ such that $a,b,c\\leq3^6$ and $a^3+b^3+c^3$ is a multiple of $3^7$. Find the remainder when $N$ is divided by $1000$.",
+          "expected": "735",
+          "predicted": "735",
+          "correct": true,
+          "total_tokens": 8352,
+          "completion_tokens": 8072,
+          "n_steps": 4,
+          "n_code_blocks": 1,
+          "elapsed_s": 1015.2,
+          "steps": [
+            {
+              "step": 0,
+              "type": "retry",
+              "content": "Timeout attempt 1, wait 30s"
+            },
+            {
+              "step": 1,
+              "type": "assistant_raw",
+              "content": "```python\nM = 3**6          # 729\nMOD = 3**7        # 2187\n\n# frequency of each cube residue modulo MOD\nfreq = [0] * MOD\nfor a in range(1, M + 1):\n    freq[pow(a, 3, MOD)] += 1\n\n# list of residues that actually appear\nresidues = [(i, cnt) for i, cnt in enumerate(freq) if cnt]\n\nN = 0\nfor i, fi in residues:\n    for j, fj in residues:\n        k = (-i - j) % MOD\n        fk = freq[k]\n        if fk:\n            N += fi * fj * fk\n\nprint(f\"ANSWER: {N % 1000}\")\n```"
+            },
+            {
+              "step": 2,
+              "type": "code",
+              "content": "M = 3**6          # 729\nMOD = 3**7        # 2187\n\n# frequency of each cube residue modulo MOD\nfreq = [0] * MOD\nfor a in range(1, M + 1):\n    freq[pow(a, 3, MOD)] += 1\n\n# list of residues that actually appear\nresidues = [(i, cnt) for i, cnt in enumerate(freq) if cnt]\n\nN = 0\nfor i, fi in residues:\n    for j, fj in residues:\n        k = (-i - j) % MOD\n        fk = freq[k]\n        if fk:\n            N += fi * fj * fk\n\nprint(f\"ANSWER: {N % 1000}\")"
+            },
+            {
+              "step": 3,
+              "type": "exec_output",
+              "content": "ANSWER: 735\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 2,
+      "problem_id": "Problem_11",
+      "question": "A piecewise linear periodic function is defined by $f(x)=\\begin{cases}x&\\text{if }x\\in[-1,1)\\\\2-x&\\text{if }x\\in[1,3)\\en",
+      "expected": "259",
+      "n_runs": 4,
+      "n_correct": 0,
+      "accuracy": 0.0,
+      "avg_total_tokens": 16411.0,
+      "avg_completion_tokens": 16000.0,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 2,
+          "run_idx": 0,
+          "problem_id": "Problem_11",
+          "question": "A piecewise linear periodic function is defined by $f(x)=\\begin{cases}x&\\text{if }x\\in[-1,1)\\\\2-x&\\text{if }x\\in[1,3)\\end{cases}$ and $f(x+4)=f(x)$ for all real numbers $x$. The graph of $f(x)$ has the sawtooth pattern. The parabola $x=34y^2$ intersects the graph of $f(x)$ at finitely many points. The sum of the $y$-coordinates of these intersection points can be expressed in the form $\\frac{a+b\\sqrt{c}}{d}$, where $a,b,c,$ and $d$ are positive integers, $a,b,$ and $d$ have greatest common divisor equal to 1, and $c$ is not divisible by the square of any prime. Find $a+b+c+d$.",
+          "expected": "259",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16411,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 400.2,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 2,
+          "run_idx": 1,
+          "problem_id": "Problem_11",
+          "question": "A piecewise linear periodic function is defined by $f(x)=\\begin{cases}x&\\text{if }x\\in[-1,1)\\\\2-x&\\text{if }x\\in[1,3)\\end{cases}$ and $f(x+4)=f(x)$ for all real numbers $x$. The graph of $f(x)$ has the sawtooth pattern. The parabola $x=34y^2$ intersects the graph of $f(x)$ at finitely many points. The sum of the $y$-coordinates of these intersection points can be expressed in the form $\\frac{a+b\\sqrt{c}}{d}$, where $a,b,c,$ and $d$ are positive integers, $a,b,$ and $d$ have greatest common divisor equal to 1, and $c$ is not divisible by the square of any prime. Find $a+b+c+d$.",
+          "expected": "259",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16411,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 405.3,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 2,
+          "run_idx": 2,
+          "problem_id": "Problem_11",
+          "question": "A piecewise linear periodic function is defined by $f(x)=\\begin{cases}x&\\text{if }x\\in[-1,1)\\\\2-x&\\text{if }x\\in[1,3)\\end{cases}$ and $f(x+4)=f(x)$ for all real numbers $x$. The graph of $f(x)$ has the sawtooth pattern. The parabola $x=34y^2$ intersects the graph of $f(x)$ at finitely many points. The sum of the $y$-coordinates of these intersection points can be expressed in the form $\\frac{a+b\\sqrt{c}}{d}$, where $a,b,c,$ and $d$ are positive integers, $a,b,$ and $d$ have greatest common divisor equal to 1, and $c$ is not divisible by the square of any prime. Find $a+b+c+d$.",
+          "expected": "259",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16411,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 469.5,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 2,
+          "run_idx": 3,
+          "problem_id": "Problem_11",
+          "question": "A piecewise linear periodic function is defined by $f(x)=\\begin{cases}x&\\text{if }x\\in[-1,1)\\\\2-x&\\text{if }x\\in[1,3)\\end{cases}$ and $f(x+4)=f(x)$ for all real numbers $x$. The graph of $f(x)$ has the sawtooth pattern. The parabola $x=34y^2$ intersects the graph of $f(x)$ at finitely many points. The sum of the $y$-coordinates of these intersection points can be expressed in the form $\\frac{a+b\\sqrt{c}}{d}$, where $a,b,c,$ and $d$ are positive integers, $a,b,$ and $d$ have greatest common divisor equal to 1, and $c$ is not divisible by the square of any prime. Find $a+b+c+d$.",
+          "expected": "259",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16411,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 276.7,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 3,
+      "problem_id": "Problem_12",
+      "question": "Let $A_1 A_2 A_3 \\ldots A_{11}$ be an $11$-sided non-convex simple polygon with the following properties:\n\n\\begin{itemiz",
+      "expected": "19",
+      "n_runs": 4,
+      "n_correct": 1,
+      "accuracy": 0.25,
+      "avg_total_tokens": 15531.8,
+      "avg_completion_tokens": 15068.8,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 3,
+          "run_idx": 0,
+          "problem_id": "Problem_12",
+          "question": "Let $A_1 A_2 A_3 \\ldots A_{11}$ be an $11$-sided non-convex simple polygon with the following properties:\n\n\\begin{itemize}\n\\item For every integer $2 \\le i \\le 10$,  the area of $\\triangle A_i A_{1} A_{i+1}$  is equal to $1$.\n\\item For every integer $2 \\le i \\le 10$, $\\cos(\\angle A_i A_{1} A_{i+1}) = \\frac{12}{13}$.\n\\item The perimeter of the $11$-gon $A_1 A_2 A_3 \\dots A_{11}$  is equal to $20$.\n\\end{itemize}\n\nThen $A_1 A_2 + A_1 A_{11} = \\frac{m \\sqrt{n} - p}{q}$ where $m, n, p$, and $q$ are positive integers, $n$ is not divisible by the square of any prime, and no prime divides all of $m, p$, and $q$. Find $m + n + p + q$.",
+          "expected": "19",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16463,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 292.1,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 3,
+          "run_idx": 1,
+          "problem_id": "Problem_12",
+          "question": "Let $A_1 A_2 A_3 \\ldots A_{11}$ be an $11$-sided non-convex simple polygon with the following properties:\n\n\\begin{itemize}\n\\item For every integer $2 \\le i \\le 10$,  the area of $\\triangle A_i A_{1} A_{i+1}$  is equal to $1$.\n\\item For every integer $2 \\le i \\le 10$, $\\cos(\\angle A_i A_{1} A_{i+1}) = \\frac{12}{13}$.\n\\item The perimeter of the $11$-gon $A_1 A_2 A_3 \\dots A_{11}$  is equal to $20$.\n\\end{itemize}\n\nThen $A_1 A_2 + A_1 A_{11} = \\frac{m \\sqrt{n} - p}{q}$ where $m, n, p$, and $q$ are positive integers, $n$ is not divisible by the square of any prime, and no prime divides all of $m, p$, and $q$. Find $m + n + p + q$.",
+          "expected": "19",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16463,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 424.7,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 3,
+          "run_idx": 2,
+          "problem_id": "Problem_12",
+          "question": "Let $A_1 A_2 A_3 \\ldots A_{11}$ be an $11$-sided non-convex simple polygon with the following properties:\n\n\\begin{itemize}\n\\item For every integer $2 \\le i \\le 10$,  the area of $\\triangle A_i A_{1} A_{i+1}$  is equal to $1$.\n\\item For every integer $2 \\le i \\le 10$, $\\cos(\\angle A_i A_{1} A_{i+1}) = \\frac{12}{13}$.\n\\item The perimeter of the $11$-gon $A_1 A_2 A_3 \\dots A_{11}$  is equal to $20$.\n\\end{itemize}\n\nThen $A_1 A_2 + A_1 A_{11} = \\frac{m \\sqrt{n} - p}{q}$ where $m, n, p$, and $q$ are positive integers, $n$ is not divisible by the square of any prime, and no prime divides all of $m, p$, and $q$. Find $m + n + p + q$.",
+          "expected": "19",
+          "predicted": "19",
+          "correct": true,
+          "total_tokens": 14652,
+          "completion_tokens": 14189,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 492.8,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n# The problem reduces to solving for t = A1A2 + A1A11.\n# Given conditions lead to equation: t + 9*sqrt(t^2 - 20) = 20.\n# Solving yields t = (9*sqrt(5) - 1)/4.\n# Hence m=9, n=5, p=1, q=4, and m+n+p+q = 19.\n\nprint(\"ANSWER: 19\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "# The problem reduces to solving for t = A1A2 + A1A11.\n# Given conditions lead to equation: t + 9*sqrt(t^2 - 20) = 20.\n# Solving yields t = (9*sqrt(5) - 1)/4.\n# Hence m=9, n=5, p=1, q=4, and m+n+p+q = 19.\n\nprint(\"ANSWER: 19\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 19\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 3,
+          "run_idx": 3,
+          "problem_id": "Problem_12",
+          "question": "Let $A_1 A_2 A_3 \\ldots A_{11}$ be an $11$-sided non-convex simple polygon with the following properties:\n\n\\begin{itemize}\n\\item For every integer $2 \\le i \\le 10$,  the area of $\\triangle A_i A_{1} A_{i+1}$  is equal to $1$.\n\\item For every integer $2 \\le i \\le 10$, $\\cos(\\angle A_i A_{1} A_{i+1}) = \\frac{12}{13}$.\n\\item The perimeter of the $11$-gon $A_1 A_2 A_3 \\dots A_{11}$  is equal to $20$.\n\\end{itemize}\n\nThen $A_1 A_2 + A_1 A_{11} = \\frac{m \\sqrt{n} - p}{q}$ where $m, n, p$, and $q$ are positive integers, $n$ is not divisible by the square of any prime, and no prime divides all of $m, p$, and $q$. Find $m + n + p + q$.",
+          "expected": "19",
+          "predicted": "17",
+          "correct": false,
+          "total_tokens": 14549,
+          "completion_tokens": 14086,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 389.3,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n\nimport sympy as sp\n\n# Solve for S = A1A2 + A1A11\nS = sp.symbols('S')\neq = sp.Eq(S + 9 * sp.sqrt(S**2 - 20), 20)\nsolutions = sp.solve(eq, S)\n\n# pick the positive real solution\nS_val = None\nfor sol in solutions:\n    if sol.is_real and sol.evalf() > 0:\n        S_val = sol\n        break\n\nif S_val is None:\n    raise ValueError(\"No positive solution found\")\n\n# Express S_val in the form (m√n - p)/q\n# We expect √5, so use nsimplify with that basis\nexpr = sp.nsimplify(S_val, [sp.sqrt(5)])\nnum, den = sp.fraction(sp.together(expr))   # numerator and denominator\n\n# Extract m and p from num = m√5 - p\nm = sp.nsimplify(num / sp.sqrt(5))\np = sp.simplify(-(num - m * sp.sqrt(5)))   # p = -(num - m√5)\n\nn = 5\nq = den\n\n# Convert to integers (they are exact)\nm = int(m)\np = int(p)\nq = int(q)\n\nans = m + n + p + q\nprint(f\"ANSWER: {ans}\")\n\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "import sympy as sp\n\n# Solve for S = A1A2 + A1A11\nS = sp.symbols('S')\neq = sp.Eq(S + 9 * sp.sqrt(S**2 - 20), 20)\nsolutions = sp.solve(eq, S)\n\n# pick the positive real solution\nS_val = None\nfor sol in solutions:\n    if sol.is_real and sol.evalf() > 0:\n        S_val = sol\n        break\n\nif S_val is None:\n    raise ValueError(\"No positive solution found\")\n\n# Express S_val in the form (m√n - p)/q\n# We expect √5, so use nsimplify with that basis\nexpr = sp.nsimplify(S_val, [sp.sqrt(5)])\nnum, den = sp.fraction(sp.together(expr))   # numerator and denominator\n\n# Extract m and p from num = m√5 - p\nm = sp.nsimplify(num / sp.sqrt(5))\np = sp.simplify(-(num - m * sp.sqrt(5)))   # p = -(num - m√5)\n\nn = 5\nq = den\n\n# Convert to integers (they are exact)\nm = int(m)\np = int(p)\nq = int(q)\n\nans = m + n + p + q\nprint(f\"ANSWER: {ans}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 17\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 4,
+      "problem_id": "Problem_8",
+      "question": "From an unlimited supply of $1$-cent coins, $10$-cent coins, and $25$-cent coins, Silas wants to find a collection of co",
+      "expected": "610",
+      "n_runs": 4,
+      "n_correct": 0,
+      "accuracy": 0.0,
+      "avg_total_tokens": 16495.0,
+      "avg_completion_tokens": 16000.0,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 4,
+          "run_idx": 0,
+          "problem_id": "Problem_8",
+          "question": "From an unlimited supply of $1$-cent coins, $10$-cent coins, and $25$-cent coins, Silas wants to find a collection of coins that has a total value of $N$ cents, where $N$ is a positive integer. He uses the so-called \\textit{greedy algorithm}, successively choosing the coin of greatest value that does not cause the value of his collection to exceed $N$. For example, to get $42$ cents, Silas will choose a $25$-cent coin, then a $10$-cent coin, then $7$ $1$-cent coins. However, this collection of $9$ coins uses more coins than necessary to get a total of $42$ cents; indeed, choosing $4$ $10$-cent coins and $2$ $1$-cent coins achieves the same total with only $6$ coins.\n\nIn general, the greedy algorithm \\emph{succeeds} for a given $N$ if no other collection of $1$-cent, $10$-cent, and $25$-cent coins gives a total value of $N$ cents using strictly fewer coins than the collection given by the greedy algorithm. Find the number of values of $N$ between $1$ and $1000$ inclusive for which the greedy algorithm succeeds.",
+          "expected": "610",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16495,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 419.6,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 4,
+          "run_idx": 1,
+          "problem_id": "Problem_8",
+          "question": "From an unlimited supply of $1$-cent coins, $10$-cent coins, and $25$-cent coins, Silas wants to find a collection of coins that has a total value of $N$ cents, where $N$ is a positive integer. He uses the so-called \\textit{greedy algorithm}, successively choosing the coin of greatest value that does not cause the value of his collection to exceed $N$. For example, to get $42$ cents, Silas will choose a $25$-cent coin, then a $10$-cent coin, then $7$ $1$-cent coins. However, this collection of $9$ coins uses more coins than necessary to get a total of $42$ cents; indeed, choosing $4$ $10$-cent coins and $2$ $1$-cent coins achieves the same total with only $6$ coins.\n\nIn general, the greedy algorithm \\emph{succeeds} for a given $N$ if no other collection of $1$-cent, $10$-cent, and $25$-cent coins gives a total value of $N$ cents using strictly fewer coins than the collection given by the greedy algorithm. Find the number of values of $N$ between $1$ and $1000$ inclusive for which the greedy algorithm succeeds.",
+          "expected": "610",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16495,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 352.7,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 4,
+          "run_idx": 2,
+          "problem_id": "Problem_8",
+          "question": "From an unlimited supply of $1$-cent coins, $10$-cent coins, and $25$-cent coins, Silas wants to find a collection of coins that has a total value of $N$ cents, where $N$ is a positive integer. He uses the so-called \\textit{greedy algorithm}, successively choosing the coin of greatest value that does not cause the value of his collection to exceed $N$. For example, to get $42$ cents, Silas will choose a $25$-cent coin, then a $10$-cent coin, then $7$ $1$-cent coins. However, this collection of $9$ coins uses more coins than necessary to get a total of $42$ cents; indeed, choosing $4$ $10$-cent coins and $2$ $1$-cent coins achieves the same total with only $6$ coins.\n\nIn general, the greedy algorithm \\emph{succeeds} for a given $N$ if no other collection of $1$-cent, $10$-cent, and $25$-cent coins gives a total value of $N$ cents using strictly fewer coins than the collection given by the greedy algorithm. Find the number of values of $N$ between $1$ and $1000$ inclusive for which the greedy algorithm succeeds.",
+          "expected": "610",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16495,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 523.2,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 4,
+          "run_idx": 3,
+          "problem_id": "Problem_8",
+          "question": "From an unlimited supply of $1$-cent coins, $10$-cent coins, and $25$-cent coins, Silas wants to find a collection of coins that has a total value of $N$ cents, where $N$ is a positive integer. He uses the so-called \\textit{greedy algorithm}, successively choosing the coin of greatest value that does not cause the value of his collection to exceed $N$. For example, to get $42$ cents, Silas will choose a $25$-cent coin, then a $10$-cent coin, then $7$ $1$-cent coins. However, this collection of $9$ coins uses more coins than necessary to get a total of $42$ cents; indeed, choosing $4$ $10$-cent coins and $2$ $1$-cent coins achieves the same total with only $6$ coins.\n\nIn general, the greedy algorithm \\emph{succeeds} for a given $N$ if no other collection of $1$-cent, $10$-cent, and $25$-cent coins gives a total value of $N$ cents using strictly fewer coins than the collection given by the greedy algorithm. Find the number of values of $N$ between $1$ and $1000$ inclusive for which the greedy algorithm succeeds.",
+          "expected": "610",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16495,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 356.6,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 5,
+      "problem_id": "Problem_7",
+      "question": "The twelve letters $A,B,C,D,E,F,G,H,I,J,K$, and $L$ are randomly grouped into six pairs of letters. The two letters in e",
+      "expected": "821",
+      "n_runs": 4,
+      "n_correct": 1,
+      "accuracy": 0.25,
+      "avg_total_tokens": 22634.8,
+      "avg_completion_tokens": 21954.2,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 5,
+          "run_idx": 0,
+          "problem_id": "Problem_7",
+          "question": "The twelve letters $A,B,C,D,E,F,G,H,I,J,K$, and $L$ are randomly grouped into six pairs of letters. The two letters in each pair are placed next to each other in alphabetical order to form six two-letter words, and those six words are listed alphabetically. For example, a possible result is $AB,CJ,DG,EK,FL,HI$. The probability that the last word listed contains $G$ is $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+          "expected": "821",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16333,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 294.5,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 5,
+          "run_idx": 1,
+          "problem_id": "Problem_7",
+          "question": "The twelve letters $A,B,C,D,E,F,G,H,I,J,K$, and $L$ are randomly grouped into six pairs of letters. The two letters in each pair are placed next to each other in alphabetical order to form six two-letter words, and those six words are listed alphabetically. For example, a possible result is $AB,CJ,DG,EK,FL,HI$. The probability that the last word listed contains $G$ is $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+          "expected": "821",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16333,
+          "completion_tokens": 16000,
+          "n_steps": 3,
+          "n_code_blocks": 0,
+          "elapsed_s": 1058.2,
+          "steps": [
+            {
+              "step": 0,
+              "type": "retry",
+              "content": "Timeout attempt 1, wait 30s"
+            },
+            {
+              "step": 1,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 2,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 5,
+          "run_idx": 2,
+          "problem_id": "Problem_7",
+          "question": "The twelve letters $A,B,C,D,E,F,G,H,I,J,K$, and $L$ are randomly grouped into six pairs of letters. The two letters in each pair are placed next to each other in alphabetical order to form six two-letter words, and those six words are listed alphabetically. For example, a possible result is $AB,CJ,DG,EK,FL,HI$. The probability that the last word listed contains $G$ is $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+          "expected": "821",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16333,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 301.7,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 5,
+          "run_idx": 3,
+          "problem_id": "Problem_7",
+          "question": "The twelve letters $A,B,C,D,E,F,G,H,I,J,K$, and $L$ are randomly grouped into six pairs of letters. The two letters in each pair are placed next to each other in alphabetical order to form six two-letter words, and those six words are listed alphabetically. For example, a possible result is $AB,CJ,DG,EK,FL,HI$. The probability that the last word listed contains $G$ is $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+          "expected": "821",
+          "predicted": "821",
+          "correct": true,
+          "total_tokens": 41540,
+          "completion_tokens": 39817,
+          "n_steps": 10,
+          "n_code_blocks": 3,
+          "elapsed_s": 1295.3,
+          "steps": [
+            {
+              "step": 0,
+              "type": "retry",
+              "content": "Timeout attempt 1, wait 30s"
+            },
+            {
+              "step": 1,
+              "type": "assistant_raw",
+              "content": "```python\nimport math\n\ndef generate_matchings(remaining):\n    \"\"\"Yield all perfect matchings of the list `remaining` as lists of unordered pairs.\"\"\"\n    if not remaining:\n        yield []\n    else:\n        first = remaining[0]\n        for i in range(1, len(remaining)):\n            second = remaining[i]\n            # remove first and second from the list\n            new_rem = remaining[1:i] + remaining[i+1:]\n            for rest in generate_matchings(new_rem):\n                yield [(first, second)] + rest\n\ndef main():\n    letters = list(range(12))   # 0=A, 1=B, ..., 6=G, ..., 11=L\n    total = 0\n    favorable = 0\n\n    for matching in generate_matchings(letters):\n        total += 1\n        # form the two-letter words (sorted within each pair)\n        words = []\n        for x, y in matching:\n            if x < y:\n                words.append((x, y))\n            else:\n                words.append((y, x))\n        # list the words alphabetically\n        words.sort()\n        last_word = words[-1]\n        # check if the last word contains G (index 6)\n        if 6 in last_word:\n            favorable += 1\n\n    # reduce the fraction\n    g = math.gcd(favorable, total)\n    m = favorable // g\n    n = total // g\n    print(f\"ANSWER: {m + n}\")\n\nif __name__ == \"__main__\":\n    main()\n```"
+            },
+            {
+              "step": 2,
+              "type": "code",
+              "content": "import math\n\ndef generate_matchings(remaining):\n    \"\"\"Yield all perfect matchings of the list `remaining` as lists of unordered pairs.\"\"\"\n    if not remaining:\n        yield []\n    else:\n        first = remaining[0]\n        for i in range(1, len(remaining)):\n            second = remaining[i]\n            # remove first and second from the list\n            new_rem = remaining[1:i] + remaining[i+1:]\n            for rest in generate_matchings(new_rem):\n                yield [(first, second)] + rest\n\ndef main():\n    letters = list(range(12))   # 0=A, 1=B, ..., 6=G, ..., 11=L\n    total = 0\n    favorable = 0\n\n    for matching in generate_matchings(letters):\n        total += 1\n        # form the two-letter words (sorted within each pair)\n        words = []\n        for x, y in matching:\n            if x < y:\n                words.append((x, y))\n            else:\n                words.append((y, x))\n        # list the words alphabetically\n        words.sort()\n        last_word = words[-1]\n        # check if the last word contains G (index 6)\n        if 6 in last_word:\n            favorable += 1\n\n    # reduce the fraction\n    g = math.gcd(favorable, total)\n    m = favorable // g\n    n = total // g\n    print(f\"ANSWER: {m + n}\")\n\nif __name__ == \"__main__\":\n    main()"
+            },
+            {
+              "step": 3,
+              "type": "exec_output",
+              "content": ""
+            },
+            {
+              "step": 4,
+              "type": "assistant_raw",
+              "content": "```python\nimport math\n\ndef generate_matchings(remaining):\n    \"\"\"Yield all perfect matchings of the list `remaining` as lists of unordered pairs.\"\"\"\n    if not remaining:\n        yield []\n    else:\n        first = remaining[0]\n        for i in range(1, len(remaining)):\n            second = remaining[i]\n            # remove first and second from the list\n            new_rem = remaining[1:i] + remaining[i+1:]\n            for rest in generate_matchings(new_rem):\n                yield [(first, second)] + rest\n\ndef main():\n    letters = list(range(12))   # 0=A, 1=B, ..., 6=G, ..., 11=L\n    total = 0\n    favorable = 0\n\n    for matching in generate_matchings(letters):\n        total += 1\n        # form the two-letter words (sorted within each pair)\n        words = []\n        for x, y in matching:\n            if x < y:\n                words.append((x, y))\n            else:\n                words.append((y, x))\n        # list the words alphabetically\n        words.sort()\n        last_word = words[-1]\n        # check if the last word contains G (index 6)\n        if 6 in last_word:\n            favorable += 1\n\n    # reduce the fraction\n    g = math.gcd(favorable, total)\n    m = favorable // g\n    n = total // g\n    print(f\"ANSWER: {m + n}\")\n\nif __name__ == \"__main__\":\n    main()\n```"
+            },
+            {
+              "step": 5,
+              "type": "code",
+              "content": "import math\n\ndef generate_matchings(remaining):\n    \"\"\"Yield all perfect matchings of the list `remaining` as lists of unordered pairs.\"\"\"\n    if not remaining:\n        yield []\n    else:\n        first = remaining[0]\n        for i in range(1, len(remaining)):\n            second = remaining[i]\n            # remove first and second from the list\n            new_rem = remaining[1:i] + remaining[i+1:]\n            for rest in generate_matchings(new_rem):\n                yield [(first, second)] + rest\n\ndef main():\n    letters = list(range(12))   # 0=A, 1=B, ..., 6=G, ..., 11=L\n    total = 0\n    favorable = 0\n\n    for matching in generate_matchings(letters):\n        total += 1\n        # form the two-letter words (sorted within each pair)\n        words = []\n        for x, y in matching:\n            if x < y:\n                words.append((x, y))\n            else:\n                words.append((y, x))\n        # list the words alphabetically\n        words.sort()\n        last_word = words[-1]\n        # check if the last word contains G (index 6)\n        if 6 in last_word:\n            favorable += 1\n\n    # reduce the fraction\n    g = math.gcd(favorable, total)\n    m = favorable // g\n    n = total // g\n    print(f\"ANSWER: {m + n}\")\n\nif __name__ == \"__main__\":\n    main()"
+            },
+            {
+              "step": 6,
+              "type": "exec_output",
+              "content": ""
+            },
+            {
+              "step": 7,
+              "type": "assistant_raw",
+              "content": "```python\nimport math\n\ndef generate_matchings(remaining):\n    \"\"\"Yield all perfect matchings of the list `remaining`.\"\"\"\n    if not remaining:\n        yield []\n    else:\n        first = remaining[0]\n        for i in range(1, len(remaining)):\n            second = remaining[i]\n            # Create the new list of remaining items\n            new_remaining = remaining[1:i] + remaining[i+1:]\n            for rest in generate_matchings(new_remaining):\n                yield [(first, second)] + rest\n\n# Letters A-L correspond to indices 0-11. G is 6.\nletters = list(range(12))\ntotal_matchings = 0\nfavorable_matchings = 0\n\nfor matching in generate_matchings(letters):\n    total_matchings += 1\n    \n    # Form the two-letter words (sorted within each pair)\n    words = [tuple(sorted(pair)) for pair in matching]\n    \n    # List the words alphabetically\n    words.sort()\n    \n    # Check if the last word contains G (index 6)\n    if 6 in words[-1]:\n        favorable_matchings += 1\n\n# Calculate m/n and m+n\ndivisor = math.gcd(favorable_matchings, total_matchings)\nm = favorable_matchings // divisor\nn = total_matchings // divisor\n\nprint(f\"ANSWER: {m + n}\")\n```"
+            },
+            {
+              "step": 8,
+              "type": "code",
+              "content": "import math\n\ndef generate_matchings(remaining):\n    \"\"\"Yield all perfect matchings of the list `remaining`.\"\"\"\n    if not remaining:\n        yield []\n    else:\n        first = remaining[0]\n        for i in range(1, len(remaining)):\n            second = remaining[i]\n            # Create the new list of remaining items\n            new_remaining = remaining[1:i] + remaining[i+1:]\n            for rest in generate_matchings(new_remaining):\n                yield [(first, second)] + rest\n\n# Letters A-L correspond to indices 0-11. G is 6.\nletters = list(range(12))\ntotal_matchings = 0\nfavorable_matchings = 0\n\nfor matching in generate_matchings(letters):\n    total_matchings += 1\n    \n    # Form the two-letter words (sorted within each pair)\n    words = [tuple(sorted(pair)) for pair in matching]\n    \n    # List the words alphabetically\n    words.sort()\n    \n    # Check if the last word contains G (index 6)\n    if 6 in words[-1]:\n        favorable_matchings += 1\n\n# Calculate m/n and m+n\ndivisor = math.gcd(favorable_matchings, total_matchings)\nm = favorable_matchings // divisor\nn = total_matchings // divisor\n\nprint(f\"ANSWER: {m + n}\")"
+            },
+            {
+              "step": 9,
+              "type": "exec_output",
+              "content": "ANSWER: 821\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 6,
+      "problem_id": "Problem_6",
+      "question": "An isosceles trapezoid has an inscribed circle tangent to each of its four sides. The radius of the circle is 3, and the",
+      "expected": "504",
+      "n_runs": 4,
+      "n_correct": 4,
+      "accuracy": 1.0,
+      "avg_total_tokens": 3433.2,
+      "avg_completion_tokens": 3136.2,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 6,
+          "run_idx": 0,
+          "problem_id": "Problem_6",
+          "question": "An isosceles trapezoid has an inscribed circle tangent to each of its four sides. The radius of the circle is 3, and the area of the trapezoid is 72. Let the parallel sides of the trapezoid have lengths $r$ and $s$, with $r \\neq s$. Find $r^{2}+s^{2}$.",
+          "expected": "504",
+          "predicted": "504.0",
+          "correct": true,
+          "total_tokens": 2989,
+          "completion_tokens": 2692,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 75.8,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\nimport math\n\n# given data\nradius = 3\narea = 72\n\n# for a tangential quadrilateral: area = radius * semiperimeter\nsemiperimeter = area / radius\nperimeter = 2 * semiperimeter\n\n# in an isosceles trapezoid with incircle: r + s = 2L and perimeter = r+s+2L = 2(r+s)\nsum_rs = perimeter / 2          # r + s\n\n# height from area: area = (r+s)*h/2\nh = 2 * area / sum_rs\n\n# leg length L = (r+s)/2\nL = sum_rs / 2\n\n# difference of bases: from right triangle: L^2 = h^2 + ((s-r)/2)^2\ndiff_rs = 2 * math.sqrt(L**2 - h**2)   # s - r\n\n# compute r^2 + s^2 using (r+s)^2 and (s-r)^2\nresult = (sum_rs**2 + diff_rs**2) / 2\n\nprint(f\"ANSWER: {result}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "import math\n\n# given data\nradius = 3\narea = 72\n\n# for a tangential quadrilateral: area = radius * semiperimeter\nsemiperimeter = area / radius\nperimeter = 2 * semiperimeter\n\n# in an isosceles trapezoid with incircle: r + s = 2L and perimeter = r+s+2L = 2(r+s)\nsum_rs = perimeter / 2          # r + s\n\n# height from area: area = (r+s)*h/2\nh = 2 * area / sum_rs\n\n# leg length L = (r+s)/2\nL = sum_rs / 2\n\n# difference of bases: from right triangle: L^2 = h^2 + ((s-r)/2)^2\ndiff_rs = 2 * math.sqrt(L**2 - h**2)   # s - r\n\n# compute r^2 + s^2 using (r+s)^2 and (s-r)^2\nresult = (sum_rs**2 + diff_rs**2) / 2\n\nprint(f\"ANSWER: {result}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 504.0\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 6,
+          "run_idx": 1,
+          "problem_id": "Problem_6",
+          "question": "An isosceles trapezoid has an inscribed circle tangent to each of its four sides. The radius of the circle is 3, and the area of the trapezoid is 72. Let the parallel sides of the trapezoid have lengths $r$ and $s$, with $r \\neq s$. Find $r^{2}+s^{2}$.",
+          "expected": "504",
+          "predicted": "504.0",
+          "correct": true,
+          "total_tokens": 4269,
+          "completion_tokens": 3972,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 302.3,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n# Given data\nradius = 3\narea = 72\n\n# For a tangential quadrilateral, area = inradius * semiperimeter\nsemiperimeter = area / radius   # = 24\n\n# For an isosceles trapezoid with incircle, r + s = semiperimeter\nr_plus_s = semiperimeter\n\n# Height from area formula: area = (r+s)*h/2 => h = 2*area/(r+s)\nh = 2 * area / r_plus_s   # = 6\n\n# Leg length from r+s = 2L => L = (r+s)/2\nL = r_plus_s / 2   # = 12\n\n# Right triangle relation: L^2 = h^2 + ((r - s)/2)^2\n# => (r - s)^2 = 4*(L^2 - h^2)\nr_minus_s_squared = 4 * (L**2 - h**2)   # = 432\n\n# r^2 + s^2 = ((r+s)^2 + (r-s)^2) / 2\nr2_plus_s2 = (r_plus_s**2 + r_minus_s_squared) / 2   # = 504\n\nprint(f\"ANSWER: {r2_plus_s2}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "# Given data\nradius = 3\narea = 72\n\n# For a tangential quadrilateral, area = inradius * semiperimeter\nsemiperimeter = area / radius   # = 24\n\n# For an isosceles trapezoid with incircle, r + s = semiperimeter\nr_plus_s = semiperimeter\n\n# Height from area formula: area = (r+s)*h/2 => h = 2*area/(r+s)\nh = 2 * area / r_plus_s   # = 6\n\n# Leg length from r+s = 2L => L = (r+s)/2\nL = r_plus_s / 2   # = 12\n\n# Right triangle relation: L^2 = h^2 + ((r - s)/2)^2\n# => (r - s)^2 = 4*(L^2 - h^2)\nr_minus_s_squared = 4 * (L**2 - h**2)   # = 432\n\n# r^2 + s^2 = ((r+s)^2 + (r-s)^2) / 2\nr2_plus_s2 = (r_plus_s**2 + r_minus_s_squared) / 2   # = 504\n\nprint(f\"ANSWER: {r2_plus_s2}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 504.0\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 6,
+          "run_idx": 2,
+          "problem_id": "Problem_6",
+          "question": "An isosceles trapezoid has an inscribed circle tangent to each of its four sides. The radius of the circle is 3, and the area of the trapezoid is 72. Let the parallel sides of the trapezoid have lengths $r$ and $s$, with $r \\neq s$. Find $r^{2}+s^{2}$.",
+          "expected": "504",
+          "predicted": "504",
+          "correct": true,
+          "total_tokens": 3543,
+          "completion_tokens": 3246,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 34.2,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n# Compute r^2 + s^2 for the isosceles trapezoid with incircle radius 3 and area 72.\n\ninradius = 3\narea = 72\n\nheight = 2 * inradius  # distance between parallel sides equals diameter\nsum_bases = 2 * area / height  # r + s\nleg = sum_bases / 2  # because for tangential trapezoid, legs = (r+s)/2\n\n# Using right triangle: leg^2 = height^2 + ((r-s)/2)^2\n# => ((r-s)/2)^2 = leg^2 - height^2\n# => (r-s)^2 = 4 * (leg^2 - height^2)\ndiff_sq = 4 * (leg**2 - height**2)\n\n# r^2 + s^2 = ((r+s)^2 + (r-s)^2) / 2\nsum_sq = (sum_bases**2 + diff_sq) / 2\n\nprint(f\"ANSWER: {int(sum_sq)}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "# Compute r^2 + s^2 for the isosceles trapezoid with incircle radius 3 and area 72.\n\ninradius = 3\narea = 72\n\nheight = 2 * inradius  # distance between parallel sides equals diameter\nsum_bases = 2 * area / height  # r + s\nleg = sum_bases / 2  # because for tangential trapezoid, legs = (r+s)/2\n\n# Using right triangle: leg^2 = height^2 + ((r-s)/2)^2\n# => ((r-s)/2)^2 = leg^2 - height^2\n# => (r-s)^2 = 4 * (leg^2 - height^2)\ndiff_sq = 4 * (leg**2 - height**2)\n\n# r^2 + s^2 = ((r+s)^2 + (r-s)^2) / 2\nsum_sq = (sum_bases**2 + diff_sq) / 2\n\nprint(f\"ANSWER: {int(sum_sq)}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 504\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 6,
+          "run_idx": 3,
+          "problem_id": "Problem_6",
+          "question": "An isosceles trapezoid has an inscribed circle tangent to each of its four sides. The radius of the circle is 3, and the area of the trapezoid is 72. Let the parallel sides of the trapezoid have lengths $r$ and $s$, with $r \\neq s$. Find $r^{2}+s^{2}$.",
+          "expected": "504",
+          "predicted": "504.0",
+          "correct": true,
+          "total_tokens": 2932,
+          "completion_tokens": 2635,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 45.4,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\nR = 3\nA = 72\n\n# For a tangential quadrilateral: A = R * semiperimeter\np = A / R  # semiperimeter\n\n# For an isosceles trapezoid with incircle, the semiperimeter equals the sum of the bases\nr_plus_s = p\n\n# Height from area formula for trapezoid\nh = 2 * A / r_plus_s\n\n# Leg length from incircle condition (bases sum = 2 * leg)\nL = r_plus_s / 2\n\n# Square of the difference of the bases\ndiff_sq = 4 * (L**2 - h**2)\n\n# Sum of squares of the bases\nresult = (r_plus_s**2 + diff_sq) / 2\n\nprint(f\"ANSWER: {result}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "R = 3\nA = 72\n\n# For a tangential quadrilateral: A = R * semiperimeter\np = A / R  # semiperimeter\n\n# For an isosceles trapezoid with incircle, the semiperimeter equals the sum of the bases\nr_plus_s = p\n\n# Height from area formula for trapezoid\nh = 2 * A / r_plus_s\n\n# Leg length from incircle condition (bases sum = 2 * leg)\nL = r_plus_s / 2\n\n# Square of the difference of the bases\ndiff_sq = 4 * (L**2 - h**2)\n\n# Sum of squares of the bases\nresult = (r_plus_s**2 + diff_sq) / 2\n\nprint(f\"ANSWER: {result}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 504.0\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 7,
+      "problem_id": "Problem_13",
+      "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draw",
+      "expected": "204",
+      "n_runs": 4,
+      "n_correct": 0,
+      "accuracy": 0.0,
+      "avg_total_tokens": 16289.0,
+      "avg_completion_tokens": 16000.0,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 7,
+          "run_idx": 0,
+          "problem_id": "Problem_13",
+          "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draws 25 more line segments through the disk, drawing each segment by selecting two points at random on the perimeter of the disk in different quadrants and connecting those two points. Find the expected number of regions into which these 27 line segments divide the disk.",
+          "expected": "204",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16289,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 246.5,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 7,
+          "run_idx": 1,
+          "problem_id": "Problem_13",
+          "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draws 25 more line segments through the disk, drawing each segment by selecting two points at random on the perimeter of the disk in different quadrants and connecting those two points. Find the expected number of regions into which these 27 line segments divide the disk.",
+          "expected": "204",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16289,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 524.6,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 7,
+          "run_idx": 2,
+          "problem_id": "Problem_13",
+          "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draws 25 more line segments through the disk, drawing each segment by selecting two points at random on the perimeter of the disk in different quadrants and connecting those two points. Find the expected number of regions into which these 27 line segments divide the disk.",
+          "expected": "204",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16289,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 524.7,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 7,
+          "run_idx": 3,
+          "problem_id": "Problem_13",
+          "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draws 25 more line segments through the disk, drawing each segment by selecting two points at random on the perimeter of the disk in different quadrants and connecting those two points. Find the expected number of regions into which these 27 line segments divide the disk.",
+          "expected": "204",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16289,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 317.1,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 8,
+      "problem_id": "Problem_12",
+      "question": "The set of points in 3-dimensional coordinate space that lie in the plane $x+y+z=75$ whose coordinates satisfy the inequ",
+      "expected": "510",
+      "n_runs": 4,
+      "n_correct": 0,
+      "accuracy": 0.0,
+      "avg_total_tokens": 16318.0,
+      "avg_completion_tokens": 16000.0,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 8,
+          "run_idx": 0,
+          "problem_id": "Problem_12",
+          "question": "The set of points in 3-dimensional coordinate space that lie in the plane $x+y+z=75$ whose coordinates satisfy the inequalities $x-yz<y-zx<z-xy$ forms three disjoint convex regions. Exactly one of those regions has finite area. The area of this finite region can be expressed in the form $a\\sqrt{b}$, where $a$ and $b$ are positive integers and $b$ is not divisible by the square of any prime. Find $a+b$.",
+          "expected": "510",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16318,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 382.5,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 8,
+          "run_idx": 1,
+          "problem_id": "Problem_12",
+          "question": "The set of points in 3-dimensional coordinate space that lie in the plane $x+y+z=75$ whose coordinates satisfy the inequalities $x-yz<y-zx<z-xy$ forms three disjoint convex regions. Exactly one of those regions has finite area. The area of this finite region can be expressed in the form $a\\sqrt{b}$, where $a$ and $b$ are positive integers and $b$ is not divisible by the square of any prime. Find $a+b$.",
+          "expected": "510",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16318,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 249.5,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 8,
+          "run_idx": 2,
+          "problem_id": "Problem_12",
+          "question": "The set of points in 3-dimensional coordinate space that lie in the plane $x+y+z=75$ whose coordinates satisfy the inequalities $x-yz<y-zx<z-xy$ forms three disjoint convex regions. Exactly one of those regions has finite area. The area of this finite region can be expressed in the form $a\\sqrt{b}$, where $a$ and $b$ are positive integers and $b$ is not divisible by the square of any prime. Find $a+b$.",
+          "expected": "510",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16318,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 240.6,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 8,
+          "run_idx": 3,
+          "problem_id": "Problem_12",
+          "question": "The set of points in 3-dimensional coordinate space that lie in the plane $x+y+z=75$ whose coordinates satisfy the inequalities $x-yz<y-zx<z-xy$ forms three disjoint convex regions. Exactly one of those regions has finite area. The area of this finite region can be expressed in the form $a\\sqrt{b}$, where $a$ and $b$ are positive integers and $b$ is not divisible by the square of any prime. Find $a+b$.",
+          "expected": "510",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16318,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 261.0,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 9,
+      "problem_id": "Problem_1",
+      "question": "Six points $A, B, C, D, E$ and $F$ lie in a straight line in that order. Suppose that $G$ is a point not on the line and",
+      "expected": "468",
+      "n_runs": 4,
+      "n_correct": 4,
+      "accuracy": 1.0,
+      "avg_total_tokens": 3828.0,
+      "avg_completion_tokens": 3522.0,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 9,
+          "run_idx": 0,
+          "problem_id": "Problem_1",
+          "question": "Six points $A, B, C, D, E$ and $F$ lie in a straight line in that order. Suppose that $G$ is a point not on the line and that $AC = 26$, $BD = 22$, $CE = 31$, $DF = 33$, $AF = 73$, $CG = 40$, and $DG = 30$. Find the area of $\\triangle BGE$.",
+          "expected": "468",
+          "predicted": "468.0",
+          "correct": true,
+          "total_tokens": 4816,
+          "completion_tokens": 4510,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 61.3,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n# Given lengths\nAC = 26\nBD = 22\nCE = 31\nDF = 33\nAF = 73\nCG = 40\nDG = 30\n\n# Place points on a line (x-axis) with A at 0\nA = 0\nC = A + AC          # C = 26\nF = A + AF          # F = 73\nE = C + CE          # E = 57\nD = F - DF          # D = 40\nB = D - BD          # B = 18\n\nBE = E - B          # 39\nCD = D - C          # 14\n\n# Area of triangle CDG via Heron's formula\ns = (CG + DG + CD) / 2\narea_CDG = (s * (s - CG) * (s - DG) * (s - CD)) ** 0.5   # = 168\n\n# Height from G to the line (same as distance to x-axis)\nheight = 2 * area_CDG / CD   # = 24\n\n# Area of triangle BGE\narea_BGE = 0.5 * BE * height   # = 468\n\nprint(f\"ANSWER: {area_BGE}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "# Given lengths\nAC = 26\nBD = 22\nCE = 31\nDF = 33\nAF = 73\nCG = 40\nDG = 30\n\n# Place points on a line (x-axis) with A at 0\nA = 0\nC = A + AC          # C = 26\nF = A + AF          # F = 73\nE = C + CE          # E = 57\nD = F - DF          # D = 40\nB = D - BD          # B = 18\n\nBE = E - B          # 39\nCD = D - C          # 14\n\n# Area of triangle CDG via Heron's formula\ns = (CG + DG + CD) / 2\narea_CDG = (s * (s - CG) * (s - DG) * (s - CD)) ** 0.5   # = 168\n\n# Height from G to the line (same as distance to x-axis)\nheight = 2 * area_CDG / CD   # = 24\n\n# Area of triangle BGE\narea_BGE = 0.5 * BE * height   # = 468\n\nprint(f\"ANSWER: {area_BGE}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 468.0\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 9,
+          "run_idx": 1,
+          "problem_id": "Problem_1",
+          "question": "Six points $A, B, C, D, E$ and $F$ lie in a straight line in that order. Suppose that $G$ is a point not on the line and that $AC = 26$, $BD = 22$, $CE = 31$, $DF = 33$, $AF = 73$, $CG = 40$, and $DG = 30$. Find the area of $\\triangle BGE$.",
+          "expected": "468",
+          "predicted": "468.0",
+          "correct": true,
+          "total_tokens": 3510,
+          "completion_tokens": 3204,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 49.2,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n# Compute coordinates based on given distances\nAB, BC, CD, DE, EF = 18, 8, 14, 17, 16\na = 0\nb = a + AB\nc = b + BC\nd = c + CD\ne = d + DE\nf = e + EF   # not needed further\n\n# Find G's coordinates from CG=40, DG=30\n# Using derived formula: (gx-26)^2 - (gx-40)^2 = 700 -> 28*gx - 924 = 700 -> gx = 58\ngx = 58\ngy2 = 900 - (gx - 40)**2   # from DG^2\ngy = (gy2)**0.5   # = 24\n\n# Area of triangle BGE: base = BE, height = |gy|\nbase = e - b   # 57 - 18 = 39\nheight = gy\narea = 0.5 * base * height\n\nprint(f\"ANSWER: {area}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "# Compute coordinates based on given distances\nAB, BC, CD, DE, EF = 18, 8, 14, 17, 16\na = 0\nb = a + AB\nc = b + BC\nd = c + CD\ne = d + DE\nf = e + EF   # not needed further\n\n# Find G's coordinates from CG=40, DG=30\n# Using derived formula: (gx-26)^2 - (gx-40)^2 = 700 -> 28*gx - 924 = 700 -> gx = 58\ngx = 58\ngy2 = 900 - (gx - 40)**2   # from DG^2\ngy = (gy2)**0.5   # = 24\n\n# Area of triangle BGE: base = BE, height = |gy|\nbase = e - b   # 57 - 18 = 39\nheight = gy\narea = 0.5 * base * height\n\nprint(f\"ANSWER: {area}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 468.0\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 9,
+          "run_idx": 2,
+          "problem_id": "Problem_1",
+          "question": "Six points $A, B, C, D, E$ and $F$ lie in a straight line in that order. Suppose that $G$ is a point not on the line and that $AC = 26$, $BD = 22$, $CE = 31$, $DF = 33$, $AF = 73$, $CG = 40$, and $DG = 30$. Find the area of $\\triangle BGE$.",
+          "expected": "468",
+          "predicted": "468.0",
+          "correct": true,
+          "total_tokens": 3150,
+          "completion_tokens": 2844,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 45.9,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n# Points on the line (x-axis)\nA = 0\nAC = 26\nBD = 22\nCE = 31\nDF = 33\nAF = 73\n\n# Compute positions\nC = A + AC          # 26\nF = AF              # 73\nD = F - DF          # 40\nB = D - BD          # 18\nE = C + CE          # 57\n\n# Distances from G to C and D\nCG = 40\nDG = 30\n\n# Solve for G = (x_G, y_G)\n# (x_G - C)^2 + y_G^2 = CG^2\n# (x_G - D)^2 + y_G^2 = DG^2\n# Subtract: (x_G - C)^2 - (x_G - D)^2 = CG^2 - DG^2 = 1600 - 900 = 700\n# Expand difference: 2*(D - C)*x_G + (C^2 - D^2) = 700\nx_G = (700 - C**2 + D**2) / (2 * (D - C))\ny_sq = CG**2 - (x_G - C)**2\ny_G = y_sq ** 0.5   # positive root (area uses absolute value)\n\n# Area of triangle BGE (B and E on x-axis, so height = |y_G|)\narea = 0.5 * abs(y_G) * abs(B - E)\n\nprint(f\"ANSWER: {area}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "# Points on the line (x-axis)\nA = 0\nAC = 26\nBD = 22\nCE = 31\nDF = 33\nAF = 73\n\n# Compute positions\nC = A + AC          # 26\nF = AF              # 73\nD = F - DF          # 40\nB = D - BD          # 18\nE = C + CE          # 57\n\n# Distances from G to C and D\nCG = 40\nDG = 30\n\n# Solve for G = (x_G, y_G)\n# (x_G - C)^2 + y_G^2 = CG^2\n# (x_G - D)^2 + y_G^2 = DG^2\n# Subtract: (x_G - C)^2 - (x_G - D)^2 = CG^2 - DG^2 = 1600 - 900 = 700\n# Expand difference: 2*(D - C)*x_G + (C^2 - D^2) = 700\nx_G = (700 - C**2 + D**2) / (2 * (D - C))\ny_sq = CG**2 - (x_G - C)**2\ny_G = y_sq ** 0.5   # positive root (area uses absolute value)\n\n# Area of triangle BGE (B and E on x-axis, so height = |y_G|)\narea = 0.5 * abs(y_G) * abs(B - E)\n\nprint(f\"ANSWER: {area}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 468.0\n"
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 9,
+          "run_idx": 3,
+          "problem_id": "Problem_1",
+          "question": "Six points $A, B, C, D, E$ and $F$ lie in a straight line in that order. Suppose that $G$ is a point not on the line and that $AC = 26$, $BD = 22$, $CE = 31$, $DF = 33$, $AF = 73$, $CG = 40$, and $DG = 30$. Find the area of $\\triangle BGE$.",
+          "expected": "468",
+          "predicted": "468",
+          "correct": true,
+          "total_tokens": 3836,
+          "completion_tokens": 3530,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 53.1,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\nimport math\n\n# Given distances\nAC = 26\nBD = 22\nCE = 31\nDF = 33\nAF = 73\nCG = 40\nDG = 30\n\n# Place points on x-axis with A at 0\nA = 0\nC = A + AC          # 26\nF = A + AF          # 73\nE = C + CE          # 57\nD = F - DF          # 40\nB = D - BD          # 18\n\n# Solve for G = (x, y) from distances to C and D\nCG2 = CG * CG\nDG2 = DG * DG\n# (x-C)^2 + y^2 = CG2, (x-D)^2 + y^2 = DG2  => subtract\nx_num = CG2 - DG2 - C*C + D*D   # = 1624\nx_den = 2 * (D - C)             # = 28\nx = x_num // x_den              # = 58 (exact division)\n\ny2 = CG2 - (x - C)*(x - C)      # = 576\ny = int(math.isqrt(y2))         # = 24 (perfect square)\n\n# Area of triangle BGE: base = BE, height = |y|\nbase = E - B                    # = 39\narea = (base * y) // 2          # = 468\n\nprint(f\"ANSWER: {area}\")\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "import math\n\n# Given distances\nAC = 26\nBD = 22\nCE = 31\nDF = 33\nAF = 73\nCG = 40\nDG = 30\n\n# Place points on x-axis with A at 0\nA = 0\nC = A + AC          # 26\nF = A + AF          # 73\nE = C + CE          # 57\nD = F - DF          # 40\nB = D - BD          # 18\n\n# Solve for G = (x, y) from distances to C and D\nCG2 = CG * CG\nDG2 = DG * DG\n# (x-C)^2 + y^2 = CG2, (x-D)^2 + y^2 = DG2  => subtract\nx_num = CG2 - DG2 - C*C + D*D   # = 1624\nx_den = 2 * (D - C)             # = 28\nx = x_num // x_den              # = 58 (exact division)\n\ny2 = CG2 - (x - C)*(x - C)      # = 576\ny = int(math.isqrt(y2))         # = 24 (perfect square)\n\n# Area of triangle BGE: base = BE, height = |y|\nbase = E - B                    # = 39\narea = (base * y) // 2          # = 468\n\nprint(f\"ANSWER: {area}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 468\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 10,
+      "problem_id": "Problem_10",
+      "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numb",
+      "expected": "81",
+      "n_runs": 4,
+      "n_correct": 0,
+      "accuracy": 0.0,
+      "avg_total_tokens": 16261.5,
+      "avg_completion_tokens": 15808.5,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 10,
+          "run_idx": 0,
+          "problem_id": "Problem_10",
+          "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numbers, and each of the three $3\\times3$ blocks heavily outlined in the example below contains 9 different numbers, as in the first three rows of a Sudoku puzzle. \n | 4 | 2 | 8 | 9 | 6 | 3 | 1 | 7 | 5 | \n | 3 | 7 | 9 | 5 | 2 | 1 | 6 | 8 | 4 | \n | 5 | 6 | 1 | 8 | 4 | 7 | 9 | 2 | 3 | \n The number of different ways to fill such a grid can be written as $p^a\\cdot q^b\\cdot r^c\\cdot s^d$, where $p,q,r,$ and $s$ are distinct prime numbers and $a,b,c,$ and $d$ are positive integers. Find $p\\cdot a+q\\cdot b+r\\cdot c+s\\cdot d$.",
+          "expected": "81",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16453,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 206.8,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 10,
+          "run_idx": 1,
+          "problem_id": "Problem_10",
+          "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numbers, and each of the three $3\\times3$ blocks heavily outlined in the example below contains 9 different numbers, as in the first three rows of a Sudoku puzzle. \n | 4 | 2 | 8 | 9 | 6 | 3 | 1 | 7 | 5 | \n | 3 | 7 | 9 | 5 | 2 | 1 | 6 | 8 | 4 | \n | 5 | 6 | 1 | 8 | 4 | 7 | 9 | 2 | 3 | \n The number of different ways to fill such a grid can be written as $p^a\\cdot q^b\\cdot r^c\\cdot s^d$, where $p,q,r,$ and $s$ are distinct prime numbers and $a,b,c,$ and $d$ are positive integers. Find $p\\cdot a+q\\cdot b+r\\cdot c+s\\cdot d$.",
+          "expected": "81",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16453,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 254.1,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 10,
+          "run_idx": 2,
+          "problem_id": "Problem_10",
+          "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numbers, and each of the three $3\\times3$ blocks heavily outlined in the example below contains 9 different numbers, as in the first three rows of a Sudoku puzzle. \n | 4 | 2 | 8 | 9 | 6 | 3 | 1 | 7 | 5 | \n | 3 | 7 | 9 | 5 | 2 | 1 | 6 | 8 | 4 | \n | 5 | 6 | 1 | 8 | 4 | 7 | 9 | 2 | 3 | \n The number of different ways to fill such a grid can be written as $p^a\\cdot q^b\\cdot r^c\\cdot s^d$, where $p,q,r,$ and $s$ are distinct prime numbers and $a,b,c,$ and $d$ are positive integers. Find $p\\cdot a+q\\cdot b+r\\cdot c+s\\cdot d$.",
+          "expected": "81",
+          "predicted": null,
+          "correct": false,
+          "total_tokens": 16453,
+          "completion_tokens": 16000,
+          "n_steps": 2,
+          "n_code_blocks": 0,
+          "elapsed_s": 315.9,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": ""
+            },
+            {
+              "step": 1,
+              "type": "text",
+              "content": ""
+            }
+          ]
+        },
+        {
+          "label": "baseline",
+          "problem_idx": 10,
+          "run_idx": 3,
+          "problem_id": "Problem_10",
+          "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numbers, and each of the three $3\\times3$ blocks heavily outlined in the example below contains 9 different numbers, as in the first three rows of a Sudoku puzzle. \n | 4 | 2 | 8 | 9 | 6 | 3 | 1 | 7 | 5 | \n | 3 | 7 | 9 | 5 | 2 | 1 | 6 | 8 | 4 | \n | 5 | 6 | 1 | 8 | 4 | 7 | 9 | 2 | 3 | \n The number of different ways to fill such a grid can be written as $p^a\\cdot q^b\\cdot r^c\\cdot s^d$, where $p,q,r,$ and $s$ are distinct prime numbers and $a,b,c,$ and $d$ are positive integers. Find $p\\cdot a+q\\cdot b+r\\cdot c+s\\cdot d$.",
+          "expected": "81",
+          "predicted": "91",
+          "correct": false,
+          "total_tokens": 15687,
+          "completion_tokens": 15234,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 244.0,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n\nimport math\n\ndef prime_factors(n):\n    \"\"\"Return a dictionary mapping prime factors to exponents.\"\"\"\n    factors = {}\n    # Factor out 2\n    while n % 2 == 0:\n        factors[2] = factors.get(2, 0) + 1\n        n //= 2\n    # Factor out odd primes\n    p = 3\n    while p * p <= n:\n        while n % p == 0:\n            factors[p] = factors.get(p, 0) + 1\n            n //= p\n        p += 2\n    if n > 1:\n        factors[n] = factors.get(n, 0) + 1\n    return factors\n\n# Number of ways to fill the 3x9 grid (Sudoku band)\nnum = math.factorial(9) * 56 * (6 ** 8)\n\nfactors = prime_factors(num)\n\n# Compute p*a + q*b + r*c + s*d\ntotal = sum(p * exp for p, exp in factors.items())\n\nprint(f\"ANSWER: {total}\")\n\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "import math\n\ndef prime_factors(n):\n    \"\"\"Return a dictionary mapping prime factors to exponents.\"\"\"\n    factors = {}\n    # Factor out 2\n    while n % 2 == 0:\n        factors[2] = factors.get(2, 0) + 1\n        n //= 2\n    # Factor out odd primes\n    p = 3\n    while p * p <= n:\n        while n % p == 0:\n            factors[p] = factors.get(p, 0) + 1\n            n //= p\n        p += 2\n    if n > 1:\n        factors[n] = factors.get(n, 0) + 1\n    return factors\n\n# Number of ways to fill the 3x9 grid (Sudoku band)\nnum = math.factorial(9) * 56 * (6 ** 8)\n\nfactors = prime_factors(num)\n\n# Compute p*a + q*b + r*c + s*d\ntotal = sum(p * exp for p, exp in factors.items())\n\nprint(f\"ANSWER: {total}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 91\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "problem_idx": 11,
+      "problem_id": "Problem_11",
+      "question": "Let $S$ be the set of vertices of a regular $24$-gon. Find the number of ways to draw $12$ segments of equal lengths so ",
+      "expected": "113",
+      "n_runs": 1,
+      "n_correct": 1,
+      "accuracy": 1.0,
+      "avg_total_tokens": 15441.0,
+      "avg_completion_tokens": 15174.0,
+      "runs": [
+        {
+          "label": "baseline",
+          "problem_idx": 11,
+          "run_idx": 0,
+          "problem_id": "Problem_11",
+          "question": "Let $S$ be the set of vertices of a regular $24$-gon. Find the number of ways to draw $12$ segments of equal lengths so that each vertex in $S$ is an endpoint of exactly one of the $12$ segments.",
+          "expected": "113",
+          "predicted": "113",
+          "correct": true,
+          "total_tokens": 15441,
+          "completion_tokens": 15174,
+          "n_steps": 3,
+          "n_code_blocks": 1,
+          "elapsed_s": 156.5,
+          "steps": [
+            {
+              "step": 0,
+              "type": "assistant_raw",
+              "content": "```python\n\nimport math\n\nn = 24\ntotal = 0\n\nfor d in range(1, n // 2 + 1):          # d = 1,2,...,12\n    g = math.gcd(n, d)\n    cycle_len = n // g\n    if cycle_len == 2:\n        # each component is a single edge → exactly 1 perfect matching per component\n        total += 1\n    elif cycle_len % 2 == 0:\n        # each even cycle (length ≥4) has 2 perfect matchings\n        total += 2 ** g\n    else:\n        # odd cycle → no perfect matching\n        total += 0\n\nprint(f\"ANSWER: {total}\")\n\n```"
+            },
+            {
+              "step": 1,
+              "type": "code",
+              "content": "import math\n\nn = 24\ntotal = 0\n\nfor d in range(1, n // 2 + 1):          # d = 1,2,...,12\n    g = math.gcd(n, d)\n    cycle_len = n // g\n    if cycle_len == 2:\n        # each component is a single edge → exactly 1 perfect matching per component\n        total += 1\n    elif cycle_len % 2 == 0:\n        # each even cycle (length ≥4) has 2 perfect matchings\n        total += 2 ** g\n    else:\n        # odd cycle → no perfect matching\n        total += 0\n\nprint(f\"ANSWER: {total}\")"
+            },
+            {
+              "step": 2,
+              "type": "exec_output",
+              "content": "ANSWER: 113\n"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

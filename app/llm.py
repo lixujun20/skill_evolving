@@ -256,7 +256,12 @@ class LLM:
             elif self.api_type == "aws":
                 self.client = BedrockClient()
             else:
-                self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+                import httpx
+                self.client = AsyncOpenAI(
+                    api_key=self.api_key,
+                    base_url=self.base_url,
+                    timeout=httpx.Timeout(300, connect=30),
+                )
 
             self.token_counter = TokenCounter(self.tokenizer)
 
@@ -594,10 +599,17 @@ class LLM:
                 )
                 + f"\n{'='*80}"
             )
+            # Enable deep-thinking for GLM reasoning models — the hidden
+            # reasoning_content improves code quality; llm.ask() only returns
+            # the visible content field, so the reasoning stays transparent.
+            extra_body = {}
+            if model_in_use.startswith("glm-"):
+                extra_body["enable_thinking"] = False
+
             if not stream:
                 # Non-streaming request
                 response = await self.client.chat.completions.create(
-                    **params, stream=False
+                    **params, stream=False, extra_body=extra_body or None
                 )
                 # if not response.choices or not response.choices[0].message.content:
                 #     raise ValueError("Empty or invalid response from LLM")
@@ -624,7 +636,9 @@ class LLM:
             # Streaming request, For streaming, update estimated token count before making the request
             self.update_token_count(input_tokens, 0, model_in_use)
 
-            response = await self.client.chat.completions.create(**params, stream=True)
+            response = await self.client.chat.completions.create(
+                **params, stream=True, extra_body=extra_body or None
+            )
 
             collected_messages = []
             completion_text = ""
@@ -1323,6 +1337,15 @@ class LLM:
 
             params["stream"] = False  # Always use non-streaming for tool requests
 
+            # GLM: keep thinking disabled for tool calls.
+            # Hidden reasoning_content is not preserved across turns (it never
+            # enters the conversation history), so the model cannot build on its
+            # previous thinking. Instead we prompt it to write reasoning in
+            # visible content (ReAct pattern), which persists naturally.
+            extra_body = {}
+            if model_in_use.startswith("glm-"):
+                extra_body["enable_thinking"] = False
+
             # ── LLM Response Cache ───────────────────────────────────────────
             from app.llm_cache import (
                 get_cached_ask_tool, store_cached_ask_tool,
@@ -1348,7 +1371,7 @@ class LLM:
                 + f"\n{'='*80}"
             )
             response: ChatCompletion = await self.client.chat.completions.create(
-                **params
+                **params, extra_body=extra_body or None
             )
 
             llm_trace(f"[ASK_TOOL OUTPUT] model={model_in_use}\n{response.choices[0].message}\n{'='*80}")

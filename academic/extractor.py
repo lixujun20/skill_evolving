@@ -1,8 +1,9 @@
 """
-extractor.py — LLM-based skill extraction from execution traces.
+extractor.py — LLM-based skill extraction from TIR execution traces.
 
-Analyses a solution trace and extracts reusable helper functions
-that could speed up similar future problems.
+Analyses a solution trace (code blocks, execution outputs, AND the model's
+thinking/reasoning content) and extracts reusable helper functions and
+reasoning patterns that could speed up similar future problems.
 """
 from __future__ import annotations
 
@@ -10,16 +11,16 @@ import asyncio
 import re
 from typing import List, Optional
 
-from academic.config import EXTRACT_MODEL
+from academic.config import EXTRACT_MODEL, LLM_CALL_TIMEOUT
 from academic.skill_store import Skill
 
 
 EXTRACT_SYSTEM = """\
 You are a code analyst specialising in extracting reusable helper functions.
 
-Given a problem statement, the code that solved it, and the execution output,
-identify computational patterns that could be turned into standalone helper
-functions for similar future problems.
+Given a problem statement, the solution trace (code + execution outputs), and
+optionally the model's internal reasoning, identify computational patterns that
+could be turned into standalone helper functions for similar future problems.
 
 ## Rules
 1. Be AGGRESSIVE about extraction — extract any computational logic that might
@@ -28,19 +29,17 @@ functions for similar future problems.
 2. Each helper must be a pure Python function (no side effects, no I/O).
 3. Give each function a clear name and a one-line docstring.
 4. Make the function GENERAL (parameterized), not hardcoded to the specific
-   problem's values. For example, if the code computes GCD of 12 and 18,
-   extract a general `gcd(a, b)` function.
+   problem's values.
 5. If you identify a skill that ALREADY EXISTS (listed below), you may output
    an UPDATED version with improvements — keep the same function name.
-6. ONLY output NO_SKILL if the solution is trivially simple (e.g., just
-   `print(2 + 3)`).
+6. ONLY output NO_SKILL if the solution is trivially simple (e.g., just `print(2 + 3)`).
 7. SKILL COMPOSITION: You are ENCOURAGED to build new skills that CALL existing
-   skills.  For example, if `gcd(a, b)` already exists, you may define
-   `lcm(a, b)` that calls `gcd`.  This reduces code duplication and makes
-   skills more powerful.  Just reference the existing function by name —
-   it will be available at runtime.
-8. For EACH skill, also provide a brief TEST snippet — one or two assert
-   statements that verify the function works correctly.
+   skills.  Reference them by name — they will be available at runtime.
+8. For EACH skill, also provide a brief TEST snippet (one or two assert statements).
+9. REASONING SKILLS: If the model's reasoning shows a clever non-trivial insight
+   or algorithm that cannot easily be captured as a Python function, encode it
+   as a function whose docstring explains the key mathematical insight. The body
+   may contain the algorithmic implementation or a step-by-step comment.
 
 ## Existing Skills
 {existing_skills}
@@ -52,7 +51,7 @@ SKILL_NAME: <function_name>
 SKILL_DESC: <one-line description>
 ```python
 def <function_name>(...):
-    \"\"\"<docstring>\"\"\"
+    \"\"\"<docstring — include key mathematical insight if reasoning-derived>\"\"\"
     ...
 ```
 SKILL_TEST:
@@ -71,20 +70,35 @@ async def extract_skills(
     outputs: List[str],
     existing_skills_prompt: str = "",
     llm_config: str = EXTRACT_MODEL,
+    reasoning_traces: Optional[List[str]] = None,
 ) -> List[Skill]:
     """
     Analyse a solution trace and return 0+ new/updated Skills.
+
+    *reasoning_traces* are the model's thinking tokens (one per TIR step).
+    When provided, the extractor can also surface reasoning-derived insights
+    as skills (encoded in the function's docstring and body).
     """
     from app.llm import LLM
 
     code_text = "\n\n".join(f"# Block {i+1}\n{c}" for i, c in enumerate(code_blocks))
     output_text = "\n---\n".join(o[:500] for o in outputs)
 
+    # Include a summarised view of reasoning (cap at 3000 chars total to avoid
+    # blowing the extractor's context with very long thinking traces)
+    reasoning_section = ""
+    if reasoning_traces:
+        combined = "\n\n---\n\n".join(reasoning_traces)
+        if len(combined) > 3000:
+            combined = combined[:3000] + "\n...[truncated]"
+        reasoning_section = f"\n\n## Model Reasoning (thinking traces)\n```\n{combined}\n```"
+
     system = EXTRACT_SYSTEM.format(existing_skills=existing_skills_prompt or "(none)")
     user_msg = (
         f"## Problem\n{query}\n\n"
         f"## Solution Code\n```python\n{code_text}\n```\n\n"
-        f"## Execution Outputs\n```\n{output_text}\n```\n\n"
+        f"## Execution Outputs\n```\n{output_text}\n```"
+        f"{reasoning_section}\n\n"
         "Extract reusable helper functions (or NO_SKILL):"
     )
 
@@ -95,7 +109,7 @@ async def extract_skills(
                 messages=[{"role": "user", "content": user_msg}],
                 system_msgs=[{"role": "system", "content": system}],
             ),
-            timeout=300,
+            timeout=LLM_CALL_TIMEOUT,
         )
     except (asyncio.TimeoutError, Exception):
         return []

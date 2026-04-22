@@ -15,11 +15,43 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from academic.config import RESULTS_DIR
+from academic.config import RESULTS_DIR, INTER_PROBLEM_DELAY
 from academic.executor import ExecTrace, solve
 from academic.extractor import extract_skills
 from academic.skill_store import Skill, SkillStore
 from academic.tester import TestResult, test_skill, test_stale_skills
+
+# Import robust grader from ~/grading
+def _load_grading():
+    """Load grade_answer from ~/grading by exec-ing the files directly."""
+    from pathlib import Path as _P
+    grading_dir = _P.home() / "grading"
+    # Load math_normalize
+    mn_ns = {}
+    exec(compile((grading_dir / "math_normalize.py").read_text(), "math_normalize.py", "exec"), mn_ns)
+    # Build a fake module so grader.py's `from ..grading import math_normalize` works
+    import types, sys as _s
+    fake_mn_mod = types.ModuleType("math_normalize")
+    for k, v in mn_ns.items():
+        if not k.startswith("_"):
+            setattr(fake_mn_mod, k, v)
+    # Create fake package hierarchy: grading.deepscaler.rewards.grading → grading
+    # Actually, grader.py does `from ..grading import math_normalize`
+    # If grading is loaded as package "X.grading", then ..grading = X.grading = itself
+    # Simplest: just exec grader.py with math_normalize pre-injected
+    gr_src = (grading_dir / "grader.py").read_text()
+    # Replace the relative import line
+    gr_src = gr_src.replace("from ..grading import math_normalize", "# math_normalize already loaded")
+    gr_ns = {"math_normalize": fake_mn_mod}
+    exec(compile(gr_src, "grader.py", "exec"), gr_ns)
+    return gr_ns["grade_answer"]
+
+try:
+    _grade_answer = _load_grading()
+except Exception as _e:
+    import warnings
+    warnings.warn(f"Failed to load ~/grading: {_e}. Falling back to built-in check_answer.")
+    _grade_answer = None
 
 logger = logging.getLogger("tool_evolving")
 
@@ -163,27 +195,23 @@ def _try_eval(expr: str) -> Optional[float]:
 
 
 def check_answer(predicted: Optional[str], expected: str) -> bool:
+    """Use ~/grading/grader.py for robust answer comparison (with fallback)."""
     if predicted is None:
         return False
-
-    # 1. Direct string match after normalization
-    norm_p = _normalize_answer(predicted)
-    norm_e = _normalize_answer(expected)
+    if _grade_answer is not None:
+        try:
+            return _grade_answer(str(predicted), str(expected))
+        except Exception:
+            pass
+    # Fallback to built-in normalization
+    norm_p = _normalize_answer(str(predicted))
+    norm_e = _normalize_answer(str(expected))
     if norm_p == norm_e:
         return True
-
-    # 2. Try numeric evaluation of both sides
-    val_p = _try_eval(predicted)
-    val_e = _try_eval(expected)
+    val_p = _try_eval(str(predicted))
+    val_e = _try_eval(str(expected))
     if val_p is not None and val_e is not None:
         return abs(val_p - val_e) < 1e-6
-
-    # 3. Try evaluating normalized forms
-    val_p = _try_eval(norm_p)
-    val_e = _try_eval(norm_e)
-    if val_p is not None and val_e is not None:
-        return abs(val_p - val_e) < 1e-6
-
     return False
 
 
@@ -227,6 +255,7 @@ async def evolve_single(
                 code_blocks=trace.code_blocks,
                 outputs=trace.outputs,
                 existing_skills_prompt=store.build_skills_prompt(relevant),
+                reasoning_traces=trace.reasoning_traces or [],
             )
             # Test each skill before adding to store
             accepted = []
@@ -334,6 +363,7 @@ async def evolve_and_test(
                 sk.usage_count += 1
 
             trace = await solve(prob.question, relevant, store=store, llm_config=_agent_model)
+
             correct = check_answer(trace.final_answer, prob.answer)
             if correct:
                 for sk in relevant:
@@ -347,6 +377,7 @@ async def evolve_and_test(
                     outputs=trace.outputs,
                     existing_skills_prompt=store.build_skills_prompt(relevant),
                     llm_config=_extract_model,
+                    reasoning_traces=trace.reasoning_traces or [],
                 )
                 # Test each skill before adding to store
                 accepted = []
@@ -396,6 +427,9 @@ async def evolve_and_test(
             )
             round_counter += 1
 
+            if INTER_PROBLEM_DELAY > 0 and round_counter < total_train_rounds:
+                await asyncio.sleep(INTER_PROBLEM_DELAY)
+
     # Save evolved skill store
     store_path = RESULTS_DIR / f"{experiment_name}_skills.json"
     store.save(store_path)
@@ -414,6 +448,7 @@ async def evolve_and_test(
         t0 = time.monotonic()
         relevant = await store.retrieve(prob.question, top_k=5)
         trace = await solve(prob.question, relevant, store=store, llm_config=_agent_model)
+
         correct = check_answer(trace.final_answer, prob.answer)
         elapsed = time.monotonic() - t0
         code_lines = sum(c.count("\n") + 1 for c in trace.code_blocks)
@@ -428,6 +463,9 @@ async def evolve_and_test(
         ))
         logger.info(f"  [{i+1}] correct={correct}  tokens={trace.total_tokens}")
 
+        if INTER_PROBLEM_DELAY > 0 and i < len(test) - 1:
+            await asyncio.sleep(INTER_PROBLEM_DELAY)
+
     # ── Phase 3: Test WITHOUT skills (baseline) ───────────────────────────
     if skip_baseline:
         logger.info("=== BASELINE SKIPPED (reusing existing results) ===")
@@ -438,6 +476,7 @@ async def evolve_and_test(
         for i, prob in enumerate(test):
             t0 = time.monotonic()
             trace = await solve(prob.question, [], llm_config=_agent_model)  # empty skills
+
             correct = check_answer(trace.final_answer, prob.answer)
             elapsed = time.monotonic() - t0
             code_lines = sum(c.count("\n") + 1 for c in trace.code_blocks)
@@ -451,6 +490,9 @@ async def evolve_and_test(
                 new_skills_extracted=0,
             ))
             logger.info(f"  [{i+1}] correct={correct}  tokens={trace.total_tokens}")
+
+            if INTER_PROBLEM_DELAY > 0 and i < len(test) - 1:
+                await asyncio.sleep(INTER_PROBLEM_DELAY)
 
     # Save all results
     evolve_result.save()

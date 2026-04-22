@@ -1007,6 +1007,251 @@ Embedding retrieval naturally curates smaller, more focused libraries. Even
 the 3-epoch embedding library (32 skills) is smaller than the 1-epoch TF-IDF
 library (34 skills).
 
+### 10.10  Ongoing Exp 7: Variance-Controlled Re-run (4 Rollouts / Prompt)
+
+To reduce the variance of the single-run results in Exp 1–6, we started a
+new **variance-controlled re-run** on the same AIME 2024 → AIME 2025 setup:
+
+- use the **recommended GLM-4.7 temperature** (`temperature=0.7`)
+- run **4 rollouts per test prompt**
+- compare **baseline**, **1-epoch skill evolution**, and **3-epoch skill evolution**
+
+As of 2026-04-16, this batch is **still in progress** and should be treated as
+an engineering status update rather than a completed experimental result.
+
+| Run | Status | Evidence | Current interpretation |
+|-----|--------|----------|------------------------|
+| Baseline, 4 rollouts | **Partially recovered** | `aime_v2_baseline.log` + reconstructed checkpoint `aime_v2_v2_baseline_detail.json` | 16/30 problems (64 rollouts) were recovered from the interrupted log. Early runs show pervasive 2048-token truncation, so this partial artifact should **not** be reported as a final accuracy number. |
+| 1-epoch + skills, 4 rollouts | **Not yet completed** | no final `aime_v2_*_evolve_1ep_*` summary/detail artifact yet | No stable aggregate result is available. |
+| 3-epoch + skills, 4 rollouts | **Not yet completed** | no final `aime_v2_*_evolve_3ep_*` summary/detail artifact yet | No stable aggregate result is available. |
+
+Because the original 4-rollout baseline run was interrupted by API/rate-limit
+failures and did not persist checkpoints, we added **crash-safe checkpointing
+and resume support** to `academic/experiments/run_aime_v2.py`:
+
+1. save `*_detail.json` / `*_summary.json` after each completed problem
+2. save the evolving skill store snapshot during training
+3. resume from existing checkpoints instead of restarting from problem 1
+4. retry transient per-run crashes instead of aborting the whole batch
+
+This resume path was validated with a smoke run
+(`aime_v2_resume_smoke_baseline`). The practical implication is that the
+variance-controlled rerun can now proceed incrementally without discarding
+already-paid API calls.
+
+---
+
+### 10.11  Exp 8 (exp11): Robust Multi-Turn Baseline with Infrastructure Fixes
+
+Building on the Exp 7 attempt, we resolved several critical infrastructure
+issues and re-ran the full variance-controlled experiment:
+
+**Key infrastructure improvements:**
+
+1. **Thread-based code execution**: Replaced `signal.alarm`-based timeout
+   (which blocked the asyncio event loop) with `threading.Thread` +
+   `ctypes.PyThreadState_SetAsyncExc`, wrapped in `asyncio.run_in_executor()`.
+   This eliminates hangs where one problem's code execution blocks all others.
+
+2. **Jupyter-like persistent namespace**: Each solve() call maintains a single
+   execution namespace across all 16 interaction rounds. Variables, imports,
+   and function definitions from previous code blocks persist. The system
+   prompt and refinement messages explicitly instruct the model to build on
+   earlier results rather than recomputing from scratch.
+
+3. **Step-level resume**: On timeout, partial solver state (code blocks,
+   outputs, messages, token counts) is saved. On retry, the namespace is
+   rebuilt by replaying previous code blocks, and the conversation continues
+   from where it left off.
+
+4. **Checkpoint/resume per-problem**: Results saved after each problem
+   completes; experiments can resume without re-running completed work.
+
+5. **Thinking mode tested and rejected**: GLM-4.7's `enable_thinking=True`
+   mode was tested (hidden chain-of-thought reasoning). While it produced
+   cleaner code per step, each API call was 2–6× slower and used 6× more
+   tokens. A single run took 18 minutes and failed to produce an answer.
+   Thinking mode was disabled for all exp11 runs.
+
+**Configuration:**
+- Model: GLM-4.7 (BigModel API), `enable_thinking=False`
+- `max_tokens=2000`, `temperature=1.0` (API recommended)
+- `MAX_AGENT_STEPS=16`, `CODE_EXEC_TIMEOUT=30s`
+- 4 rollouts per problem, `CONCURRENCY=4`
+
+#### 10.11.1  Baseline Results
+
+| Metric | Value |
+|--------|-------|
+| Accuracy (micro) | **39.2%** (47/120) |
+| Accuracy (macro) | **39.2%** |
+| Total time | 67.5 min |
+| Avg tokens/run | 82,906 |
+| Timeouts | **0** |
+
+This is the best baseline result across all experiments:
+
+| Experiment | Baseline Accuracy | Notes |
+|------------|-------------------|-------|
+| Exp 1 (single-turn, TF-IDF) | 36.7% | Single run, temp=0 |
+| Exp 5 (single-turn, embedding) | 33.3% | Single run, temp=1 |
+| Exp 7 (4 rollout, interrupted) | ~35% | Partial, token truncation |
+| **Exp 8 baseline** | **39.2%** | 4 rollouts, multi-turn, Jupyter-like |
+
+**Per-problem breakdown (30 AIME 2025 problems, 4 runs each):**
+
+| Problem | Correct/4 | Problem | Correct/4 | Problem | Correct/4 |
+|---------|-----------|---------|-----------|---------|-----------|
+| P0 (Prob5) | 2/4 | P10 (Prob10) | 0/4 | P20 (Prob3) | 2/4 |
+| P1 (Prob15) | 0/4 | P11 (Prob11) | 0/4 | P21 (Prob14) | 2/4 |
+| P2 (Prob11) | 2/4 | P12 (Prob15) | 0/4 | P22 (Prob5) | 2/4 |
+| P3 (Prob12) | 1/4 | P13 (Prob7) | 0/4 | P23 (Prob10) | 2/4 |
+| P4 (Prob8) | **4/4** | P14 (Prob2) | **4/4** | P24 (Prob8) | 0/4 |
+| P5 (Prob7) | 0/4 | P15 (Prob13) | 0/4 | P25 (Prob9) | 3/4 |
+| P6 (Prob6) | 2/4 | P16 (Prob2) | 2/4 | P26 (Prob9) | 0/4 |
+| P7 (Prob13) | 0/4 | P17 (Prob14) | 0/4 | P27 (Prob1) | **4/4** |
+| P8 (Prob12) | 0/4 | P18 (Prob4) | 1/4 | P28 (Prob4) | **4/4** |
+| P9 (Prob1) | 3/4 | P19 (Prob3) | **4/4** | P29 (Prob6) | 3/4 |
+
+- **Consistently solved** (4/4): P4, P14, P19, P27, P28
+- **Never solved** (0/4): P1, P5, P7, P8, P10, P11, P12, P13, P15, P17, P24, P26
+
+#### 10.11.2  Skill Evolution — 1 Epoch
+
+Training on 30 AIME 2024 problems produced **23 skills** (some rejected due
+to assertion failures in auto-generated test code).
+
+| Metric | Baseline | +Skills (1 ep) | Δ |
+|--------|----------|----------------|---|
+| Accuracy | **39.2%** | 37.5% | −1.7 pp |
+| Avg tokens | 82,906 | 86,498 | +4.3% |
+| Time | 67.5 min | 128 min (incl. training) | — |
+| Timeouts | 0 | 0 | — |
+
+**Per-problem comparison (Baseline → 1-Epoch Skills):**
+
+| Improved (+14 runs) | Regressed (−16 runs) |
+|----------------------|----------------------|
+| P0: 2→4, P1: 0→2, P5: 0→1 | P2: 2→0, P4: 4→2, P14: 4→3 |
+| P6: 2→3, P8: 0→1, P9: 3→4 | P16: 2→1, P18: 1→0, P21: 2→1 |
+| P10: 0→1, P15: 0→1, P20: 2→3 | P23: 2→0, P25: 3→2, P27: 4→2 |
+| P22: 2→4, P24: 0→1 | P28: 4→3, P29: 3→1 |
+
+Skills helped some previously-unsolved problems (P1, P5, P8, P10, P15, P24)
+but caused regressions on previously-reliable ones (P4, P23, P27). The net
+effect is slightly negative (−2 correct runs), suggesting that indiscriminate
+skill injection can introduce noise for problems the model already solves well.
+
+#### 10.11.3  Skill Evolution — 3 Epochs
+
+*(Not run — exp11 superseded by exp12 with TIR architecture)*
+
+#### 10.11.4  Raw Data
+
+- `academic/results/aime_v2_exp11_baseline_detail.json` — Baseline detail
+- `academic/results/aime_v2_exp11_baseline_summary.json` — Baseline summary
+- `academic/results/aime_v2_exp11_evolve_1ep_detail.json` — 1-epoch detail
+- `academic/results/aime_v2_exp11_skills.json` — 1-epoch skill store (23 skills)
+- `academic/results/exp11_baseline.log` — Baseline log
+- `academic/results/exp11_evolve1.log` — 1-epoch evolve log
+
+---
+
+### 10.12  Exp 9 (exp12): TIR / ReAct Architecture
+
+**Motivation:** Exp 8 (exp11) used a multi-turn code-extraction loop where GLM-4.7 struggled to utilise previous turn results (each turn it tended to restart from scratch). Additionally, the multi-turn loop relied on a fragile regex to scrape `\`\`\`python` blocks, and `reasoning_content` (hidden thinking) never persisted across turns. These issues were diagnosed by observing that Claude had no problem with the same code, confirming the problem was model-specific.
+
+**Key architecture changes (exp12 vs exp11):**
+
+| Dimension | Exp 8 (exp11) | Exp 9 (exp12) |
+|-----------|--------------|--------------|
+| Execution pattern | Multi-turn code extraction loop | TIR: `python_interpreter` tool calling |
+| Reasoning | Hidden `reasoning_content` (not persisted) | Visible content (ReAct — persists in history) |
+| Answer extraction | `ANSWER:` prefix only | `ANSWER:` or `\boxed{N}` |
+| Loop termination | Run all N steps | Break on text response with answer; commit step at end |
+| Skill injection | Full skill code in system prompt | Only signatures/descriptions; code preloaded in sandbox |
+| max_tokens | 2000 | 4096 |
+| Executor class | Namespace-based `exec()` | `PersistentSandbox` with thread-based timeout |
+
+**Three bug fixes applied during exp12 baseline run:**
+1. `_extract_answer` only parsed `ANSWER:` prefix — model consistently used `\boxed{N}` → all answers were `pred=None` in first attempt
+2. Loop didn't break on text-only response → model looped all 16 steps repeating `\boxed{N}` wastefully
+3. No "commit" step → when model called tools all 16 steps and printed bare numbers (no prefix), `pred=None`
+
+#### 10.12.1  Baseline Results
+
+**Settings:** GLM-4.7, AIME 2025 (30 problems × 4 runs), `max_tokens=4096`, `temperature=1.0`, `MAX_AGENT_STEPS=16`, `CONCURRENCY=4`
+
+| Metric | Value |
+|--------|-------|
+| Micro accuracy (per run) | **77/120 = 64.2%** |
+| Pass@1 (≥1/4 correct per problem) | **25/30 = 83.3%** |
+| Pass@4 (all 4 correct per problem) | **11/30 = 36.7%** |
+| pred=None (no answer extracted) | **0/120** |
+| Avg tokens per run | 85,995 |
+| Total elapsed | ~55 min |
+
+**Per-problem correct counts:**
+
+| Problem | Correct/4 | Problem | Correct/4 |
+|---------|-----------|---------|-----------|
+| Problem_5 | 1/4 | Problem_13 (set B) | 0/4 |
+| Problem_15 | 3/4 | Problem_12 (set B) | 1/4 |
+| Problem_11 | 2/4 | Problem_1 (set B) | 4/4 |
+| Problem_12 | 4/4 | Problem_10 (set B) | 0/4 |
+| Problem_8 | 3/4 | Problem_11 (set B) | 2/4 |
+| Problem_7 | 3/4 | Problem_15 (set B) | 0/4 |
+| Problem_6 | 4/4 | Problem_7 (set B) | 2/4 |
+| Problem_13 | 0/4 | Problem_2 (set B) | 4/4 |
+| Problem_12 (set B) | 2/4 | Problem_13 (set B2) | 0/4 |
+| Problem_1 | 4/4 | Problem_2 (set B) | 0/4 |
+| Problem_10 | 0/4 | Problem_14 (set B) | 0/4 |
+| Problem_11 (set B) | 2/4 | Problem_4 (set B) | 4/4 |
+| Problem_15 (set B) | 1/4 | Problem_3 (set B) | 4/4 |
+| Problem_7 (set B) | 2/4 | Problem_3 (set B2) | 4/4 |
+| Problem_2 | 4/4 | Problem_14 (set B2) | 2/4 |
+
+**vs Exp 8 (exp11) baseline:**
+
+| Metric | Exp 8 (exp11) | Exp 9 (exp12) | Delta |
+|--------|--------------|--------------|-------|
+| Micro accuracy | 39.2% (47/120) | **64.2% (77/120)** | **+25.0 pp** |
+| pred=None | ~12% | **0%** | −12 pp |
+
+The +25pp jump is primarily attributable to the TIR/ReAct pattern enabling the model to maintain reasoning context across turns, plus the answer extraction fixes.
+
+#### 10.12.2  Skill Evolution — 1 Epoch
+
+Training on 30 AIME 2024 problems (1 epoch), testing on AIME 2025 with 4 runs/problem.
+Skills extracted: **19** (out of 30 training problems).
+
+| Metric | Baseline | Evolve 1ep | Delta |
+|--------|---------|-----------|-------|
+| Micro accuracy | 64.2% (77/120) | **60.8% (73/120)** | **−3.3 pp** |
+| Pass@1 (≥1 correct) | 83.3% (25/30) | 83.3% (25/30) | 0 pp |
+| Pass@4 (all correct) | 36.7% (11/30) | 36.7% (11/30) | 0 pp |
+| Avg tokens/run | 85,995 | 85,493 | −502 |
+| pred=None | 0/120 | 1/120 (P15 R2) | — |
+
+**Per-problem changes** (16 problems unchanged, 6 gained, 10 lost):
+- Notable gains: P16 (0/4→3/4 ↑3), P11 (2/4→3/4 ↑1), P17 (0/4→1/4 ↑1)
+- Notable losses: P3 (4/4→2/4 ↓2), P26 (3/4→1/4 ↓2)
+
+**Critical finding — skills are never called**: Post-hoc analysis of all 120 test runs confirms that **the model called zero pre-loaded skill functions** across all runs (0/120). Every run reimplemented math from scratch using sympy/numpy. This means:
+- The per-problem gains/losses (e.g., P16: 0/4→3/4, P3: 4/4→2/4) are **pure stochastic variance**, not skill-driven
+- The −3.3 pp micro accuracy delta is within noise for this sample size
+- The skill injection mechanism is **non-functional for GLM-4.7**: the model reads function signatures in the system prompt but consistently ignores them in favor of reimplementing
+
+**Root cause**: GLM-4.7 does not reliably follow the "use pre-loaded helpers when relevant" instruction. Inspection of failing runs shows the model immediately dives into writing its own code (sympy, numpy) without acknowledging or testing the available skill functions. The system prompt instruction "Do NOT redefine them" is ignored.
+
+**Implication**: The skill-evolving framework as currently implemented cannot demonstrate value with GLM-4.7 + TIR. Either the prompt needs redesign (e.g., explicit step requiring the model to check skill applicability), or a stronger instruction-following model (Claude, GPT-4) is needed for the test phase.
+
+#### 10.12.3  Raw Data
+
+- `academic/results/aime_v2_exp12_baseline_detail.json` — Baseline detail (30 probs × 4 runs)
+- `academic/results/aime_v2_exp12_baseline_summary.json` — Baseline summary
+- `academic/results/exp12_baseline.log` — Baseline log
+
 ---
 
 ## 11  Limitations

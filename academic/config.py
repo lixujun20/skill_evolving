@@ -27,4 +27,9 @@ EXTRACT_MODEL: str = os.environ.get("TE_EXTRACT_MODEL", "bigmodel")
 
 # ── Execution ─────────────────────────────────────────────────────────────────
 CODE_EXEC_TIMEOUT: int = int(os.environ.get("TE_EXEC_TIMEOUT", "30"))
-MAX_AGENT_STEPS: int = int(os.environ.get("TE_MAX_STEPS", "8"))
+MAX_AGENT_STEPS: int = int(os.environ.get("TE_MAX_STEPS", "16"))
+LLM_CALL_TIMEOUT: int = int(os.environ.get("TE_LLM_TIMEOUT", "600"))
+LLM_TIMEOUT_RETRIES: int = int(os.environ.get("TE_TIMEOUT_RETRIES", "3"))
+INTER_PROBLEM_DELAY: int = int(os.environ.get("TE_PROBLEM_DELAY", "10"))
+RATE_LIMIT_RETRIES: int = int(os.environ.get("TE_RATE_RETRIES", "5"))
+RATE_LIMIT_BASE_WAIT: int = int(os.environ.get("TE_RATE_WAIT", "60"))

@@ -1,0 +1,336 @@
+[
+  {
+    "name": "calculate_side_product_ia_perp_oi",
+    "description": "Calculates the product of sides AB and AC given circumradius R and inradius r, assuming IA is perpendicular to OI.",
+    "code": "def calculate_side_product_ia_perp_oi(R, r):\n    \"\"\"Calculates AB * AC given circumradius R and inradius r, assuming IA ⟂ OI.\"\"\"\n    return 6 * R * r",
+    "source_problems": [
+      "Let $\\triangle ABC$ have circumcenter $O$ and incenter $I$ with $\\overline{IA}\\perp\\overline{OI}$, circumradius $13$, and inradius $6$. Find $AB\\cdot AC$."
+    ],
+    "version": 1,
+    "usage_count": 12,
+    "success_count": 8,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert calculate_side_product_ia_perp_oi(13, 6) == 468"
+  },
+  {
+    "name": "hypergeometric_ways",
+    "description": "Calculates the number of ways to draw a sample with a specific number of successes from a population.",
+    "code": "def hypergeometric_ways(population_size, successes_in_pop, sample_size, desired_successes):\n    \"\"\"Calculates the number of ways to choose n items from N such that exactly k are from the K marked items.\"\"\"\n    from math import comb\n    return comb(successes_in_pop, desired_successes) * comb(population_size - successes_in_pop, sample_size - desired_successes)",
+    "source_problems": [
+      "Jen enters a lottery by picking $4$ distinct numbers from $S=\\{1,2,3,\\cdots,9,10\\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 7,
+    "success_count": 6,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert hypergeometric_ways(10, 4, 4, 4) == 1\nassert hypergeometric_ways(10, 4, 4, 2) == 90"
+  },
+  {
+    "name": "hypergeometric_range_ways",
+    "description": "Calculates the number of ways to draw a sample with successes in a specific range.",
+    "code": "def hypergeometric_range_ways(population_size, successes_in_pop, sample_size, min_successes, max_successes):\n    \"\"\"Calculates the number of ways to choose n items from N such that successes are in [min, max].\"\"\"\n    return sum(hypergeometric_ways(population_size, successes_in_pop, sample_size, k) \n               for k in range(min_successes, max_successes + 1))",
+    "source_problems": [
+      "Jen enters a lottery by picking $4$ distinct numbers from $S=\\{1,2,3,\\cdots,9,10\\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 14,
+    "success_count": 8,
+    "history": [],
+    "dependencies": [
+      "hypergeometric_ways"
+    ],
+    "stale": false,
+    "test_code": "assert hypergeometric_range_ways(10, 4, 4, 2, 4) == 115"
+  },
+  {
+    "name": "stars_and_bars",
+    "description": "Calculates the number of non-negative integer solutions to x1 + ... + xk = n.",
+    "code": "def stars_and_bars(n, k):\n    \"\"\"Calculates the number of non-negative integer solutions to x1 + ... + xk = n.\"\"\"\n    from math import comb\n    return comb(n + k - 1, k - 1)",
+    "source_problems": [
+      "Find the number of ways to place a digit in each cell of a 2x3 grid so that the sum of the two numbers formed by reading left to right is $999$, and the sum of the three numbers formed by reading top to bottom is $99$. The grid below is an example of such an arrangement because $8+991=999$ and $9+9+81=99$.\n\\[\\begin{array}{|c|c|c|} \\hline 0 & 0 & 8 \\\\ \\hline 9 & 9 & 1 \\\\ \\hline \\end{array}\\]"
+    ],
+    "version": 1,
+    "usage_count": 15,
+    "success_count": 9,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert stars_and_bars(8, 3) == 45\nassert stars_and_bars(0, 3) == 1"
+  },
+  {
+    "name": "count_digit_sum_ways",
+    "description": "Calculates the number of ways to choose a specific number of digits (0-9) that sum to a target value.",
+    "code": "def count_digit_sum_ways(target_sum, num_digits):\n    \"\"\"Calculates the number of ways to choose `num_digits` digits (0-9) that sum to `target_sum`.\"\"\"\n    from math import comb\n    count = 0\n    # Inclusion-exclusion to handle the upper bound of 9 for each digit.\n    # j represents the number of digits that exceed 9 (i.e., are >= 10).\n    max_j = min(target_sum // 10, num_digits)\n    for j in range(max_j + 1):\n        sign = 1 if j % 2 == 0 else -1\n        ways_to_choose = comb(num_digits, j)\n        remaining_sum = target_sum - 10 * j\n        \n        # Standard stars and bars for the remaining sum\n        ways_to_distribute = stars_and_bars(remaining_sum, num_digits)\n        \n        count += sign * ways_to_choose * ways_to_distribute\n    return count",
+    "source_problems": [
+      "Find the number of ways to place a digit in each cell of a 2x3 grid so that the sum of the two numbers formed by reading left to right is $999$, and the sum of the three numbers formed by reading top to bottom is $99$. The grid below is an example of such an arrangement because $8+991=999$ and $9+9+81=99$.\n\\[\\begin{array}{|c|c|c|} \\hline 0 & 0 & 8 \\\\ \\hline 9 & 9 & 1 \\\\ \\hline \\end{array}\\]"
+    ],
+    "version": 1,
+    "usage_count": 13,
+    "success_count": 9,
+    "history": [],
+    "dependencies": [
+      "stars_and_bars"
+    ],
+    "stale": false,
+    "test_code": "assert count_digit_sum_ways(8, 3) == 45\nassert count_digit_sum_ways(20, 3) == 36"
+  },
+  {
+    "name": "is_prime",
+    "description": "Checks if an integer is a prime number using trial division.",
+    "code": "def is_prime(n):\n    \"\"\"Return True if n is prime, else False.\"\"\"\n    if n < 2:\n        return False\n    for i in range(2, int(n**0.5) + 1):\n        if n % i == 0:\n            return False\n    return True",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 2,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert is_prime(2) == True\nassert is_prime(4) == False\nassert is_prime(13) == True"
+  },
+  {
+    "name": "find_least_congruence_root",
+    "description": "Finds the smallest positive integer x such that x^exponent ≡ target (mod modulus).",
+    "code": "def find_least_congruence_root(exponent, modulus, target):\n    \"\"\"Finds the smallest positive integer x such that x^exponent ≡ target (mod modulus).\"\"\"\n    for x in range(1, modulus):\n        if pow(x, exponent, modulus) == target:\n            return x\n    return None",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 10,
+    "success_count": 7,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert find_least_congruence_root(2, 5, 4) == 2\nassert find_least_congruence_root(2, 8, 1) == 1\nassert find_least_congruence_root(3, 7, 6) == 3"
+  },
+  {
+    "name": "calculate_equilateral_hexagon_side",
+    "description": "Calculates the side length of an equilateral hexagon with parallel opposite sides given the side lengths of the triangle formed by extending its sides.",
+    "code": "def calculate_equilateral_hexagon_side(a, b, c):\n    \"\"\"Calculates the side length of an equilateral hexagon with parallel opposite sides given the side lengths of the triangle formed by extending its sides.\"\"\"\n    product = a * b * c\n    sum_pairwise = a*b + b*c + c*a\n    return product / sum_pairwise",
+    "source_problems": [
+      "Let ABCDEF be a convex equilateral hexagon in which all pairs of opposite sides are parallel. The triangle whose sides are extensions of segments AB, CD, and EF has side lengths 200, 240, and 300. Find the side length of the hexagon."
+    ],
+    "version": 1,
+    "usage_count": 7,
+    "success_count": 4,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert calculate_equilateral_hexagon_side(200, 240, 300) == 80"
+  },
+  {
+    "name": "check_divisibility_after_replacement",
+    "description": "Checks if replacing any single digit of a number with a specific value results in a multiple of a divisor.",
+    "code": "def check_divisibility_after_replacement(number, replacement_digit, divisor):\n    \"\"\"Checks if replacing any single digit of `number` with `replacement_digit` results in a multiple of `divisor`.\"\"\"\n    s = str(number)\n    for i in range(len(s)):\n        # Construct the new number with the digit replaced\n        new_num_str = s[:i] + str(replacement_digit) + s[i+1:]\n        if int(new_num_str) % divisor != 0:\n            return False\n    return True",
+    "source_problems": [
+      "Let $N$ be the greatest four-digit positive integer with the property that whenever one of its digits is changed to $1$, the resulting number is divisible by $7$. Let $Q$ and $R$ be the quotient and remainder, respectively, when $N$ is divided by $1000$. Find $Q+R$."
+    ],
+    "version": 1,
+    "usage_count": 5,
+    "success_count": 4,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# 24 -> 14 (div by 7), 21 (div by 7). True.\nassert check_divisibility_after_replacement(24, 1, 7) == True\n# 21 -> 11 (not div by 7), 21 (div by 7). False.\nassert check_divisibility_after_replacement(21, 1, 7) == False"
+  },
+  {
+    "name": "find_greatest_number_with_property",
+    "description": "Finds the greatest integer in a range [low, high] that satisfies a given condition function.",
+    "code": "def find_greatest_number_with_property(low, high, condition_func):\n    \"\"\"Finds the greatest integer in the range [low, high] (inclusive) that satisfies `condition_func`.\"\"\"\n    for n in range(high, low - 1, -1):\n        if condition_func(n):\n            return n\n    return None",
+    "source_problems": [
+      "Let $N$ be the greatest four-digit positive integer with the property that whenever one of its digits is changed to $1$, the resulting number is divisible by $7$. Let $Q$ and $R$ be the quotient and remainder, respectively, when $N$ is divided by $1000$. Find $Q+R$."
+    ],
+    "version": 1,
+    "usage_count": 9,
+    "success_count": 5,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# Find greatest even number between 1 and 10\nassert find_greatest_number_with_property(1, 10, lambda x: x % 2 == 0) == 10\n# Find greatest multiple of 3 between 1 and 10\nassert find_greatest_number_with_property(1, 10, lambda x: x % 3 == 0) == 9"
+  },
+  {
+    "name": "calculate_intersection_from_exact_counts",
+    "description": "Calculates the number of elements belonging to all sets given the sum of set sizes and counts of elements belonging to exactly k sets.",
+    "code": "def calculate_intersection_from_exact_counts(sum_of_sizes, exact_counts, num_sets):\n    \"\"\"\n    Calculates the number of elements belonging to all `num_sets` sets,\n    given the sum of the sizes of the sets and the counts of elements belonging to exactly k sets.\n    \"\"\"\n    weighted_sum = sum(k * count for k, count in exact_counts.items())\n    return (sum_of_sizes - weighted_sum) // num_sets",
+    "source_problems": [
+      "Among the 900 residents of Aimeville, there are 195 who own a diamond ring, 367 who own a set of golf clubs, and 562 who own a garden spade. In addition, each of the 900 residents owns a bag of candy hearts. There are 437 residents who own exactly two of these things, and 234 residents who own exactly three of these things. Find the number of residents of Aimeville who own all four of these things."
+    ],
+    "version": 1,
+    "usage_count": 7,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# Problem: D=195, G=367, S=562. Sum = 1124.\n# Exactly 1 of D,G,S is 437. Exactly 2 of D,G,S is 234.\n# We want exactly 3 of D,G,S.\nassert calculate_intersection_from_exact_counts(1124, {1: 437, 2: 234}, 3) == 73"
+  },
+  {
+    "name": "convert_hm_to_hours",
+    "description": "Converts a duration given in hours and minutes into a fractional number of hours.",
+    "code": "def convert_hm_to_hours(hours, minutes):\n    \"\"\"Converts a duration given in hours and minutes into a fractional number of hours.\"\"\"\n    return hours + minutes / 60",
+    "source_problems": [
+      "Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert convert_hm_to_hours(2, 24) == 2.4\nassert convert_hm_to_hours(1, 30) == 1.5"
+  },
+  {
+    "name": "solve_speed_from_time_difference",
+    "description": "Calculates the initial speed given distance, two total times, and the difference between the two speeds.",
+    "code": "def solve_speed_from_time_difference(distance, total_time_1, total_time_2, speed_diff):\n    \"\"\"\n    Calculates the initial speed given distance, two total times, and the difference between the two speeds.\n    Assumes total_time_1 corresponds to the slower speed (initial_speed) and total_time_2 to the faster speed (initial_speed + speed_diff).\n    \"\"\"\n    from math import sqrt\n    delta_t = total_time_1 - total_time_2\n    # Equation derived from: T1 = D/s + t and T2 = D/(s+k) + t\n    # T1 - T2 = D/s - D/(s+k) = D*k / (s^2 + s*k)\n    # s^2 + s*k - (D*k / delta_t) = 0\n    discriminant = speed_diff**2 + 4 * distance * speed_diff / delta_t\n    s = (-speed_diff + sqrt(discriminant)) / 2\n    return s",
+    "source_problems": [
+      "Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop."
+    ],
+    "version": 1,
+    "usage_count": 3,
+    "success_count": 3,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert abs(solve_speed_from_time_difference(9, 4, 2.4, 2) - 2.5) < 1e-9"
+  },
+  {
+    "name": "calculate_stop_time",
+    "description": "Calculates the constant stop time given total time, distance, and speed.",
+    "code": "def calculate_stop_time(total_time, distance, speed):\n    \"\"\"Calculates the constant stop time given total time, distance, and speed.\"\"\"\n    return total_time - distance / speed",
+    "source_problems": [
+      "Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop."
+    ],
+    "version": 1,
+    "usage_count": 2,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert abs(calculate_stop_time(4, 9, 2.5) - 0.4) < 1e-9"
+  },
+  {
+    "name": "calculate_infimum_rhombus_diagonal_squared",
+    "description": "Calculates the infimum of the squared length of a diagonal of a rhombus inscribed in the hyperbola x^2/a^2 - y^2/b^2 = 1 with center at the origin.",
+    "code": "def calculate_infimum_rhombus_diagonal_squared(a_sq, b_sq):\n    \"\"\"Calculates the infimum of the squared length of a diagonal of a rhombus inscribed in the hyperbola x^2/a^2 - y^2/b^2 = 1 with center at the origin.\"\"\"\n    # Derived from minimizing 4 * r^2 subject to orthogonality condition k1*k2 = -1\n    return (4 * a_sq * b_sq) / (b_sq - a_sq)",
+    "source_problems": [
+      "Let $A$, $B$, $C$, and $D$ be point on the hyperbola $\\frac{x^2}{20}- \\frac{y^2}{24} = 1$ such that $ABCD$ is a rhombus whose diagonals intersect at the origin. Find the greatest real number that is less than $BD^2$ for all such rhombi."
+    ],
+    "version": 1,
+    "usage_count": 5,
+    "success_count": 4,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert calculate_infimum_rhombus_diagonal_squared(20, 24) == 480"
+  },
+  {
+    "name": "calculate_astroid_tangency_point",
+    "description": "Calculates the coordinates of the tangency point between the astroid x^(2/3) + y^(2/3) = L^(2/3) and the line segment connecting (a, 0) and (0, b), assuming a^2 + b^2 = L^2.",
+    "code": "def calculate_astroid_tangency_point(a, b, L=1):\n    \"\"\"\n    Calculates the coordinates of the tangency point between the astroid x^(2/3) + y^(2/3) = L^(2/3)\n    and the line segment connecting (a, 0) and (0, b), assuming a^2 + b^2 = L^2.\n    \"\"\"\n    # The tangency point coordinates are (a^3 / L^2, b^3 / L^2)\n    return (a**3 / L**2, b**3 / L**2)",
+    "source_problems": [
+      "Let \\(O=(0,0)\\), \\(A=\\left(\\tfrac{1}{2},0\\right)\\), and \\(B=\\left(0,\\tfrac{\\sqrt{3}}{2}\\right)\\) be points in the coordinate plane. Let \\(\\mathcal{F}\\) be the family of segments \\(\\overline{PQ}\\) of unit length lying in the first quadrant with \\(P\\) on the \\(x\\)-axis and \\(Q\\) on the \\(y\\)-axis. There is a unique point \\(C\\) on \\(\\overline{AB}\\), distinct from \\(A\\) and \\(B\\),  that does not belong to any segment from \\(\\mathcal{F}\\) other than \\(\\overline{AB}\\). Then \\(OC^2=\\tfrac{p}{q}\\), where \\(p\\) and \\(q\\) are relatively prime positive integers. Find \\(p+q\\)."
+    ],
+    "version": 1,
+    "usage_count": 7,
+    "success_count": 5,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\n# Test case: a=3/5, b=4/5, L=1. Tangency point should be (27/125, 64/125)\na, b, L = Fraction(3, 5), Fraction(4, 5), 1\nx, y = calculate_astroid_tangency_point(a, b, L)\nassert x == Fraction(27, 125) and y == Fraction(64, 125)"
+  },
+  {
+    "name": "calculate_cyclic_rectangles_segment_length",
+    "description": "Calculates the distance CE between two rectangles ABCD (top) and EFGH (bottom) on a line, where A, D, H, G are concyclic.",
+    "code": "import math\n\ndef calculate_cyclic_rectangles_segment_length(width_top, height_top, width_bottom, height_bottom):\n    \"\"\"\n    Calculates the distance CE between two rectangles ABCD (top) and EFGH (bottom) on a line,\n    where A, D, H, G are concyclic.\n    Assumes D is at origin, C at width_top, E at x, F at x+width_bottom.\n    \"\"\"\n    # Derived from cyclic condition: x^2 + width_bottom * x - (height_bottom^2 + height_top * height_bottom) = 0\n    rhs = height_bottom**2 + height_top * height_bottom\n    discriminant = width_bottom**2 + 4 * rhs\n    x_e = (-width_bottom + math.sqrt(discriminant)) / 2\n    return width_top - x_e",
+    "source_problems": [
+      "Rectangles $ABCD$ and $EFGH$ are drawn such that $D,E,C,F$ are collinear. Also, $A,D,H,G$ all lie on a circle. If $BC=16$,$AB=107$,$FG=17$, and $EF=184$, what is the length of $CE$?"
+    ],
+    "version": 1,
+    "usage_count": 3,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert calculate_cyclic_rectangles_segment_length(107, 16, 184, 17) == 104.0"
+  },
+  {
+    "name": "calculate_inradius_from_circle_chains",
+    "description": "Calculates the inradius of a triangle given two configurations of sequentially tangent circles in a corner, assuming a linear relationship between the chain length and the circle radius.",
+    "code": "def calculate_inradius_from_circle_chains(r1, n1, r2, n2):\n    \"\"\"\n    Calculates the inradius of a triangle given two configurations of\n    sequentially tangent circles in a corner, assuming the relationship\n    2 * r * (n - 1) = S * (R - r) where S is a geometric constant.\n    \"\"\"\n    # Total length of the chain of diameters for each configuration\n    L1 = 2 * r1 * (n1 - 1)\n    L2 = 2 * r2 * (n2 - 1)\n\n    # Solve for the geometric constant S\n    # From L1 = S(R - r1) and L2 = S(R - r2)\n    # S = (L2 - L1) / (r1 - r2)\n    S = (L2 - L1) / (r1 - r2)\n\n    # Solve for the inradius R\n    # R = r1 + L1 / S\n    return r1 + L1 / S",
+    "source_problems": [
+      "Eight circles of radius $34$ are sequentially tangent, and two of the circles are tangent to $AB$ and $BC$ of triangle $ABC$, respectively. $2024$ circles of radius $1$ can be arranged in the same manner. The inradius of triangle $ABC$ can be expressed as $\\frac{m}{n}$, where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 5,
+    "success_count": 4,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\nassert calculate_inradius_from_circle_chains(Fraction(34, 1), 8, Fraction(1, 1), 2024) == Fraction(192, 5)"
+  },
+  {
+    "name": "solve_log_system_product",
+    "description": "Calculates the product xy given the system log_x(y^x) = k1 and log_y(x^{c*y}) = k2.",
+    "code": "def solve_log_system_product(k1, k2, c):\n    \"\"\"Calculates the product xy given log_x(y^x) = k1 and log_y(x^{c*y}) = k2.\"\"\"\n    return (k1 * k2) / c",
+    "source_problems": [
+      "There exist real numbers $x$ and $y$, both greater than 1, such that $\\log_x\\left(y^x\\right)=\\log_y\\left(x^{4y}\\right)=10$. Find $xy$."
+    ],
+    "version": 1,
+    "usage_count": 4,
+    "success_count": 3,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert solve_log_system_product(10, 10, 4) == 25"
+  },
+  {
+    "name": "max_real_part_complex_sum_reciprocal",
+    "description": "Calculates the maximum real part of A*z + B/z given |z| = R.",
+    "code": "def max_real_part_complex_sum_reciprocal(A, B, R):\n    \"\"\"\n    Calculates the maximum real part of A*z + B/z given |z| = R.\n    \"\"\"\n    C = A * R\n    D = B / R\n    alpha = (C + D).real\n    beta = (C - D).imag\n    return (alpha**2 + beta**2)**0.5",
+    "source_problems": [
+      "Find the largest possible real part of \\[(75+117i)z+\\frac{96+144i}{z}\\]where $z$ is a complex number with $|z|=4$."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert max_real_part_complex_sum_reciprocal(75+117j, 96+144j, 4) == 540.0\nassert max_real_part_complex_sum_reciprocal(1+0j, 1+0j, 1) == 2.0"
+  },
+  {
+    "name": "solve_symmetric_log_system_linear_combination",
+    "description": "Calculates the value of p*log(x) + q*log(y) + r*log(z) given the system log(x/yz)=k1, log(y/xz)=k2, log(z/xy)=k3.",
+    "code": "def solve_symmetric_log_system_linear_combination(k1, k2, k3, p, q, r):\n    \"\"\"\n    Calculates the value of p*log(x) + q*log(y) + r*log(z) given the system:\n    log(x/yz) = k1\n    log(y/xz) = k2\n    log(z/xy) = k3\n    \"\"\"\n    sum_k = k1 + k2 + k3\n    sum_p = p + q + r\n    weighted_pk = p * k1 + q * k2 + r * k3\n    \n    # Derived from solving the linear system:\n    # a = (k1 + S)/2, b = (k2 + S)/2, c = (k3 + S)/2 where S = -(k1+k2+k3)\n    # Target = p*a + q*b + r*c\n    # Target = 0.5 * ( -sum_k * sum_p + weighted_pk )\n    return 0.5 * (-sum_k * sum_p + weighted_pk)",
+    "source_problems": [
+      "Let $x,y$ and $z$ be positive real numbers that satisfy the following system of equations:\n\\[\\log_2\\left({x \\over yz}\\right) = {1 \\over 2}\\]\\[\\log_2\\left({y \\over xz}\\right) = {1 \\over 3}\\]\\[\\log_2\\left({z \\over xy}\\right) = {1 \\over 4}\\]\nThen the value of $\\left|\\log_2(x^4y^3z^2)\\right|$ is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 3,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\n# Test case from the problem\nk1 = Fraction(1, 2)\nk2 = Fraction(1, 3)\nk3 = Fraction(1, 4)\np, q, r = 4, 3, 2\n# Expected value is -25/8\nassert solve_symmetric_log_system_linear_combination(k1, k2, k3, p, q, r) == Fraction(-25, 8)"
+  },
+  {
+    "name": "sum_of_set_bit_indices_one_based",
+    "description": "Calculates the sum of the 1-based indices of the set bits in the binary representation of an integer.",
+    "code": "def sum_of_set_bit_indices_one_based(n):\n    \"\"\"\n    Calculates the sum of the 1-based indices of the set bits in the binary representation of n.\n    This corresponds to the sum of elements of a set A where sum(2^(a-1) for a in A) = n.\n    \"\"\"\n    total = 0\n    index = 0\n    while n:\n        if n & 1:\n            total += index + 1\n        n >>= 1\n        index += 1\n    return total",
+    "source_problems": [
+      "Alice chooses a set $A$ of positive integers. Then Bob lists all finite nonempty sets $B$ of positive integers with the property that the maximum element of $B$ belongs to $A$. Bob's list has 2024 sets. Find the sum of the elements of A."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert sum_of_set_bit_indices_one_based(2024) == 55\nassert sum_of_set_bit_indices_one_based(5) == 4"
+  }
+]

@@ -1,0 +1,514 @@
+{
+  "engine": {
+    "engine": "desc_first",
+    "llm_config": "glm5",
+    "elapsed_s": 223.57,
+    "shared_sub_functions": [
+      {
+        "name": "_shared_det_2x2",
+        "description": "The common sub-task is calculating the determinant of a 2x2 matrix formed by vectors or matrix rows.",
+        "source_skills": [
+          "polygon_area",
+          "point_in_convex_polygon",
+          "signed_triangle_area",
+          "det_2x2",
+          "inverse_2x2",
+          "solve_linear_2x2"
+        ],
+        "code": "def _shared_det_2x2(a, b, c, d):\n    \"\"\"Calculates the determinant of a 2x2 matrix represented by elements a, b, c, d.\"\"\"\n    return a * d - b * c"
+      }
+    ],
+    "rejected_merges": [],
+    "standalone_after": [
+      {
+        "skill": "polygon_area",
+        "ok": false,
+        "tests": [
+          {
+            "q": "Area of quadrilateral (0,0),(4,0),(4,3),(0,3)?",
+            "expected": 12.0,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "Area of triangle (0,0),(6,0),(3,4)?",
+            "expected": 12.0,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "Area of pentagon (0,0),(2,0),(3,2),(1,4),(-1,2)?",
+            "expected": 10.0,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          }
+        ]
+      },
+      {
+        "skill": "point_in_convex_polygon",
+        "ok": false,
+        "tests": [
+          {
+            "q": "Is (2,2) inside square (0,0),(4,0),(4,4),(0,4)?",
+            "expected": true,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "Is (5,2) inside square (0,0),(4,0),(4,4),(0,4)?",
+            "expected": false,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "Is (1,1) inside triangle (0,0),(3,0),(0,3)?",
+            "expected": true,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          }
+        ]
+      },
+      {
+        "skill": "signed_triangle_area",
+        "ok": false,
+        "tests": [
+          {
+            "q": "Signed area of (0,0),(4,0),(0,3) (CCW)?",
+            "expected": 6.0,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "Signed area of (0,0),(0,3),(4,0) (CW)?",
+            "expected": -6.0,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          }
+        ]
+      },
+      {
+        "skill": "power_of_point",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Power of (5,0) wrt circle centre (0,0) radius 3?",
+            "expected": 16.0,
+            "got": 16,
+            "ok": true
+          },
+          {
+            "q": "Power of (1,1) wrt circle centre (0,0) radius 2?",
+            "expected": -2.0,
+            "got": -2,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "gcd_pair",
+        "ok": true,
+        "tests": [
+          {
+            "q": "gcd(12, 18)?",
+            "expected": 6,
+            "got": 6,
+            "ok": true
+          },
+          {
+            "q": "gcd(17, 5)?",
+            "expected": 1,
+            "got": 1,
+            "ok": true
+          },
+          {
+            "q": "gcd(0, 9)?",
+            "expected": 9,
+            "got": 9,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "lcm_of_list",
+        "ok": true,
+        "tests": [
+          {
+            "q": "lcm of [2, 3, 4]?",
+            "expected": 12,
+            "got": 12,
+            "ok": true
+          },
+          {
+            "q": "lcm of [6, 8, 12]?",
+            "expected": 24,
+            "got": 24,
+            "ok": true
+          },
+          {
+            "q": "lcm of [5, 7]?",
+            "expected": 35,
+            "got": 35,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "simplify_fraction",
+        "ok": true,
+        "tests": [
+          {
+            "q": "simplify 8/12?",
+            "expected": [
+              2,
+              3
+            ],
+            "got": [
+              2,
+              3
+            ],
+            "ok": true
+          },
+          {
+            "q": "simplify 14/21?",
+            "expected": [
+              2,
+              3
+            ],
+            "got": [
+              2,
+              3
+            ],
+            "ok": true
+          },
+          {
+            "q": "simplify 5/7?",
+            "expected": [
+              5,
+              7
+            ],
+            "got": [
+              5,
+              7
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "count_coprime_pairs",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Coprime pair count in [2,3,4,5]?",
+            "expected": 5,
+            "got": 5,
+            "ok": true
+          },
+          {
+            "q": "Coprime pair count in [6,10,15]?",
+            "expected": 0,
+            "got": 0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "pow_mod",
+        "ok": true,
+        "tests": [
+          {
+            "q": "2^10 mod 1000?",
+            "expected": 24,
+            "got": 24,
+            "ok": true
+          },
+          {
+            "q": "3^200 mod 7?",
+            "expected": 2,
+            "got": 2,
+            "ok": true
+          },
+          {
+            "q": "5^0 mod 13?",
+            "expected": 1,
+            "got": 1,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "modular_inverse_prime",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Inverse of 3 mod 7?",
+            "expected": 5,
+            "got": 5,
+            "ok": true
+          },
+          {
+            "q": "Inverse of 10 mod 17?",
+            "expected": 12,
+            "got": 12,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "binomial_mod_prime",
+        "ok": true,
+        "tests": [
+          {
+            "q": "C(5,2) mod 13?",
+            "expected": 10,
+            "got": 10,
+            "ok": true
+          },
+          {
+            "q": "C(10,3) mod 97?",
+            "expected": 23,
+            "got": 23,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "det_2x2",
+        "ok": false,
+        "tests": [
+          {
+            "q": "det([[1,2],[3,4]])?",
+            "expected": -2,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "det([[2,0],[0,5]])?",
+            "expected": 10,
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          }
+        ]
+      },
+      {
+        "skill": "inverse_2x2",
+        "ok": false,
+        "tests": [
+          {
+            "q": "Inverse of [[1,2],[3,4]]?",
+            "expected": [
+              -2.0,
+              1.0,
+              1.5,
+              -0.5
+            ],
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "Inverse of [[1,0],[0,1]]?",
+            "expected": [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          }
+        ]
+      },
+      {
+        "skill": "solve_linear_2x2",
+        "ok": false,
+        "tests": [
+          {
+            "q": "Solve [[2,1],[1,3]]x=[5,10]?",
+            "expected": [
+              1.0,
+              3.0
+            ],
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          },
+          {
+            "q": "Solve [[1,0],[0,1]]x=[7,-2]?",
+            "expected": [
+              7.0,
+              -2.0
+            ],
+            "got": null,
+            "ok": false,
+            "error": "NameError(\"name '_shared_det_2x2' is not defined\")"
+          }
+        ]
+      },
+      {
+        "skill": "sample_mean",
+        "ok": true,
+        "tests": [
+          {
+            "q": "mean of [1,2,3,4,5]?",
+            "expected": 3.0,
+            "got": 3.0,
+            "ok": true
+          },
+          {
+            "q": "mean of [10,10,10]?",
+            "expected": 10.0,
+            "got": 10.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "sample_variance",
+        "ok": true,
+        "tests": [
+          {
+            "q": "variance of [1,2,3,4,5]?",
+            "expected": 2.0,
+            "got": 2.0,
+            "ok": true
+          },
+          {
+            "q": "variance of [2,2,2]?",
+            "expected": 0.0,
+            "got": 0.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "expected_value",
+        "ok": true,
+        "tests": [
+          {
+            "q": "EV of [(1,0.5),(2,0.5)]?",
+            "expected": 1.5,
+            "got": 1.5,
+            "ok": true
+          },
+          {
+            "q": "EV of [(-1,0.25),(0,0.5),(1,0.25)]?",
+            "expected": 0.0,
+            "got": 0.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "sample_median",
+        "ok": true,
+        "tests": [
+          {
+            "q": "median of [1,2,3,4,5]?",
+            "expected": 3.0,
+            "got": 3.0,
+            "ok": true
+          },
+          {
+            "q": "median of [1,2,3,4]?",
+            "expected": 2.5,
+            "got": 2.5,
+            "ok": true
+          }
+        ]
+      }
+    ],
+    "correctness_pass_rate": 0.6666666666666666,
+    "token_report": {
+      "per_skill_before_tokens": {
+        "polygon_area": 104,
+        "point_in_convex_polygon": 123,
+        "signed_triangle_area": 46,
+        "power_of_point": 42,
+        "gcd_pair": 31,
+        "lcm_of_list": 83,
+        "simplify_fraction": 70,
+        "count_coprime_pairs": 95,
+        "pow_mod": 66,
+        "modular_inverse_prime": 98,
+        "binomial_mod_prime": 184,
+        "det_2x2": 47,
+        "inverse_2x2": 94,
+        "solve_linear_2x2": 151,
+        "sample_mean": 54,
+        "sample_variance": 119,
+        "expected_value": 48,
+        "sample_median": 75
+      },
+      "per_skill_after_tokens": {
+        "polygon_area": 99,
+        "point_in_convex_polygon": 92,
+        "signed_triangle_area": 47,
+        "power_of_point": 42,
+        "gcd_pair": 31,
+        "lcm_of_list": 83,
+        "simplify_fraction": 70,
+        "count_coprime_pairs": 95,
+        "pow_mod": 66,
+        "modular_inverse_prime": 98,
+        "binomial_mod_prime": 184,
+        "det_2x2": 43,
+        "inverse_2x2": 91,
+        "solve_linear_2x2": 131,
+        "sample_mean": 54,
+        "sample_variance": 119,
+        "expected_value": 48,
+        "sample_median": 75
+      },
+      "sub_functions_total_tokens": 49,
+      "total_before_tokens": 1530,
+      "total_after_tokens": 1517,
+      "delta_tokens": -13,
+      "delta_pct": -0.00849673202614379
+    },
+    "cluster_eval": {
+      "predictions": [
+        {
+          "predicted_sub_function": "_shared_det_2x2",
+          "predicted_members": [
+            "det_2x2",
+            "inverse_2x2",
+            "point_in_convex_polygon",
+            "polygon_area",
+            "signed_triangle_area",
+            "solve_linear_2x2"
+          ],
+          "best_gt_cluster": "geometry_cross_product",
+          "jaccard": 0.5,
+          "negative_controls_incorrectly_merged": []
+        }
+      ],
+      "missed_gt_clusters": [
+        "number_theory_gcd",
+        "combinatorics_pow_mod",
+        "linalg_2x2_det",
+        "statistics_sum_reduction"
+      ]
+    }
+  },
+  "judge": {
+    "sub_function_quality": 1,
+    "naming_quality": 4,
+    "merge_correctness": 2,
+    "over_merging_detected": false,
+    "under_merging_detected": true,
+    "overall_recommendation": "reject",
+    "rationale": "The refactoring is technically broken because the extracted sub-function `_shared_det_2x2` was not defined in the scope of the refactored skills, causing NameErrors and test failures. Conceptually, the algorithm failed to identify major duplication opportunities, missing obvious clusters for GCD (appearing in 4 skills) and modular exponentiation (appearing in 3 skills). Additionally, the single extracted function captures a low-level algebraic identity rather than a semantic task, providing minimal architectural value."
+  }
+}

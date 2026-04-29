@@ -1,0 +1,369 @@
+{
+  "baseline_detail_path": "/home/lixujun/skill_evolving/academic/results/ds100_aime_v1_exp1_baseline_detail.json",
+  "evolve_detail_path": "/home/lixujun/skill_evolving/academic/results/ds100_aime_v1_exp1_evolve_1ep_detail.json",
+  "n_candidates": 14,
+  "candidates": [
+    {
+      "problem_idx": 7,
+      "problem_id": "Problem_13",
+      "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draw",
+      "baseline_accuracy": 0.5,
+      "evolve_accuracy": 0.25,
+      "baseline_avg_tokens": 294706.0,
+      "evolve_avg_tokens": 408637.2,
+      "baseline_avg_steps": 34.5,
+      "evolve_avg_steps": 39.0,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "regression",
+        "token_blow_up",
+        "planner_or_retrieval_mismatch"
+      ],
+      "priority_score": 12.5,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "regular_polygon_segment_lengths",
+        "rectangle_grid_symmetry_points",
+        "convex_quadrilateral_area",
+        "square_vertices_from_side_and_center",
+        "triangle_inequality_check"
+      ]
+    },
+    {
+      "problem_idx": 11,
+      "problem_id": "Problem_11",
+      "question": "Let $S$ be the set of vertices of a regular $24$-gon. Find the number of ways to draw $12$ segments of equal lengths so ",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 0.75,
+      "baseline_avg_tokens": 91630.5,
+      "evolve_avg_tokens": 215742.5,
+      "baseline_avg_steps": 34.5,
+      "evolve_avg_steps": 32.25,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "regression",
+        "token_blow_up",
+        "planner_or_retrieval_mismatch"
+      ],
+      "priority_score": 12.5,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "regular_polygon_vertices",
+        "regular_polygon_segment_lengths",
+        "count_event_assignments",
+        "square_vertices_from_side_and_center",
+        "count_arithmetic_sequences"
+      ]
+    },
+    {
+      "problem_idx": 13,
+      "problem_id": "Problem_7",
+      "question": "Let $A$ be the set of positive integer divisors of $2025$. Let $B$ be a randomly selected subset of $A$. The probability",
+      "baseline_accuracy": 0.5,
+      "evolve_accuracy": 0.25,
+      "baseline_avg_tokens": 36226.5,
+      "evolve_avg_tokens": 53706.0,
+      "baseline_avg_steps": 10.75,
+      "evolve_avg_steps": 15.75,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "regression",
+        "token_blow_up",
+        "planner_or_retrieval_mismatch"
+      ],
+      "priority_score": 12.5,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "min_with_exact_divisors",
+        "count_divisors",
+        "max_subset_no_pairwise_coprime_triple",
+        "count_multiples_in_range",
+        "smallest_multiple_perfect_power"
+      ]
+    },
+    {
+      "problem_idx": 19,
+      "problem_id": "Problem_3",
+      "question": "The 9 members of a baseball team went to an ice cream parlor after their game. Each player had a singlescoop cone of cho",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 0.75,
+      "baseline_avg_tokens": 6329.2,
+      "evolve_avg_tokens": 9851.2,
+      "baseline_avg_steps": 7.5,
+      "evolve_avg_steps": 5.25,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "regression",
+        "token_blow_up",
+        "planner_or_retrieval_mismatch"
+      ],
+      "priority_score": 12.5,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "count_event_assignments",
+        "count_tournament_outcomes",
+        "digit_rearrangement_range",
+        "satisfies_4digit_constraints",
+        "generate_4digit_with_pattern"
+      ]
+    },
+    {
+      "problem_idx": 25,
+      "problem_id": "Problem_9",
+      "question": "The parabola with equation $y=x^{2}-4$ is rotated $60^{\\circ}$ counterclockwise around the origin. The unique point in t",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 0.75,
+      "baseline_avg_tokens": 55074.8,
+      "evolve_avg_tokens": 95327.8,
+      "baseline_avg_steps": 23.75,
+      "evolve_avg_steps": 25.0,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "regression",
+        "token_blow_up",
+        "planner_or_retrieval_mismatch"
+      ],
+      "priority_score": 12.5,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "absolute_value_curve_area",
+        "square_inscribed_on_axis_through_point",
+        "triangle_area_max_on_conic_with_perpendicular_bisector",
+        "log_fraction_function_symmetry",
+        "hyperbola_perpendicular_bisector_condition"
+      ]
+    },
+    {
+      "problem_idx": 26,
+      "problem_id": "Problem_9",
+      "question": "There are $n$ values of $x$ in the interval $0 < x < 2\\pi$ where $f(x) = \\sin\\left(7\\pi \\cdot \\sin(5x)\\right) = 0$. For ",
+      "baseline_accuracy": 0.75,
+      "evolve_accuracy": 0.5,
+      "baseline_avg_tokens": 48597.0,
+      "evolve_avg_tokens": 127765.0,
+      "baseline_avg_steps": 23.0,
+      "evolve_avg_steps": 27.0,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "regression",
+        "token_blow_up",
+        "planner_or_retrieval_mismatch"
+      ],
+      "priority_score": 12.5,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "trig_product_to_linear",
+        "tangent_half_angle_substitution",
+        "reference_angle_trig_eval",
+        "regular_polygon_segment_lengths",
+        "solve_trig_function_sum_difference"
+      ]
+    },
+    {
+      "problem_idx": 4,
+      "problem_id": "Problem_8",
+      "question": "From an unlimited supply of $1$-cent coins, $10$-cent coins, and $25$-cent coins, Silas wants to find a collection of co",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 1.0,
+      "baseline_avg_tokens": 40433.2,
+      "evolve_avg_tokens": 65940.0,
+      "baseline_avg_steps": 20.25,
+      "evolve_avg_steps": 20.5,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "alternating_product_sign_range",
+        "arithmetic_sequence_bounds",
+        "gcd_equation_solver",
+        "max_subset_forbidden_differences",
+        "count_arithmetic_sequences"
+      ]
+    },
+    {
+      "problem_idx": 9,
+      "problem_id": "Problem_1",
+      "question": "Six points $A, B, C, D, E$ and $F$ lie in a straight line in that order. Suppose that $G$ is a point not on the line and",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 1.0,
+      "baseline_avg_tokens": 16199.2,
+      "evolve_avg_tokens": 35346.0,
+      "baseline_avg_steps": 12.0,
+      "evolve_avg_steps": 12.0,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "triangle_inequality_check",
+        "regular_polygon_segment_lengths",
+        "line_intersection",
+        "triangle_area_max_on_conic_with_perpendicular_bisector",
+        "convex_quadrilateral_area"
+      ]
+    },
+    {
+      "problem_idx": 10,
+      "problem_id": "Problem_10",
+      "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numb",
+      "baseline_accuracy": 0.5,
+      "evolve_accuracy": 0.5,
+      "baseline_avg_tokens": 156929.0,
+      "evolve_avg_tokens": 244364.2,
+      "baseline_avg_steps": 37.25,
+      "evolve_avg_steps": 37.75,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "max_color_cells_grid",
+        "grid_coloring_validator",
+        "max_subset_forbidden_differences",
+        "rectangle_grid_symmetry_points",
+        "has_three_pairwise_coprime"
+      ]
+    },
+    {
+      "problem_idx": 12,
+      "problem_id": "Problem_15",
+      "question": "There are exactly three positive real numbers $k$ such that the function\n$$f(x) = \\frac{(x - 18)(x - 72)(x - 98)(x - k)}",
+      "baseline_accuracy": 0.0,
+      "evolve_accuracy": 0.0,
+      "baseline_avg_tokens": 124976.0,
+      "evolve_avg_tokens": 178049.0,
+      "baseline_avg_steps": 48.0,
+      "evolve_avg_steps": 48.0,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "alternating_product_sign_range",
+        "reciprocal_sum_bounds",
+        "min_with_exact_divisors",
+        "max_independent_set_graph",
+        "titu_lemma_minimum"
+      ]
+    },
+    {
+      "problem_idx": 14,
+      "problem_id": "Problem_2",
+      "question": "Find the sum of all positive integers $n$ such that $n+2$ divides the product $3(n+3)(n^2+9)$.",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 1.0,
+      "baseline_avg_tokens": 4734.8,
+      "evolve_avg_tokens": 14999.5,
+      "baseline_avg_steps": 5.0,
+      "evolve_avg_steps": 8.25,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "alternating_product_sign_range",
+        "ordered_pairs_with_product",
+        "sum_of_squares_solutions",
+        "count_divisors",
+        "solve_three_variable_sum_system"
+      ]
+    },
+    {
+      "problem_idx": 15,
+      "problem_id": "Problem_13",
+      "question": "Let $x_1, x_2, x_3, \\ldots$ be a sequence of rational numbers defined by $x_1 = \\frac{25}{11}$ and\n$$x_{k+1} = \\frac{1}{",
+      "baseline_accuracy": 0.0,
+      "evolve_accuracy": 0.0,
+      "baseline_avg_tokens": 174945.8,
+      "evolve_avg_tokens": 263935.2,
+      "baseline_avg_steps": 48.0,
+      "evolve_avg_steps": 48.0,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "arithmetic_sequence_bounds",
+        "function_machine_trajectory",
+        "repeating_base_k_value",
+        "exponential_fraction_pairing_sum",
+        "count_arithmetic_sequences"
+      ]
+    },
+    {
+      "problem_idx": 27,
+      "problem_id": "Problem_1",
+      "question": "Find the sum of all integer bases $b>9$ for which $17_{b}$ is a divisor of $97_{b}$.",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 1.0,
+      "baseline_avg_tokens": 7870.5,
+      "evolve_avg_tokens": 12335.0,
+      "baseline_avg_steps": 5.75,
+      "evolve_avg_steps": 5.5,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "inverse_power_mod",
+        "repeating_base_k_value",
+        "modular_inverse",
+        "chinese_remainder_theorem",
+        "p_adic_valuation"
+      ]
+    },
+    {
+      "problem_idx": 29,
+      "problem_id": "Problem_6",
+      "question": "Circle $\\omega_1$ with radius $6$ centered at point $A$ is internally tangent at point $B$ to circle $\\omega_2$ with rad",
+      "baseline_accuracy": 1.0,
+      "evolve_accuracy": 1.0,
+      "baseline_avg_tokens": 18249.0,
+      "evolve_avg_tokens": 78994.2,
+      "baseline_avg_steps": 15.0,
+      "evolve_avg_steps": 14.5,
+      "baseline_has_timeout": false,
+      "evolve_has_timeout": false,
+      "candidate_reason_tags": [
+        "token_blow_up"
+      ],
+      "priority_score": 3.0,
+      "baseline_skills_seen": [],
+      "evolve_skills_seen": [
+        "triangle_area_max_on_conic_with_perpendicular_bisector",
+        "polygon_shoelace_area",
+        "square_vertices_from_side_and_center",
+        "convex_quadrilateral_area",
+        "absolute_value_curve_area"
+      ]
+    }
+  ]
+}

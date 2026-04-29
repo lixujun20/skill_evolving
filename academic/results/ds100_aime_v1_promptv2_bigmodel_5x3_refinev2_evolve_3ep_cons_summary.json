@@ -1,0 +1,26 @@
+{
+  "dataset": "ds100_aime",
+  "mode": "evolve_3ep_cons",
+  "tag": "promptv2_bigmodel_5x3_refinev2",
+  "solver_mode": "tir",
+  "n_epochs": 3,
+  "epoch_mode": "consecutive",
+  "n_train": 5,
+  "n_test": 0,
+  "n_runs_per_problem": 3,
+  "evolve": {
+    "accuracy": 0.0,
+    "total_tokens": 0,
+    "avg_tokens": 0.0,
+    "skills_evolved": 1
+  },
+  "test_with_skills": {
+    "total_correct": 0,
+    "total_runs": 0,
+    "accuracy_micro": 0.0,
+    "accuracy_macro": 0.0,
+    "avg_total_tokens": 0.0,
+    "avg_completion_tokens": 0.0
+  },
+  "maintenance_refactor": {}
+}

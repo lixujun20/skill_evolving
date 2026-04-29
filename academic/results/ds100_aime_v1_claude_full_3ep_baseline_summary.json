@@ -1,0 +1,15 @@
+{
+  "dataset": "ds100_aime",
+  "mode": "baseline",
+  "tag": "claude_full_3ep",
+  "solver_mode": "tir",
+  "n_problems": 30,
+  "n_runs_per_problem": 4,
+  "total_correct": 112,
+  "total_runs": 120,
+  "accuracy_micro": 0.9333,
+  "accuracy_macro": 0.9333,
+  "avg_total_tokens": 122494.3,
+  "avg_completion_tokens": 13835.4,
+  "total_elapsed_s": 2231.2
+}

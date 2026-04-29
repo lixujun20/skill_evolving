@@ -1,0 +1,23 @@
+{
+  "mode": "evolve_1ep",
+  "tag": "exp12",
+  "n_epochs": 1,
+  "n_train": 30,
+  "n_test": 30,
+  "n_runs_per_problem": 4,
+  "evolve": {
+    "accuracy": 0.6667,
+    "total_tokens": 487723,
+    "avg_tokens": 16257.4,
+    "skills_evolved": 19
+  },
+  "test_with_skills": {
+    "total_correct": 73,
+    "total_runs": 120,
+    "accuracy_micro": 0.6083,
+    "accuracy_macro": 0.6083,
+    "avg_total_tokens": 85493.8,
+    "avg_completion_tokens": 12908.2
+  },
+  "total_elapsed_s": 7488.4
+}

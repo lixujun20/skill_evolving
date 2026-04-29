@@ -1,0 +1,12 @@
+{
+  "mode": "baseline",
+  "tag": "exp7c",
+  "n_problems": 30,
+  "n_runs_per_problem": 4,
+  "total_correct": 0,
+  "total_runs": 0,
+  "accuracy_micro": 0.0,
+  "accuracy_macro": 0.0,
+  "avg_total_tokens": 0.0,
+  "avg_completion_tokens": 0.0
+}

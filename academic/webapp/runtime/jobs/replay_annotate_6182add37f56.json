@@ -1,0 +1,60 @@
+{
+  "job_id": "replay_annotate_6182add37f56",
+  "job_type": "replay_annotate",
+  "status": "completed",
+  "created_at": "2026-04-26 20:47:12",
+  "updated_at": "2026-04-26 20:47:39",
+  "progress": {
+    "total": 1,
+    "completed": 1,
+    "running_case_id": "",
+    "message": "annotation complete",
+    "events": [
+      {
+        "time": "2026-04-26 20:47:12",
+        "message": "Loaded replay cases",
+        "data": {
+          "n_selected": 1
+        }
+      },
+      {
+        "time": "2026-04-26 20:47:12",
+        "message": "Start annotation for reuse_previous_plan_exact",
+        "data": {}
+      },
+      {
+        "time": "2026-04-26 20:47:39",
+        "message": "Finished annotation for reuse_previous_plan_exact",
+        "data": {
+          "status": "validated"
+        }
+      }
+    ]
+  },
+  "meta": {
+    "path": "/home/lixujun/skill_evolving/academic/refactoring_lab/experiments/planning_replay_cases.json",
+    "case_ids": [
+      "reuse_previous_plan_exact"
+    ],
+    "llm_config": "tool_maker",
+    "save_results": false
+  },
+  "result": {
+    "artifact_path": "/home/lixujun/skill_evolving/academic/webapp/runtime/annotation_runs/replay_annotate_6182add37f56.json",
+    "cases_path": "/home/lixujun/skill_evolving/academic/refactoring_lab/experiments/planning_replay_cases.json",
+    "n_selected": 1,
+    "summary": {
+      "n_cases": 5,
+      "status_counts": {
+        "validated": 1,
+        "draft": 4
+      },
+      "source_counts": {
+        "synthetic_seed": 5
+      },
+      "validated_cases": 1,
+      "draft_cases": 4
+    }
+  },
+  "error": ""
+}

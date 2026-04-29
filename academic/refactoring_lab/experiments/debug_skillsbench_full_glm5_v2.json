@@ -1,0 +1,995 @@
+{
+  "engine": {
+    "engine": "desc_first",
+    "llm_config": "glm5",
+    "corpus": "skillsbench_manual",
+    "elapsed_s": 61.24,
+    "shared_sub_functions": [
+      {
+        "name": "_shared_collect",
+        "description": "Both skills iterate over an input sequence to produce a new list of processed elements based on a specific condition or transformation.",
+        "source_skills": [
+          "detect_local_peaks",
+          "titles_equivalent"
+        ],
+        "code": "def _shared_collect(iterable, selector):\n    \"\"\"Collects items from iterable into a list if selector returns a truthy value.\"\"\"\n    return [item for item in iterable if selector(item)]"
+      },
+      {
+        "name": "_shared_normalize_text",
+        "description": "The common sub-task is normalizing text by replacing non-alphanumeric characters with spaces and collapsing whitespace.",
+        "source_skills": [
+          "normalize_reference_title",
+          "dedupe_reference_titles"
+        ],
+        "code": "def _shared_normalize_text(text):\n    \"\"\"Lowercases text, replaces non-alphanumeric chars with spaces, and collapses whitespace.\"\"\"\n    return \" \".join(\"\".join(ch if ch.isalnum() else \" \" for ch in text.lower()).split())"
+      },
+      {
+        "name": "_shared_find_peaks",
+        "description": "Identify indices of local peaks in a sequence that meet or exceed a specified threshold.",
+        "source_skills": [
+          "first_peak_after",
+          "pair_nearby_peaks"
+        ],
+        "code": "def _shared_find_peaks(xs, threshold):\n    \"\"\"Return list of indices i where xs[i] is a local peak >= threshold.\"\"\"\n    return [i for i in range(1, len(xs) - 1) if xs[i] > xs[i - 1] and xs[i] >= xs[i + 1] and xs[i] >= threshold]"
+      }
+    ],
+    "refactored_skills": [
+      {
+        "name": "detect_local_peaks",
+        "description": "Return indices of local peaks above a threshold.",
+        "code": "def detect_local_peaks(xs, threshold):\n    indices = range(1, len(xs) - 1)\n    is_peak = lambda i: xs[i] > xs[i-1] and xs[i] >= xs[i+1] and xs[i] >= threshold\n    return _shared_collect(indices, is_peak)"
+      },
+      {
+        "name": "first_peak_after",
+        "description": "Find the first local peak after a given start index.",
+        "code": "def first_peak_after(xs, threshold, start_idx):\n    for i in _shared_find_peaks(xs, threshold):\n        if i > start_idx:\n            return i\n    return -1"
+      },
+      {
+        "name": "pair_nearby_peaks",
+        "description": "Pair peaks from two signals if their indices are within a max gap.",
+        "code": "def pair_nearby_peaks(xs, ys, threshold, max_gap):\n    x_peaks = _shared_find_peaks(xs, threshold)\n    y_peaks = _shared_find_peaks(ys, threshold)\n    pairs = []\n    for xp in x_peaks:\n        for yp in y_peaks:\n            if abs(xp - yp) <= max_gap:\n                pairs.append((xp, yp))\n                break\n    return pairs"
+      },
+      {
+        "name": "global_argmax_index",
+        "description": "Return the index of the global maximum sample.",
+        "code": "def global_argmax_index(xs):\n    if not xs:\n        return -1\n    best_i = 0\n    best_v = xs[0]\n    for i, value in enumerate(xs[1:], start=1):\n        if value > best_v:\n            best_i = i\n            best_v = value\n    return best_i\n",
+        "test_queries": [
+          [
+            "Argmax index of [1,5,2,4]?",
+            1
+          ],
+          [
+            "Argmax index of [0,1,9,3]?",
+            2
+          ]
+        ]
+      },
+      {
+        "name": "normalize_reference_title",
+        "description": "Normalize a reference title to a canonical token string.",
+        "code": "def normalize_reference_title(text):\n    return _shared_normalize_text(text)"
+      },
+      {
+        "name": "dedupe_reference_titles",
+        "description": "Deduplicate titles after canonical normalization, preserving first occurrence.",
+        "code": "def dedupe_reference_titles(titles):\n    seen = set()\n    out = []\n    for title in titles:\n        key = _shared_normalize_text(title)\n        if key not in seen:\n            seen.add(key)\n            out.append(key)\n    return out"
+      },
+      {
+        "name": "titles_equivalent",
+        "description": "Check whether two titles are equivalent after canonical normalization.",
+        "code": "def titles_equivalent(left, right):\n    def _canon(text):\n        tokens = _shared_collect(text.lower(), str.isalnum)\n        return \" \".join(tokens)\n    return _canon(left) == _canon(right)"
+      },
+      {
+        "name": "extract_year_tokens",
+        "description": "Extract 4-digit year-like tokens from text.",
+        "code": "def extract_year_tokens(text):\n    current = \"\"\n    out = []\n    for ch in text:\n        if ch.isdigit():\n            current += ch\n        else:\n            if len(current) == 4:\n                out.append(int(current))\n            current = \"\"\n    if len(current) == 4:\n        out.append(int(current))\n    return out\n",
+        "test_queries": [
+          [
+            "Year tokens in 'Published 2024, revised 2025.'?",
+            [
+              2024,
+              2025
+            ]
+          ],
+          [
+            "Year tokens in 'No year here 123.'?",
+            []
+          ]
+        ]
+      }
+    ],
+    "rejected_merges": [],
+    "standalone_after": [
+      {
+        "skill": "detect_local_peaks",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+            "expected": [
+              2,
+              5
+            ],
+            "got": [
+              2,
+              5
+            ],
+            "ok": true
+          },
+          {
+            "q": "Peak indices in [0,2,1,2,0] with threshold 2?",
+            "expected": [
+              1,
+              3
+            ],
+            "got": [
+              1,
+              3
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "first_peak_after",
+        "ok": true,
+        "tests": [
+          {
+            "q": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+            "expected": 2,
+            "got": 2,
+            "ok": true
+          },
+          {
+            "q": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+            "expected": 4,
+            "got": 4,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "pair_nearby_peaks",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+            "expected": [
+              [
+                1,
+                2
+              ]
+            ],
+            "got": [
+              [
+                1,
+                2
+              ]
+            ],
+            "ok": true
+          },
+          {
+            "q": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+            "expected": [
+              [
+                1,
+                2
+              ]
+            ],
+            "got": [
+              [
+                1,
+                2
+              ]
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "global_argmax_index",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Argmax index of [1,5,2,4]?",
+            "expected": 1,
+            "got": 1,
+            "ok": true
+          },
+          {
+            "q": "Argmax index of [0,1,9,3]?",
+            "expected": 2,
+            "got": 2,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "normalize_reference_title",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Normalize 'Graph-based, Search! Systems'?",
+            "expected": "graph based search systems",
+            "got": "graph based search systems",
+            "ok": true
+          },
+          {
+            "q": "Normalize 'Citation_Check 101'?",
+            "expected": "citation check 101",
+            "got": "citation check 101",
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "dedupe_reference_titles",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Dedupe ['A Study', 'a-study', 'Other Paper']?",
+            "expected": [
+              "a study",
+              "other paper"
+            ],
+            "got": [
+              "a study",
+              "other paper"
+            ],
+            "ok": true
+          },
+          {
+            "q": "Dedupe ['X.Y', 'x y', 'Z']?",
+            "expected": [
+              "x y",
+              "z"
+            ],
+            "got": [
+              "x y",
+              "z"
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "titles_equivalent",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Are 'Neural Search' and 'neural-search' equivalent?",
+            "expected": true,
+            "got": true,
+            "ok": true
+          },
+          {
+            "q": "Are 'Graph Mining' and 'Graph Matching' equivalent?",
+            "expected": false,
+            "got": false,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "extract_year_tokens",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Year tokens in 'Published 2024, revised 2025.'?",
+            "expected": [
+              2024,
+              2025
+            ],
+            "got": [
+              2024,
+              2025
+            ],
+            "ok": true
+          },
+          {
+            "q": "Year tokens in 'No year here 123.'?",
+            "expected": [],
+            "got": [],
+            "ok": true
+          }
+        ]
+      }
+    ],
+    "correctness_pass_rate": 1.0,
+    "token_report": {
+      "per_skill_before_tokens": {
+        "detect_local_peaks": 75,
+        "first_peak_after": 88,
+        "pair_nearby_peaks": 179,
+        "global_argmax_index": 71,
+        "normalize_reference_title": 41,
+        "dedupe_reference_titles": 81,
+        "titles_equivalent": 64,
+        "extract_year_tokens": 71
+      },
+      "per_skill_after_tokens": {
+        "detect_local_peaks": 66,
+        "first_peak_after": 39,
+        "pair_nearby_peaks": 90,
+        "global_argmax_index": 71,
+        "normalize_reference_title": 14,
+        "dedupe_reference_titles": 52,
+        "titles_equivalent": 48,
+        "extract_year_tokens": 71
+      },
+      "sub_functions_total_tokens": 164,
+      "total_before_tokens": 670,
+      "total_after_tokens": 615,
+      "delta_tokens": -55,
+      "delta_pct": -0.08208955223880597
+    },
+    "cluster_eval": {
+      "predictions": [
+        {
+          "predicted_sub_function": "_shared_collect",
+          "predicted_members": [
+            "detect_local_peaks",
+            "titles_equivalent"
+          ],
+          "best_gt_cluster": "skillsbench_signal_peak_detection",
+          "jaccard": 0.25,
+          "negative_controls_incorrectly_merged": []
+        },
+        {
+          "predicted_sub_function": "_shared_normalize_text",
+          "predicted_members": [
+            "dedupe_reference_titles",
+            "normalize_reference_title"
+          ],
+          "best_gt_cluster": "skillsbench_citation_normalization",
+          "jaccard": 0.667,
+          "negative_controls_incorrectly_merged": []
+        },
+        {
+          "predicted_sub_function": "_shared_find_peaks",
+          "predicted_members": [
+            "first_peak_after",
+            "pair_nearby_peaks"
+          ],
+          "best_gt_cluster": "skillsbench_signal_peak_detection",
+          "jaccard": 0.667,
+          "negative_controls_incorrectly_merged": []
+        }
+      ],
+      "missed_gt_clusters": []
+    },
+    "skill_set_comparison": {
+      "baseline": "no_skills",
+      "skill_sets": [
+        {
+          "skill_set": "no_skills",
+          "summary": {
+            "skill_set": "no_skills",
+            "n_problems": 16,
+            "n_runs_per_problem": 1,
+            "total_correct": 0,
+            "total_runs": 16,
+            "accuracy_micro": 0.0,
+            "avg_total_tokens": 0.0,
+            "avg_completion_tokens": 0.0,
+            "total_elapsed_s": 0.0,
+            "n_skills": 0,
+            "metadata": {}
+          },
+          "details": [
+            {
+              "case_id": "detect_local_peaks_q0",
+              "query": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+              "expected": [
+                2,
+                5
+              ],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: detect_local_peaks')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "detect_local_peaks_q1",
+              "query": "Peak indices in [0,2,1,2,0] with threshold 2?",
+              "expected": [
+                1,
+                3
+              ],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: detect_local_peaks')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "first_peak_after_q0",
+              "query": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+              "expected": 2,
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: first_peak_after')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "first_peak_after_q1",
+              "query": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+              "expected": 4,
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: first_peak_after')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "pair_nearby_peaks_q0",
+              "query": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+              "expected": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: pair_nearby_peaks')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "pair_nearby_peaks_q1",
+              "query": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+              "expected": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: pair_nearby_peaks')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "global_argmax_index_q0",
+              "query": "Argmax index of [1,5,2,4]?",
+              "expected": 1,
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: global_argmax_index')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "global_argmax_index_q1",
+              "query": "Argmax index of [0,1,9,3]?",
+              "expected": 2,
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: global_argmax_index')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "normalize_reference_title_q0",
+              "query": "Normalize 'Graph-based, Search! Systems'?",
+              "expected": "graph based search systems",
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: normalize_reference_title')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "normalize_reference_title_q1",
+              "query": "Normalize 'Citation_Check 101'?",
+              "expected": "citation check 101",
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: normalize_reference_title')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "dedupe_reference_titles_q0",
+              "query": "Dedupe ['A Study', 'a-study', 'Other Paper']?",
+              "expected": [
+                "a study",
+                "other paper"
+              ],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: dedupe_reference_titles')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "dedupe_reference_titles_q1",
+              "query": "Dedupe ['X.Y', 'x y', 'Z']?",
+              "expected": [
+                "x y",
+                "z"
+              ],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: dedupe_reference_titles')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "titles_equivalent_q0",
+              "query": "Are 'Neural Search' and 'neural-search' equivalent?",
+              "expected": true,
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: titles_equivalent')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "titles_equivalent_q1",
+              "query": "Are 'Graph Mining' and 'Graph Matching' equivalent?",
+              "expected": false,
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: titles_equivalent')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "extract_year_tokens_q0",
+              "query": "Year tokens in 'Published 2024, revised 2025.'?",
+              "expected": [
+                2024,
+                2025
+              ],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: extract_year_tokens')",
+              "elapsed_s": 0.0
+            },
+            {
+              "case_id": "extract_year_tokens_q1",
+              "query": "Year tokens in 'No year here 123.'?",
+              "expected": [],
+              "predicted": null,
+              "correct": false,
+              "error": "KeyError('required skill missing: extract_year_tokens')",
+              "elapsed_s": 0.0
+            }
+          ]
+        },
+        {
+          "skill_set": "original_skills",
+          "summary": {
+            "skill_set": "original_skills",
+            "n_problems": 16,
+            "n_runs_per_problem": 1,
+            "total_correct": 16,
+            "total_runs": 16,
+            "accuracy_micro": 1.0,
+            "avg_total_tokens": 310.0,
+            "avg_completion_tokens": 0.0,
+            "total_elapsed_s": 0.0015,
+            "n_skills": 8,
+            "metadata": {
+              "corpus": "skillsbench_manual"
+            },
+            "delta_vs_baseline": {
+              "accuracy_micro": 1.0,
+              "avg_total_tokens": 310.0,
+              "avg_completion_tokens": 0.0,
+              "total_elapsed_s": 0.0015
+            }
+          },
+          "details": [
+            {
+              "case_id": "detect_local_peaks_q0",
+              "query": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+              "expected": [
+                2,
+                5
+              ],
+              "predicted": [
+                2,
+                5
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "detect_local_peaks_q1",
+              "query": "Peak indices in [0,2,1,2,0] with threshold 2?",
+              "expected": [
+                1,
+                3
+              ],
+              "predicted": [
+                1,
+                3
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "first_peak_after_q0",
+              "query": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+              "expected": 2,
+              "predicted": 2,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "first_peak_after_q1",
+              "query": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+              "expected": 4,
+              "predicted": 4,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "pair_nearby_peaks_q0",
+              "query": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+              "expected": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "predicted": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0002
+            },
+            {
+              "case_id": "pair_nearby_peaks_q1",
+              "query": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+              "expected": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "predicted": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0002
+            },
+            {
+              "case_id": "global_argmax_index_q0",
+              "query": "Argmax index of [1,5,2,4]?",
+              "expected": 1,
+              "predicted": 1,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "global_argmax_index_q1",
+              "query": "Argmax index of [0,1,9,3]?",
+              "expected": 2,
+              "predicted": 2,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "normalize_reference_title_q0",
+              "query": "Normalize 'Graph-based, Search! Systems'?",
+              "expected": "graph based search systems",
+              "predicted": "graph based search systems",
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "normalize_reference_title_q1",
+              "query": "Normalize 'Citation_Check 101'?",
+              "expected": "citation check 101",
+              "predicted": "citation check 101",
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "dedupe_reference_titles_q0",
+              "query": "Dedupe ['A Study', 'a-study', 'Other Paper']?",
+              "expected": [
+                "a study",
+                "other paper"
+              ],
+              "predicted": [
+                "a study",
+                "other paper"
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "dedupe_reference_titles_q1",
+              "query": "Dedupe ['X.Y', 'x y', 'Z']?",
+              "expected": [
+                "x y",
+                "z"
+              ],
+              "predicted": [
+                "x y",
+                "z"
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "titles_equivalent_q0",
+              "query": "Are 'Neural Search' and 'neural-search' equivalent?",
+              "expected": true,
+              "predicted": true,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "titles_equivalent_q1",
+              "query": "Are 'Graph Mining' and 'Graph Matching' equivalent?",
+              "expected": false,
+              "predicted": false,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "extract_year_tokens_q0",
+              "query": "Year tokens in 'Published 2024, revised 2025.'?",
+              "expected": [
+                2024,
+                2025
+              ],
+              "predicted": [
+                2024,
+                2025
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "extract_year_tokens_q1",
+              "query": "Year tokens in 'No year here 123.'?",
+              "expected": [],
+              "predicted": [],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            }
+          ]
+        },
+        {
+          "skill_set": "refactored_skills",
+          "summary": {
+            "skill_set": "refactored_skills",
+            "n_problems": 16,
+            "n_runs_per_problem": 1,
+            "total_correct": 16,
+            "total_runs": 16,
+            "accuracy_micro": 1.0,
+            "avg_total_tokens": 365.0,
+            "avg_completion_tokens": 0.0,
+            "total_elapsed_s": 0.0017,
+            "n_skills": 8,
+            "metadata": {
+              "corpus": "skillsbench_manual"
+            },
+            "delta_vs_baseline": {
+              "accuracy_micro": 1.0,
+              "avg_total_tokens": 365.0,
+              "avg_completion_tokens": 0.0,
+              "total_elapsed_s": 0.0017
+            }
+          },
+          "details": [
+            {
+              "case_id": "detect_local_peaks_q0",
+              "query": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+              "expected": [
+                2,
+                5
+              ],
+              "predicted": [
+                2,
+                5
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "detect_local_peaks_q1",
+              "query": "Peak indices in [0,2,1,2,0] with threshold 2?",
+              "expected": [
+                1,
+                3
+              ],
+              "predicted": [
+                1,
+                3
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "first_peak_after_q0",
+              "query": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+              "expected": 2,
+              "predicted": 2,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "first_peak_after_q1",
+              "query": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+              "expected": 4,
+              "predicted": 4,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "pair_nearby_peaks_q0",
+              "query": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+              "expected": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "predicted": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "pair_nearby_peaks_q1",
+              "query": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+              "expected": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "predicted": [
+                [
+                  1,
+                  2
+                ]
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "global_argmax_index_q0",
+              "query": "Argmax index of [1,5,2,4]?",
+              "expected": 1,
+              "predicted": 1,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "global_argmax_index_q1",
+              "query": "Argmax index of [0,1,9,3]?",
+              "expected": 2,
+              "predicted": 2,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "normalize_reference_title_q0",
+              "query": "Normalize 'Graph-based, Search! Systems'?",
+              "expected": "graph based search systems",
+              "predicted": "graph based search systems",
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "normalize_reference_title_q1",
+              "query": "Normalize 'Citation_Check 101'?",
+              "expected": "citation check 101",
+              "predicted": "citation check 101",
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "dedupe_reference_titles_q0",
+              "query": "Dedupe ['A Study', 'a-study', 'Other Paper']?",
+              "expected": [
+                "a study",
+                "other paper"
+              ],
+              "predicted": [
+                "a study",
+                "other paper"
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "dedupe_reference_titles_q1",
+              "query": "Dedupe ['X.Y', 'x y', 'Z']?",
+              "expected": [
+                "x y",
+                "z"
+              ],
+              "predicted": [
+                "x y",
+                "z"
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "titles_equivalent_q0",
+              "query": "Are 'Neural Search' and 'neural-search' equivalent?",
+              "expected": true,
+              "predicted": true,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "titles_equivalent_q1",
+              "query": "Are 'Graph Mining' and 'Graph Matching' equivalent?",
+              "expected": false,
+              "predicted": false,
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "extract_year_tokens_q0",
+              "query": "Year tokens in 'Published 2024, revised 2025.'?",
+              "expected": [
+                2024,
+                2025
+              ],
+              "predicted": [
+                2024,
+                2025
+              ],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            },
+            {
+              "case_id": "extract_year_tokens_q1",
+              "query": "Year tokens in 'No year here 123.'?",
+              "expected": [],
+              "predicted": [],
+              "correct": true,
+              "error": null,
+              "elapsed_s": 0.0001
+            }
+          ]
+        }
+      ],
+      "evaluation_mode": "direct_harness"
+    }
+  }
+}

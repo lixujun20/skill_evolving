@@ -1,0 +1,71 @@
+{
+  "agent_model": "default",
+  "solver_mode": "tir",
+  "top_k": 5,
+  "n_cases": 1,
+  "n_runs": 3,
+  "retrieved_counts": {
+    "circle_from_equation": 3,
+    "minimize_expression": 3,
+    "polynomial_coefficient": 3,
+    "square_vertices_from_side_and_center": 3,
+    "tangent_length_from_external_point": 3
+  },
+  "called_counts": {
+    "circle_from_equation": 3
+  },
+  "results": [
+    {
+      "case_idx": 0,
+      "problem_id": "math_23939",
+      "question": "A tangent line is drawn to the moving circle $C: x^2 + y^2 - 2ay + a^2 - 2 = 0$ passing through the fixed point $P(2, -1)$. If the point of tangency is $T$, then the minimum length of the line segment $PT$ is \\_\\_\\_\\_\\_\\_.",
+      "expected_skills": [
+        "tangent_length_from_external_point",
+        "circle_from_equation",
+        "minimize_expression"
+      ],
+      "retrieved_names": [
+        "tangent_length_from_external_point",
+        "minimize_expression",
+        "polynomial_coefficient",
+        "circle_from_equation",
+        "square_vertices_from_side_and_center"
+      ],
+      "runs": [
+        {
+          "run_idx": 0,
+          "final_answer": null,
+          "success": false,
+          "skill_runtime_call_counts": {
+            "circle_from_equation": 1
+          },
+          "skills_called": [
+            "circle_from_equation"
+          ]
+        },
+        {
+          "run_idx": 1,
+          "final_answer": null,
+          "success": false,
+          "skill_runtime_call_counts": {
+            "circle_from_equation": 1
+          },
+          "skills_called": [
+            "circle_from_equation"
+          ]
+        },
+        {
+          "run_idx": 2,
+          "final_answer": null,
+          "success": false,
+          "skill_runtime_call_counts": {
+            "circle_from_equation": 1
+          },
+          "skills_called": [
+            "circle_from_equation"
+          ]
+        }
+      ]
+    }
+  ]
+}

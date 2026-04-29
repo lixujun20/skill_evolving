@@ -70,3 +70,23 @@
 
 
 请在progress.md中记录实现过程中遇到的任何问题和解决方案，以及任何设计上的调整和优化。
+
+## Documentation Routing
+
+长期维护时，优先使用以下文档入口：
+
+- `AGENT.md`
+  - 长期稳定约束
+- `progress.md`
+  - 每次计划、执行记录、已完成事项、阻塞项
+- `academic_doc.md`
+  - `academic` 主实验线的设计、论文写作要点、benchmark 协议与文档路由
+- `DESIGN.md`
+  - `skill_evolving_v1`
+- `DESIGN_V2.md`
+  - `skill_evolving_v2`
+
+默认规则：
+
+- 每次代码修改之后，都同步检查对应文档是否需要更新
+- 如果某个子系统进入长期维护阶段，应给它建立单独文档，并在 `academic_doc.md` 中登记引用入口

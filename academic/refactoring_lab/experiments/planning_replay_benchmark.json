@@ -1,0 +1,726 @@
+{
+  "benchmark": "planning_replay_benchmark",
+  "benchmark_version": "workflow_reuse_v3_judge",
+  "cases_path": "/home/lixujun/skill_evolving/academic/refactoring_lab/experiments/planning_replay_cases.json",
+  "n_cases": 5,
+  "n_available_cases": 5,
+  "n_judged_cases": 5,
+  "joint_refactor_wins": 5,
+  "joint_refactor_win_rate": 1.0,
+  "cases": [
+    {
+      "case": {
+        "case_id": "reuse_previous_plan_exact",
+        "source_experiment": "synthetic_seed",
+        "problem_id": "reuse_previous_plan_exact",
+        "query": "Given a list of scores, compute the mean and variance, then return a summary dictionary.",
+        "retrieved_skills": [
+          {
+            "name": "sample_mean",
+            "description": "Compute the arithmetic mean of a numeric list.",
+            "code": "def sample_mean(xs):\n    total = 0.0\n    for x in xs:\n        total += x\n    return total / len(xs)\n"
+          },
+          {
+            "name": "sample_variance",
+            "description": "Compute population variance of a numeric list.",
+            "code": "def sample_variance(xs):\n    mu = sum(xs) / len(xs)\n    return sum((x - mu) ** 2 for x in xs) / len(xs)\n"
+          }
+        ],
+        "references": {
+          "preferred_actions": [
+            "reuse_plan"
+          ],
+          "useful_plan_calls": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "relevant_fragment_ids": [
+            "frag_stats_summary"
+          ],
+          "possible_shared_skill_names": [],
+          "discouraged_shared_skill_names": [
+            "_shared_sum_stats"
+          ],
+          "desirable_keywords": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "discouraged_keywords": [
+            "_shared_sum_stats"
+          ],
+          "rubric_notes": "The correct behavior is to reuse the previous plan directly; extracting a new helper would be unnecessary."
+        },
+        "status": "validated",
+        "failure_type": "synthetic_seed",
+        "annotation_notes": "The correct behavior is to reuse the previous plan directly; extracting a new helper would be unnecessary.",
+        "history_context": {
+          "previous_query": "Given a list of exam scores, compute the mean and variance, then return a summary dictionary.",
+          "previous_workflow_plan": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_({'mean': mu, 'variance': variance})\n",
+          "workflow_summary": "Previous run directly called sample_mean and sample_variance, then returned the dictionary.",
+          "historical_agent_summary": "Previous run directly called sample_mean and sample_variance, then returned the dictionary.",
+          "workflow_fragments": [
+            {
+              "fragment_id": "frag_stats_summary",
+              "content": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_({'mean': mu, 'variance': variance})",
+              "description": "Compute both summary statistics and return the dictionary."
+            }
+          ],
+          "trace_snippets": [
+            "mu = sample_mean(scores)\nvariance = sample_variance(scores)\nprint({'mean': mu, 'variance': variance})"
+          ],
+          "proposed_skills": []
+        },
+        "candidate_metadata": {},
+        "mock_joint_alignments": [],
+        "mock_joint_response": "## 历史复用决策\n决策: reuse_plan\n复用片段: frag_stats_summary\n理由: 当前查询与上一轮几乎等价，直接复用原计划即可。\n\n## 共享技能\nNONE\n\n## 工作流计划\n```python\nmu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_({'mean': mu, 'variance': variance})\n```",
+        "mock_legacy_response": "## 候选技能提取\n### _shared_sum_stats\n描述: 统一计算统计量\n来源查询: \"legacy\"\n```python\ndef _shared_sum_stats(values):\n    mu = sum(values) / len(values)\n    variance = sum((x - mu) ** 2 for x in values) / len(values)\n    return mu, variance\n```\n\n## 工作流计划\n```python\nmu, variance = _shared_sum_stats(SCORES)\nreturn_({'mean': mu, 'variance': variance})\n```",
+        "mock_judge_response": "{\"winner\": \"joint_refactor\", \"confidence\": \"high\", \"judge_type\": \"mock_llm\", \"reasoning\": \"Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.\", \"joint_refactor_score\": 9, \"legacy_planner_score\": 3}"
+      },
+      "skipped": false,
+      "skip_reason": "",
+      "joint_refactor": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "joint_refactor",
+          "planner_mode": "FRESH",
+          "history_reuse_action": "reuse_plan",
+          "action_reference_match": true,
+          "useful_plan_calls_used": 2,
+          "relevant_fragment_mentions": 1,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [],
+          "missing_useful_plan_calls": [],
+          "missing_relevant_fragment_ids": [],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [],
+          "discouraged_keyword_violations": [],
+          "proposed_skill_names": [],
+          "reused_fragments": [
+            "frag_stats_summary"
+          ],
+          "plan_char_count": 103,
+          "plan_is_valid_python": true,
+          "runtime_s": 0.178,
+          "heuristic_score": 8
+        },
+        "workflow_plan": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_({'mean': mu, 'variance': variance})",
+        "proposed_skill_names": []
+      },
+      "legacy_planner": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "legacy_fallback",
+          "planner_mode": "FRESH",
+          "history_reuse_action": null,
+          "action_reference_match": false,
+          "useful_plan_calls_used": 0,
+          "relevant_fragment_mentions": 0,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [
+            "_shared_sum_stats"
+          ],
+          "missing_useful_plan_calls": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "missing_relevant_fragment_ids": [
+            "frag_stats_summary"
+          ],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "discouraged_keyword_violations": [
+            "_shared_sum_stats"
+          ],
+          "proposed_skill_names": [
+            "_shared_sum_stats"
+          ],
+          "reused_fragments": [],
+          "plan_char_count": 84,
+          "plan_is_valid_python": true,
+          "runtime_s": null,
+          "heuristic_score": -1
+        },
+        "workflow_plan": "mu, variance = _shared_sum_stats(SCORES)\nreturn_({'mean': mu, 'variance': variance})",
+        "proposed_skill_names": [
+          "_shared_sum_stats"
+        ]
+      },
+      "judge": {
+        "available": true,
+        "winner": "joint_refactor",
+        "confidence": "high",
+        "judge_type": "mock_llm",
+        "reasoning": "Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.",
+        "joint_refactor_score": 9,
+        "legacy_planner_score": 3
+      },
+      "heuristic_winner": "joint_refactor",
+      "winner": "joint_refactor"
+    },
+    {
+      "case": {
+        "case_id": "adapt_previous_plan_format_change",
+        "source_experiment": "synthetic_seed",
+        "problem_id": "adapt_previous_plan_format_change",
+        "query": "Compute the mean and variance of SCORES and return them as a tuple `(mean, variance)`.",
+        "retrieved_skills": [
+          {
+            "name": "sample_mean",
+            "description": "Compute the arithmetic mean of a numeric list.",
+            "code": "def sample_mean(xs):\n    total = 0.0\n    for x in xs:\n        total += x\n    return total / len(xs)\n"
+          },
+          {
+            "name": "sample_variance",
+            "description": "Compute population variance of a numeric list.",
+            "code": "def sample_variance(xs):\n    mu = sum(xs) / len(xs)\n    return sum((x - mu) ** 2 for x in xs) / len(xs)\n"
+          }
+        ],
+        "references": {
+          "preferred_actions": [
+            "adapt_plan"
+          ],
+          "useful_plan_calls": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "relevant_fragment_ids": [
+            "frag_compute_stats"
+          ],
+          "possible_shared_skill_names": [],
+          "discouraged_shared_skill_names": [
+            "_shared_stats_tuple"
+          ],
+          "desirable_keywords": [
+            "return_((mu, variance))"
+          ],
+          "discouraged_keywords": [
+            "_shared_stats_tuple"
+          ],
+          "rubric_notes": "The planner should adapt the old plan minimally and only change the final output schema."
+        },
+        "status": "validated",
+        "failure_type": "synthetic_seed",
+        "annotation_notes": "The planner should adapt the old plan minimally and only change the final output schema.",
+        "history_context": {
+          "previous_query": "Compute the mean and variance of SCORES and return them in a dictionary.",
+          "previous_workflow_plan": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_({'mean': mu, 'variance': variance})\n",
+          "workflow_summary": "Previous run used the two existing stats skills; only the final packaging step is likely to vary.",
+          "historical_agent_summary": "Previous run used the two existing stats skills; only the final packaging step is likely to vary.",
+          "workflow_fragments": [
+            {
+              "fragment_id": "frag_compute_stats",
+              "content": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)",
+              "description": "Compute both mean and variance before packaging."
+            }
+          ],
+          "trace_snippets": [],
+          "proposed_skills": []
+        },
+        "candidate_metadata": {},
+        "mock_joint_alignments": [],
+        "mock_joint_response": "## 历史复用决策\n决策: adapt_plan\n复用片段: frag_compute_stats\n理由: 统计步骤完全相同，只需修改最后的返回格式。\n\n## 共享技能\nNONE\n\n## 工作流计划\n```python\nmu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_((mu, variance))\n```",
+        "mock_legacy_response": "## 候选技能提取\n### _shared_stats_tuple\n描述: 同时计算均值和方差并返回元组\n来源查询: \"legacy\"\n```python\ndef _shared_stats_tuple(values):\n    mu = sum(values) / len(values)\n    variance = sum((x - mu) ** 2 for x in values) / len(values)\n    return mu, variance\n```\n\n## 工作流计划\n```python\nmu, variance = _shared_stats_tuple(SCORES)\nreturn_((mu, variance))\n```",
+        "mock_judge_response": "{\"winner\": \"joint_refactor\", \"confidence\": \"high\", \"judge_type\": \"mock_llm\", \"reasoning\": \"Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.\", \"joint_refactor_score\": 9, \"legacy_planner_score\": 3}"
+      },
+      "skipped": false,
+      "skip_reason": "",
+      "joint_refactor": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "joint_refactor",
+          "planner_mode": "FRESH",
+          "history_reuse_action": "adapt_plan",
+          "action_reference_match": true,
+          "useful_plan_calls_used": 2,
+          "relevant_fragment_mentions": 1,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [],
+          "missing_useful_plan_calls": [],
+          "missing_relevant_fragment_ids": [],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [],
+          "discouraged_keyword_violations": [],
+          "proposed_skill_names": [],
+          "reused_fragments": [
+            "frag_compute_stats"
+          ],
+          "plan_char_count": 83,
+          "plan_is_valid_python": true,
+          "runtime_s": 0.0,
+          "heuristic_score": 7
+        },
+        "workflow_plan": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_((mu, variance))",
+        "proposed_skill_names": []
+      },
+      "legacy_planner": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "legacy_fallback",
+          "planner_mode": "FRESH",
+          "history_reuse_action": null,
+          "action_reference_match": false,
+          "useful_plan_calls_used": 0,
+          "relevant_fragment_mentions": 0,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [
+            "_shared_stats_tuple"
+          ],
+          "missing_useful_plan_calls": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "missing_relevant_fragment_ids": [
+            "frag_compute_stats"
+          ],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [],
+          "discouraged_keyword_violations": [
+            "_shared_stats_tuple"
+          ],
+          "proposed_skill_names": [
+            "_shared_stats_tuple"
+          ],
+          "reused_fragments": [],
+          "plan_char_count": 66,
+          "plan_is_valid_python": true,
+          "runtime_s": null,
+          "heuristic_score": 0
+        },
+        "workflow_plan": "mu, variance = _shared_stats_tuple(SCORES)\nreturn_((mu, variance))",
+        "proposed_skill_names": [
+          "_shared_stats_tuple"
+        ]
+      },
+      "judge": {
+        "available": true,
+        "winner": "joint_refactor",
+        "confidence": "high",
+        "judge_type": "mock_llm",
+        "reasoning": "Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.",
+        "joint_refactor_score": 9,
+        "legacy_planner_score": 3
+      },
+      "heuristic_winner": "joint_refactor",
+      "winner": "joint_refactor"
+    },
+    {
+      "case": {
+        "case_id": "reuse_workflow_fragment_only",
+        "source_experiment": "synthetic_seed",
+        "problem_id": "reuse_workflow_fragment_only",
+        "query": "Normalize SCORES to z-scores and return the normalized list together with the original mean.",
+        "retrieved_skills": [
+          {
+            "name": "sample_mean",
+            "description": "Compute the arithmetic mean of a numeric list.",
+            "code": "def sample_mean(xs):\n    total = 0.0\n    for x in xs:\n        total += x\n    return total / len(xs)\n"
+          },
+          {
+            "name": "sample_variance",
+            "description": "Compute population variance of a numeric list.",
+            "code": "def sample_variance(xs):\n    mu = sum(xs) / len(xs)\n    return sum((x - mu) ** 2 for x in xs) / len(xs)\n"
+          }
+        ],
+        "references": {
+          "preferred_actions": [
+            "reuse_workflow_fragment"
+          ],
+          "useful_plan_calls": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "relevant_fragment_ids": [
+            "frag_mean_variance_core"
+          ],
+          "possible_shared_skill_names": [],
+          "discouraged_shared_skill_names": [],
+          "desirable_keywords": [
+            "z_scores",
+            "frag_mean_variance_core"
+          ],
+          "discouraged_keywords": [],
+          "rubric_notes": "Only the computation core should be reused; the plan must extend it for z-score normalization."
+        },
+        "status": "validated",
+        "failure_type": "synthetic_seed",
+        "annotation_notes": "Only the computation core should be reused; the plan must extend it for z-score normalization.",
+        "history_context": {
+          "previous_query": "Compute summary statistics for SCORES.",
+          "previous_workflow_plan": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_({'mean': mu, 'variance': variance})\n",
+          "workflow_summary": "The useful reusable part is the first two lines that compute mean and variance. The output step should not be copied verbatim.",
+          "historical_agent_summary": "The useful reusable part is the first two lines that compute mean and variance. The output step should not be copied verbatim.",
+          "workflow_fragments": [
+            {
+              "fragment_id": "frag_mean_variance_core",
+              "content": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)",
+              "description": "Core statistics computation before downstream post-processing."
+            }
+          ],
+          "trace_snippets": [
+            "mu = sample_mean(scores)\nvariance = sample_variance(scores)\nprint(mu, variance)"
+          ],
+          "proposed_skills": []
+        },
+        "candidate_metadata": {},
+        "mock_joint_alignments": [],
+        "mock_joint_response": "## 历史复用决策\n决策: reuse_workflow_fragment\n复用片段: frag_mean_variance_core\n理由: 历史工作流前半段可复用，但当前查询需要新增 z-score 归一化步骤。\n\n## 共享技能\nNONE\n\n## 工作流计划\n```python\n# reuse fragment: frag_mean_variance_core\nmu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nstd = variance ** 0.5\nz_scores = [(x - mu) / std for x in SCORES]\nreturn_({'mean': mu, 'z_scores': z_scores})\n```",
+        "mock_legacy_response": "## 候选技能提取\n\n## 工作流计划\n```python\nmu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nstd = variance ** 0.5\nnormalized = [(x - mu) / std for x in SCORES]\nreturn_({'mean': mu, 'normalized': normalized})\n```",
+        "mock_judge_response": "{\"winner\": \"joint_refactor\", \"confidence\": \"high\", \"judge_type\": \"mock_llm\", \"reasoning\": \"Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.\", \"joint_refactor_score\": 9, \"legacy_planner_score\": 3}"
+      },
+      "skipped": false,
+      "skip_reason": "",
+      "joint_refactor": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "joint_refactor",
+          "planner_mode": "FRESH",
+          "history_reuse_action": "reuse_workflow_fragment",
+          "action_reference_match": true,
+          "useful_plan_calls_used": 2,
+          "relevant_fragment_mentions": 1,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [],
+          "missing_useful_plan_calls": [],
+          "missing_relevant_fragment_ids": [],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [],
+          "discouraged_keyword_violations": [],
+          "proposed_skill_names": [],
+          "reused_fragments": [
+            "frag_mean_variance_core"
+          ],
+          "plan_char_count": 211,
+          "plan_is_valid_python": true,
+          "runtime_s": 0.0,
+          "heuristic_score": 8
+        },
+        "workflow_plan": "# reuse fragment: frag_mean_variance_core\nmu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nstd = variance ** 0.5\nz_scores = [(x - mu) / std for x in SCORES]\nreturn_({'mean': mu, 'z_scores': z_scores})",
+        "proposed_skill_names": []
+      },
+      "legacy_planner": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "legacy_fallback",
+          "planner_mode": "FRESH",
+          "history_reuse_action": null,
+          "action_reference_match": false,
+          "useful_plan_calls_used": 2,
+          "relevant_fragment_mentions": 0,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [],
+          "missing_useful_plan_calls": [],
+          "missing_relevant_fragment_ids": [
+            "frag_mean_variance_core"
+          ],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [
+            "z_scores",
+            "frag_mean_variance_core"
+          ],
+          "discouraged_keyword_violations": [],
+          "proposed_skill_names": [],
+          "reused_fragments": [],
+          "plan_char_count": 175,
+          "plan_is_valid_python": true,
+          "runtime_s": null,
+          "heuristic_score": 3
+        },
+        "workflow_plan": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nstd = variance ** 0.5\nnormalized = [(x - mu) / std for x in SCORES]\nreturn_({'mean': mu, 'normalized': normalized})",
+        "proposed_skill_names": []
+      },
+      "judge": {
+        "available": true,
+        "winner": "joint_refactor",
+        "confidence": "high",
+        "judge_type": "mock_llm",
+        "reasoning": "Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.",
+        "joint_refactor_score": 9,
+        "legacy_planner_score": 3
+      },
+      "heuristic_winner": "joint_refactor",
+      "winner": "joint_refactor"
+    },
+    {
+      "case": {
+        "case_id": "fresh_plan_no_history_help",
+        "source_experiment": "synthetic_seed",
+        "problem_id": "fresh_plan_no_history_help",
+        "query": "Given a 2D grid of characters, count how many connected components of '#' exist.",
+        "retrieved_skills": [
+          {
+            "name": "sample_mean",
+            "description": "Compute the arithmetic mean of a numeric list.",
+            "code": "def sample_mean(xs):\n    total = 0.0\n    for x in xs:\n        total += x\n    return total / len(xs)\n"
+          },
+          {
+            "name": "sample_variance",
+            "description": "Compute population variance of a numeric list.",
+            "code": "def sample_variance(xs):\n    mu = sum(xs) / len(xs)\n    return sum((x - mu) ** 2 for x in xs) / len(xs)\n"
+          }
+        ],
+        "references": {
+          "preferred_actions": [
+            "fresh"
+          ],
+          "useful_plan_calls": [],
+          "relevant_fragment_ids": [],
+          "possible_shared_skill_names": [],
+          "discouraged_shared_skill_names": [
+            "_shared_sum_stats"
+          ],
+          "desirable_keywords": [
+            "visited",
+            "queue"
+          ],
+          "discouraged_keywords": [
+            "sample_mean",
+            "sample_variance",
+            "_shared_sum_stats"
+          ],
+          "rubric_notes": "Historical statistics workflows are irrelevant; the planner should start fresh."
+        },
+        "status": "validated",
+        "failure_type": "synthetic_seed",
+        "annotation_notes": "Historical statistics workflows are irrelevant; the planner should start fresh.",
+        "history_context": {
+          "previous_query": "Compute mean and variance for a list of scores.",
+          "previous_workflow_plan": "mu = sample_mean(SCORES)\nvariance = sample_variance(SCORES)\nreturn_({'mean': mu, 'variance': variance})\n",
+          "workflow_summary": "This old workflow is for scalar statistics and should not bias the grid-graph planning problem.",
+          "historical_agent_summary": "This old workflow is for scalar statistics and should not bias the grid-graph planning problem.",
+          "workflow_fragments": [],
+          "trace_snippets": [],
+          "proposed_skills": []
+        },
+        "candidate_metadata": {},
+        "mock_joint_alignments": [],
+        "mock_joint_response": "## 历史复用决策\n决策: fresh\n复用片段: NONE\n理由: 历史统计 workflow 与当前网格连通块问题无关，直接从头规划。\n\n## 共享技能\nNONE\n\n## 工作流计划\n```python\nvisited = set()\nqueue = []\ncomponent_count = 0\nfor r in range(len(GRID)):\n    for c in range(len(GRID[0])):\n        if GRID[r][c] != '#' or (r, c) in visited:\n            continue\n        component_count += 1\n        queue.append((r, c))\n        while queue:\n            x, y = queue.pop()\n            if (x, y) in visited:\n                continue\n            visited.add((x, y))\n            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):\n                nx, ny = x + dx, y + dy\n                if 0 <= nx < len(GRID) and 0 <= ny < len(GRID[0]) and GRID[nx][ny] == '#' and (nx, ny) not in visited:\n                    queue.append((nx, ny))\nreturn_(component_count)\n```",
+        "mock_legacy_response": "## 候选技能提取\n### _shared_sum_stats\n描述: 统一做列表扫描\n来源查询: \"legacy\"\n```python\ndef _shared_sum_stats(values):\n    total = 0\n    for value in values:\n        total += value\n    return total\n```\n\n## 工作流计划\n```python\nmean_like = sample_mean([len(row) for row in GRID])\nvariance_like = sample_variance([row.count('#') for row in GRID])\nreturn_({'components': mean_like, 'variance_like': variance_like})\n```",
+        "mock_judge_response": "{\"winner\": \"joint_refactor\", \"confidence\": \"high\", \"judge_type\": \"mock_llm\", \"reasoning\": \"Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.\", \"joint_refactor_score\": 9, \"legacy_planner_score\": 3}"
+      },
+      "skipped": false,
+      "skip_reason": "",
+      "joint_refactor": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "joint_refactor",
+          "planner_mode": "FRESH",
+          "history_reuse_action": "fresh",
+          "action_reference_match": true,
+          "useful_plan_calls_used": 0,
+          "relevant_fragment_mentions": 0,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [],
+          "missing_useful_plan_calls": [],
+          "missing_relevant_fragment_ids": [],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [],
+          "discouraged_keyword_violations": [],
+          "proposed_skill_names": [],
+          "reused_fragments": [],
+          "plan_char_count": 669,
+          "plan_is_valid_python": true,
+          "runtime_s": 0.001,
+          "heuristic_score": 5
+        },
+        "workflow_plan": "visited = set()\nqueue = []\ncomponent_count = 0\nfor r in range(len(GRID)):\n    for c in range(len(GRID[0])):\n        if GRID[r][c] != '#' or (r, c) in visited:\n            continue\n        component_count += 1\n        queue.append((r, c))\n        while queue:\n            x, y = queue.pop()\n            if (x, y) in visited:\n                continue\n            visited.add((x, y))\n            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):\n                nx, ny = x + dx, y + dy\n                if 0 <= nx < len(GRID) and 0 <= ny < len(GRID[0]) and GRID[nx][ny] == '#' and (nx, ny) not in visited:\n                    queue.append((nx, ny))\nreturn_(component_count)",
+        "proposed_skill_names": []
+      },
+      "legacy_planner": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "legacy_fallback",
+          "planner_mode": "FRESH",
+          "history_reuse_action": null,
+          "action_reference_match": false,
+          "useful_plan_calls_used": 0,
+          "relevant_fragment_mentions": 0,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [
+            "_shared_sum_stats"
+          ],
+          "missing_useful_plan_calls": [],
+          "missing_relevant_fragment_ids": [],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [
+            "visited",
+            "queue"
+          ],
+          "discouraged_keyword_violations": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "proposed_skill_names": [
+            "_shared_sum_stats"
+          ],
+          "reused_fragments": [],
+          "plan_char_count": 184,
+          "plan_is_valid_python": true,
+          "runtime_s": null,
+          "heuristic_score": -2
+        },
+        "workflow_plan": "mean_like = sample_mean([len(row) for row in GRID])\nvariance_like = sample_variance([row.count('#') for row in GRID])\nreturn_({'components': mean_like, 'variance_like': variance_like})",
+        "proposed_skill_names": [
+          "_shared_sum_stats"
+        ]
+      },
+      "judge": {
+        "available": true,
+        "winner": "joint_refactor",
+        "confidence": "high",
+        "judge_type": "mock_llm",
+        "reasoning": "Candidate A uses historical context more appropriately and avoids unnecessary or misleading abstractions.",
+        "joint_refactor_score": 9,
+        "legacy_planner_score": 3
+      },
+      "heuristic_winner": "joint_refactor",
+      "winner": "joint_refactor"
+    },
+    {
+      "case": {
+        "case_id": "shared_skill_when_fragment_repeats",
+        "source_experiment": "synthetic_seed",
+        "problem_id": "shared_skill_when_fragment_repeats",
+        "query": "Given polygon side lengths, compute both the perimeter and the semiperimeter and return them in a dictionary.",
+        "retrieved_skills": [
+          {
+            "name": "polygon_perimeter",
+            "description": "Compute the perimeter of a polygon from side lengths.",
+            "code": "def polygon_perimeter(lengths):\n    total = 0.0\n    for value in lengths:\n        total += value\n    return total\n"
+          },
+          {
+            "name": "triangle_semiperimeter",
+            "description": "Compute triangle semiperimeter from three side lengths.",
+            "code": "def triangle_semiperimeter(a, b, c):\n    total = a + b + c\n    return total / 2.0\n"
+          }
+        ],
+        "references": {
+          "preferred_actions": [
+            "propose_shared_skill"
+          ],
+          "useful_plan_calls": [
+            "_shared_side_length_total"
+          ],
+          "relevant_fragment_ids": [
+            "frag_side_length_sum"
+          ],
+          "possible_shared_skill_names": [
+            "_shared_side_length_total"
+          ],
+          "discouraged_shared_skill_names": [],
+          "desirable_keywords": [
+            "semiperimeter"
+          ],
+          "discouraged_keywords": [],
+          "rubric_notes": "This is the positive shared-skill case: extraction is justified because the new query needs two outputs that both depend on the same accumulated total."
+        },
+        "status": "validated",
+        "failure_type": "synthetic_seed",
+        "annotation_notes": "This is the positive shared-skill case: extraction is justified because the new query needs two outputs that both depend on the same accumulated total.",
+        "history_context": {
+          "previous_query": "Compute perimeter-related quantities from polygon side lengths.",
+          "previous_workflow_plan": "perimeter = polygon_perimeter(LENGTHS)\nreturn_({'perimeter': perimeter})\n",
+          "workflow_summary": "Both historical routines first sum side lengths. For the new query, extracting one shared helper is reasonable because both requested outputs depend on the same total.",
+          "historical_agent_summary": "Both historical routines first sum side lengths. For the new query, extracting one shared helper is reasonable because both requested outputs depend on the same total.",
+          "workflow_fragments": [
+            {
+              "fragment_id": "frag_side_length_sum",
+              "content": "total = 0.0\nfor value in LENGTHS:\n    total += value",
+              "description": "Accumulate the total side length once."
+            }
+          ],
+          "trace_snippets": [
+            "total = sum(lengths)\nprint(total)"
+          ],
+          "proposed_skills": []
+        },
+        "candidate_metadata": {},
+        "mock_joint_alignments": [
+          "COMMON: accumulate total side length once"
+        ],
+        "mock_joint_response": "## 历史复用决策\n决策: propose_shared_skill\n复用片段: frag_side_length_sum\n理由: 当前查询同时需要 perimeter 和 semiperimeter，抽取一次 side-length total helper 能避免重复。\n\n## 共享技能\n### _shared_side_length_total\n描述: 累加边长并返回总长度\n来源: workflow_summary\n```python\ndef _shared_side_length_total(lengths):\n    total = 0.0\n    for value in lengths:\n        total += value\n    return total\n```\n\n## 工作流计划\n```python\ntotal = _shared_side_length_total(LENGTHS)\nsemiperimeter = total / 2.0\nreturn_({'perimeter': total, 'semiperimeter': semiperimeter})\n```",
+        "mock_legacy_response": "## 候选技能提取\n\n## 工作流计划\n```python\nperimeter = polygon_perimeter(LENGTHS)\nsemiperimeter = triangle_semiperimeter(LENGTHS[0], LENGTHS[1], LENGTHS[2])\nreturn_({'perimeter': perimeter, 'semiperimeter': semiperimeter})\n```",
+        "mock_judge_response": "{\"winner\": \"joint_refactor\", \"confidence\": \"high\", \"judge_type\": \"mock_llm\", \"reasoning\": \"Candidate A is better because extracting one shared helper is justified by repeated dependence on the same accumulated total.\", \"joint_refactor_score\": 9, \"legacy_planner_score\": 3}"
+      },
+      "skipped": false,
+      "skip_reason": "",
+      "joint_refactor": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "joint_refactor",
+          "planner_mode": "FRESH",
+          "history_reuse_action": "propose_shared_skill",
+          "action_reference_match": true,
+          "useful_plan_calls_used": 1,
+          "relevant_fragment_mentions": 1,
+          "possible_shared_skills_used": 1,
+          "discouraged_shared_skill_violations": [],
+          "missing_useful_plan_calls": [],
+          "missing_relevant_fragment_ids": [],
+          "missing_possible_shared_skills": [],
+          "missing_desirable_keywords": [],
+          "discouraged_keyword_violations": [],
+          "proposed_skill_names": [
+            "_shared_side_length_total"
+          ],
+          "reused_fragments": [
+            "frag_side_length_sum"
+          ],
+          "plan_char_count": 132,
+          "plan_is_valid_python": true,
+          "runtime_s": 0.0,
+          "heuristic_score": 7
+        },
+        "workflow_plan": "total = _shared_side_length_total(LENGTHS)\nsemiperimeter = total / 2.0\nreturn_({'perimeter': total, 'semiperimeter': semiperimeter})",
+        "proposed_skill_names": [
+          "_shared_side_length_total"
+        ]
+      },
+      "legacy_planner": {
+        "available": true,
+        "diagnostics": {
+          "planner_strategy": "legacy_fallback",
+          "planner_mode": "FRESH",
+          "history_reuse_action": null,
+          "action_reference_match": false,
+          "useful_plan_calls_used": 0,
+          "relevant_fragment_mentions": 0,
+          "possible_shared_skills_used": 0,
+          "discouraged_shared_skill_violations": [],
+          "missing_useful_plan_calls": [
+            "_shared_side_length_total"
+          ],
+          "missing_relevant_fragment_ids": [
+            "frag_side_length_sum"
+          ],
+          "missing_possible_shared_skills": [
+            "_shared_side_length_total"
+          ],
+          "missing_desirable_keywords": [],
+          "discouraged_keyword_violations": [],
+          "proposed_skill_names": [],
+          "reused_fragments": [],
+          "plan_char_count": 179,
+          "plan_is_valid_python": true,
+          "runtime_s": null,
+          "heuristic_score": 2
+        },
+        "workflow_plan": "perimeter = polygon_perimeter(LENGTHS)\nsemiperimeter = triangle_semiperimeter(LENGTHS[0], LENGTHS[1], LENGTHS[2])\nreturn_({'perimeter': perimeter, 'semiperimeter': semiperimeter})",
+        "proposed_skill_names": []
+      },
+      "judge": {
+        "available": true,
+        "winner": "joint_refactor",
+        "confidence": "high",
+        "judge_type": "mock_llm",
+        "reasoning": "Candidate A is better because extracting one shared helper is justified by repeated dependence on the same accumulated total.",
+        "joint_refactor_score": 9,
+        "legacy_planner_score": 3
+      },
+      "heuristic_winner": "joint_refactor",
+      "winner": "joint_refactor"
+    }
+  ]
+}

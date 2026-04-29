@@ -37,7 +37,7 @@ def load_aime_2024(
 
     rng = random.Random(seed)
     rng.shuffle(problems)
-    if n and n < len(problems):
+    if n is not None and n < len(problems):
         problems = problems[:n]
     return problems
 
@@ -63,7 +63,7 @@ def load_aime_2025(
 
     rng = random.Random(seed)
     rng.shuffle(problems)
-    if n and n < len(problems):
+    if n is not None and n < len(problems):
         problems = problems[:n]
     return problems
 

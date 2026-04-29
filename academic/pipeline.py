@@ -17,7 +17,7 @@ from typing import List, Optional
 
 from academic.config import RESULTS_DIR, INTER_PROBLEM_DELAY
 from academic.executor import ExecTrace, solve
-from academic.extractor import extract_skills
+from academic.extractor import extract_skills, refine_skill_after_test_failure
 from academic.skill_store import Skill, SkillStore
 from academic.tester import TestResult, test_skill, test_stale_skills
 
@@ -54,6 +54,7 @@ except Exception as _e:
     _grade_answer = None
 
 logger = logging.getLogger("tool_evolving")
+MAX_REFINE_ATTEMPTS = 3
 
 
 @dataclass
@@ -260,24 +261,50 @@ async def evolve_single(
             # Test each skill before adding to store
             accepted = []
             for sk in new_skills:
-                tr = test_skill(sk, store)
-                if tr.passed:
-                    old = store.get(sk.name)
-                    old_ver = old.version if old else 0
-                    store.add(sk)
-                    cur = store.get(sk.name)
-                    if old_ver > 0:
-                        logger.info(
-                            f"    skill '{sk.name}' updated v{old_ver}→v{cur.version}"
-                            f"  deps={cur.dependencies}"
-                        )
-                    else:
-                        logger.info(
-                            f"    skill '{sk.name}' added v1  deps={cur.dependencies}"
-                        )
-                    accepted.append(sk)
-                else:
-                    logger.info(f"    skill '{sk.name}' REJECTED by tester: {tr.error}")
+                candidate = sk
+                refinement_history = []
+                fixed_test_code = sk.test_code
+                for attempt_idx in range(1, MAX_REFINE_ATTEMPTS + 2):
+                    tr = test_skill(candidate, store)
+                    if tr.passed:
+                        old = store.get(candidate.name)
+                        old_ver = old.version if old else 0
+                        store.add(candidate)
+                        cur = store.get(candidate.name)
+                        if old_ver > 0:
+                            logger.info(
+                                f"    skill '{candidate.name}' updated v{old_ver}→v{cur.version}"
+                                f"  deps={cur.dependencies}"
+                            )
+                        else:
+                            logger.info(
+                                f"    skill '{candidate.name}' added v1  deps={cur.dependencies}"
+                            )
+                        accepted.append(candidate)
+                        break
+                    logger.info(
+                        f"    skill '{candidate.name}' failed test on attempt {attempt_idx}: {tr.error}"
+                    )
+                    refinement_history.append({
+                        "attempt": attempt_idx,
+                        "test_error": tr.error,
+                        "skill_code": candidate.code,
+                    })
+                    if attempt_idx > MAX_REFINE_ATTEMPTS:
+                        logger.info(f"    skill '{candidate.name}' REJECTED after refine loop")
+                        break
+                    refined = await refine_skill_after_test_failure(
+                        query=query,
+                        skill=candidate,
+                        test_error=tr.error,
+                        fixed_test_code=fixed_test_code,
+                        existing_skills_prompt=store.build_skills_prompt(relevant),
+                        refinement_history=refinement_history,
+                    )
+                    if not refined:
+                        logger.info(f"    skill '{candidate.name}' refine returned no candidate")
+                        break
+                    candidate = refined[0]
             new_skills = accepted
 
         # Handle stale skills (lazy update)
@@ -382,24 +409,51 @@ async def evolve_and_test(
                 # Test each skill before adding to store
                 accepted = []
                 for sk in new_skills:
-                    tr = test_skill(sk, store)
-                    if tr.passed:
-                        old = store.get(sk.name)
-                        old_ver = old.version if old else 0
-                        store.add(sk)
-                        cur = store.get(sk.name)
-                        if old_ver > 0:
-                            logger.info(
-                                f"    skill '{sk.name}' updated v{old_ver}→v{cur.version}"
-                                f"  deps={cur.dependencies}"
-                            )
-                        else:
-                            logger.info(
-                                f"    skill '{sk.name}' added v1  deps={cur.dependencies}"
-                            )
-                        accepted.append(sk)
-                    else:
-                        logger.info(f"    skill '{sk.name}' REJECTED by tester: {tr.error}")
+                    candidate = sk
+                    refinement_history = []
+                    fixed_test_code = sk.test_code
+                    for attempt_idx in range(1, MAX_REFINE_ATTEMPTS + 2):
+                        tr = test_skill(candidate, store)
+                        if tr.passed:
+                            old = store.get(candidate.name)
+                            old_ver = old.version if old else 0
+                            store.add(candidate)
+                            cur = store.get(candidate.name)
+                            if old_ver > 0:
+                                logger.info(
+                                    f"    skill '{candidate.name}' updated v{old_ver}→v{cur.version}"
+                                    f"  deps={cur.dependencies}"
+                                )
+                            else:
+                                logger.info(
+                                    f"    skill '{candidate.name}' added v1  deps={cur.dependencies}"
+                                )
+                            accepted.append(candidate)
+                            break
+                        logger.info(
+                            f"    skill '{candidate.name}' failed test on attempt {attempt_idx}: {tr.error}"
+                        )
+                        refinement_history.append({
+                            "attempt": attempt_idx,
+                            "test_error": tr.error,
+                            "skill_code": candidate.code,
+                        })
+                        if attempt_idx > MAX_REFINE_ATTEMPTS:
+                            logger.info(f"    skill '{candidate.name}' REJECTED after refine loop")
+                            break
+                        refined = await refine_skill_after_test_failure(
+                            query=prob.question,
+                            skill=candidate,
+                            test_error=tr.error,
+                            fixed_test_code=fixed_test_code,
+                            existing_skills_prompt=store.build_skills_prompt(relevant),
+                            llm_config=_extract_model,
+                            refinement_history=refinement_history,
+                        )
+                        if not refined:
+                            logger.info(f"    skill '{candidate.name}' refine returned no candidate")
+                            break
+                        candidate = refined[0]
                 new_skills = accepted
             else:
                 new_skills = []

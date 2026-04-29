@@ -1,0 +1,289 @@
+{
+  "skills": [
+    {
+      "name": "count_unique_permutations_of_multiset",
+      "description": "Calculates the number of distinct permutations of a multiset given item counts.",
+      "code": "from math import factorial\n\ndef count_unique_permutations_of_multiset(counts):\n    \"\"\"\n    Computes the number of distinct permutations of a multiset.\n    \n    Args:\n        counts: list of integers representing the frequency of each distinct item.\n    \n    Returns:\n        int: the multinomial coefficient (sum(counts))! / (c1! * c2! * ...).\n    \"\"\"\n    total = sum(counts)\n    result = factorial(total)\n    for c in counts:\n        result //= factorial(c)\n    return result",
+      "source_problems": [
+        "Find the number of 7 -tuples $\\left(n_{1}, \\ldots, n_{7}\\right)$ of integers such that $$\\sum_{i=1}^{7} n_{i}^{6}=96957$$"
+      ],
+      "test_queries": [],
+      "version": 1,
+      "usage_count": 7,
+      "success_count": 1,
+      "history": [],
+      "dependencies": [],
+      "stale": false,
+      "test_code": "# For \"AABBC\", counts are [2, 2, 1]. Permutations = 5! / (2! 2! 1!) = 30\nassert count_unique_permutations_of_multiset([2, 2, 1]) == 30\nassert count_unique_permutations_of_multiset([5, 2]) == 21"
+    },
+    {
+      "name": "reflect_point_across_line",
+      "description": "Computes the reflection of a point across a line defined by two points using vector projection.",
+      "code": "def reflect_point_across_line(P, Q, X):\n    \"\"\"\n    Computes the reflection of point X across the line passing through points P and Q.\n    \n    Mathematical Insight:\n    Let v be the direction vector of the line (Q - P) and w be the vector from P to X.\n    The projection of w onto v is proj = (w . v) / (v . v) * v.\n    The reflection X' is given by X' = 2 * proj - w + P.\n    \n    Args:\n        P (tuple): Coordinates (x, y) of the first point on the line.\n        Q (tuple): Coordinates (x, y) of the second point on the line.\n        X (tuple): Coordinates (x, y) of the point to reflect.\n        \n    Returns:\n        tuple: The coordinates (x, y) of the reflected point, or None if P and Q are coincident.\n    \"\"\"\n    vx = Q[0] - P[0]\n    vy = Q[1] - P[1]\n    wx = X[0] - P[0]\n    wy = X[1] - P[1]\n    \n    v_dot_v = vx*vx + vy*vy\n    if v_dot_v == 0:\n        return None\n        \n    w_dot_v = wx*vx + wy*vy\n    proj_x = (w_dot_v / v_dot_v) * vx\n    proj_y = (w_dot_v / v_dot_v) * vy\n    \n    # Reflection: X' = 2*proj - w + P\n    Xprime_x = 2*proj_x - wx + P[0]\n    Xprime_y = 2*proj_y - wy + P[1]\n    \n    return (Xprime_x, Xprime_y)",
+      "source_problems": [
+        "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points."
+      ],
+      "test_queries": [],
+      "version": 1,
+      "usage_count": 6,
+      "success_count": 1,
+      "history": [],
+      "dependencies": [],
+      "stale": false,
+      "test_code": "# Reflect (1, 1) across vertical line x=0 (defined by (0,0) and (0,1)). Expected: (-1, 1)\nassert reflect_point_across_line((0, 0), (0, 1), (1, 1)) == (-1.0, 1.0)\n# Reflect (2, 0) across line y=x (defined by (0,0) and (1,1)). Expected: (0, 2)\nassert reflect_point_across_line((0, 0), (1, 1), (2, 0)) == (0.0, 2.0)"
+    },
+    {
+      "name": "is_point_on_grid_line",
+      "description": "Checks if a given point lies on a specific line (horizontal, vertical, or diagonal) within a grid.",
+      "code": "def is_point_on_grid_line(Q, line_type, params):\n    \"\"\"\n    Determines if point Q lies on a specified grid line.\n    \n    Mathematical Insight:\n    For a grid of integer points, a point Q lies on a line if it satisfies the line's equation.\n    Horizontal lines are of the form y = c.\n    Vertical lines are of the form x = c.\n    Diagonal lines can be defined by two points (x1, y1) and (x2, y2).\n    To avoid floating point precision issues with integer grid points, \n    we check the cross-product or integer form of the line equation:\n    (y2 - y1) * x - (x2 - x1) * y = (y2 - y1) * x1 - (x2 - x1) * y1.\n    \n    Args:\n        Q (tuple): The (x, y) coordinates of the point to check.\n        line_type (str): 'horizontal', 'vertical', or 'diagonal'.\n        params: \n            - For 'horizontal': the y-intercept (int/float).\n            - For 'vertical': the x-intercept (int/float).\n            - For 'diagonal': a tuple ((x1, y1), (x2, y2)) defining the line.\n            \n    Returns:\n        bool: True if Q lies on the line, False otherwise.\n    \"\"\"\n    x, y = Q\n    if line_type == 'horizontal':\n        return y == params\n    elif line_type == 'vertical':\n        return x == params\n    elif line_type == 'diagonal':\n        (x1, y1), (x2, y2) = params\n        dx = x2 - x1\n        dy = y2 - y1\n        # Equation: dy * x - dx * y = dy * x1 - dx * y1\n        # Check if Q satisfies this equation\n        return dy * x - dx * y == dy * x1 - dx * y1\n    return False",
+      "source_problems": [
+        "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points."
+      ],
+      "test_queries": [],
+      "version": 1,
+      "usage_count": 1,
+      "success_count": 0,
+      "history": [],
+      "dependencies": [],
+      "stale": false,
+      "test_code": "assert is_point_on_grid_line((4, 3), 'horizontal', 3) == True\nassert is_point_on_grid_line((4, 3), 'vertical', 4) == True\nassert is_point_on_grid_line((3, 3), 'vertical', 4) == False\n# Line from (1,1) to (5,5) (y = x) -> dy=4, dx=4 -> 4x - 4y = 0 -> x = y\nassert is_point_on_grid_line((2, 2), 'diagonal', ((1, 1), (5, 5))) == True\nassert is_point_on_grid_line((2, 3), 'diagonal', ((1, 1), (5, 5))) == False\n# Line from (1,6) to (8,1) (like problem) -> dy=-5, dx=7 -> -5x - 7y = -5(1) - 7(6) = -47\n# Check (1,6): -5(1) - 7(6) = -47. Correct.\nassert is_point_on_grid_line((1, 6), 'diagonal', ((1, 6), (8, 1))) == True"
+    },
+    {
+      "name": "get_grid_points",
+      "description": "Generates a list of integer coordinate points for a rectangular grid.",
+      "code": "def get_grid_points(width, height, x_start=1, y_start=1):\n    \"\"\"\n    Generates a list of (x, y) tuples for a rectangular grid of integer points.\n    \n    Args:\n        width (int): The width of the grid (number of columns).\n        height (int): The height of the grid (number of rows).\n        x_start (int): The starting x-coordinate (default 1).\n        y_start (int): The starting y-coordinate (default 1).\n        \n    Returns:\n        list of tuples: A list containing all grid points (x, y).\n    \"\"\"\n    return [(x, y) for x in range(x_start, x_start + width) for y in range(y_start, y_start + height)]",
+      "source_problems": [
+        "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points."
+      ],
+      "test_queries": [],
+      "version": 1,
+      "usage_count": 4,
+      "success_count": 1,
+      "history": [],
+      "dependencies": [],
+      "stale": false,
+      "test_code": "assert get_grid_points(2, 2) == [(1, 1), (1, 2), (2, 1), (2, 2)]\nassert get_grid_points(3, 1, 0, 0) == [(0, 0), (1, 0), (2, 0)]"
+    },
+    {
+      "name": "get_rectangle_center",
+      "description": "Computes the geometric center of a rectangle defined by width and height.",
+      "code": "def get_rectangle_center(width, height, x_start=1, y_start=1):\n    \"\"\"\n    Computes the geometric center (centroid) of a rectangle.\n    \n    Args:\n        width (int): The width of the rectangle.\n        height (int): The height of the rectangle.\n        x_start (int): The x-coordinate of the top-left corner (default 1).\n        y_start (int): The y-coordinate of the top-left corner (default 1).\n        \n    Returns:\n        tuple: The (x, y) coordinates of the center.\n    \"\"\"\n    # Center is midpoint of the diagonal. The rectangle spans from x_start to x_start + width\n    # and y_start to y_start + height. The coordinates are half-integers if start is integer\n    # and dimensions are odd (if considering cells), but here we treat the grid lines.\n    # If grid points are at integers, the extent is [x_start, x_start + width - 1].\n    x1, y1 = x_start, y_start\n    x2, y2 = x_start + width - 1, y_start + height - 1\n    return ((x1 + x2) / 2, (y1 + y2) / 2)",
+      "source_problems": [
+        "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points."
+      ],
+      "test_queries": [],
+      "version": 1,
+      "usage_count": 1,
+      "success_count": 1,
+      "history": [],
+      "dependencies": [],
+      "stale": false,
+      "test_code": "assert get_rectangle_center(8, 6) == (4.5, 3.5)\nassert get_rectangle_center(2, 2) == (1.5, 1.5)"
+    },
+    {
+      "name": "find_points_on_line",
+      "description": "Finds integer grid points lying on a line defined by two points.",
+      "code": "def find_points_on_line(points, p1, p2):\n    \"\"\"\n    Filters a list of points to find those lying on the line passing through p1 and p2.\n    \n    Mathematical Insight:\n    A point P lies on the line through A and B if the cross product (B-A) x (P-A) is zero.\n    i.e., (x2 - x1)*(y - y1) - (y2 - y1)*(x - x1) == 0.\n    \n    Args:\n        points (list): A list of (x, y) tuples to check.\n        p1 (tuple): The first point (x1, y1) defining the line.\n        p2 (tuple): The second point (x2, y2) defining the line.\n        \n    Returns:\n        list: A list of points from the input list that lie on the line.\n    \"\"\"\n    x1, y1 = p1\n    x2, y2 = p2\n    dx = x2 - x1\n    dy = y2 - y1\n    \n    result = []\n    for (x, y) in points:\n        # Check cross product: dx * (y - y1) - dy * (x - x1) == 0\n        if dx * (y - y1) - dy * (x - x1) == 0:\n            result.append((x, y))\n    return result",
+      "source_problems": [
+        "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points."
+      ],
+      "test_queries": [],
+      "version": 1,
+      "usage_count": 4,
+      "success_count": 1,
+      "history": [],
+      "dependencies": [],
+      "stale": false,
+      "test_code": "grid = [(x, y) for x in range(1, 9) for y in range(1, 7)]\n# Diagonal from (1,1) to (8,6) contains (1,1) and (8,6)\nline_pts = find_points_on_line(grid, (1, 1), (8, 6))\nassert (1, 1) in line_pts and (8, 6) in line_pts\nassert (1, 2) not in line_pts"
+    },
+    {
+      "name": "map_expanded_sequence_position",
+      "description": "Maps a 1-indexed position in a sequence expanded by inserting k items between originals to the original index and offset.",
+      "code": "def map_expanded_sequence_position(position, k):\n    \"\"\"\n    Maps a position in an expanded sequence to the original term index and offset.\n    \n    In the expanded sequence, each original term is followed by k inserted terms.\n    This function identifies which 'group' (original term index) the position belongs to\n    and the offset within that group (0 for original, 1..k for inserted).\n    \n    Mathematical Insight:\n    The sequence consists of blocks of size (k + 1). The block index (0-based) is \n    given by floor((position - 1) / (k + 1)). The offset within the block is \n    (position - 1) % (k + 1).\n    \n    Args:\n        position (int): The 1-indexed position in the expanded sequence.\n        k (int): The number of items inserted between each pair of original terms.\n        \n    Returns:\n        tuple: (original_index, offset) where original_index is the 1-based index \n               of the original term, and offset is the 0-based index within the group \n               (0 corresponds to the original term, 1..k correspond to inserted terms).\n    \"\"\"\n    if position <= 0:\n        return None, None\n    \n    block_size = k + 1\n    group = (position - 1) // block_size  # 0-based index of the original term\n    offset = (position - 1) % block_size  # 0 for original, 1..k for inserted\n    \n    return group + 1, offset",
+      "source_problems": [
+        "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence.",
+        "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence."
+      ],
+      "test_queries": [],
+      "version": 2,
+      "usage_count": 3,
+      "success_count": 0,
+      "history": [
+        {
+          "version": 1,
+          "code": "def map_expanded_sequence_position(position, k):\n    \"\"\"\n    Maps a position in an expanded sequence to the original term index and offset.\n    \n    In the expanded sequence, each original term is followed by k inserted terms.\n    This function identifies which 'group' (original term index) the position belongs to\n    and the offset within that group (0 for original, 1..k for inserted).\n    \n    Mathematical Insight:\n    The sequence consists of blocks of size (k + 1). The block index (0-based) is \n    given by floor((position - 1) / (k + 1)). The offset within the block is \n    (position - 1) % (k + 1).\n    \n    Args:\n        position (int): The 1-indexed position in the expanded sequence.\n        k (int): The number of items inserted between each pair of original terms.\n        \n    Returns:\n        tuple: (original_index, offset) where original_index is the 1-based index \n               of the original term, and offset is the 0-based index within the group \n               (0 corresponds to the original term, 1..k correspond to inserted terms).\n    \"\"\"\n    if position <= 0:\n        return None, None\n    \n    block_size = k + 1\n    group = (position - 1) // block_size  # 0-based index of the original term\n    offset = (position - 1) % block_size  # 0 for original, 1..k for inserted\n    \n    return group + 1, offset",
+          "description": "Maps a 1-indexed position in a sequence expanded by inserting k items between originals to the original index and offset.",
+          "timestamp": 1777223335.4119022
+        }
+      ],
+      "dependencies": [],
+      "stale": false,
+      "test_code": "assert map_expanded_sequence_position(69, 3) == (18, 0)\nassert map_expanded_sequence_position(1, 3) == (1, 0)\nassert map_expanded_sequence_position(2, 3) == (1, 1)\nassert map_expanded_sequence_position(4, 3) == (1, 3)\nassert map_expanded_sequence_position(5, 3) == (2, 0)"
+    }
+  ],
+  "workflow_records": [
+    {
+      "query": "Let the function be $$f(x)= \\frac {2^{x}}{2^{x}+ \\sqrt {2}}$$. Calculate the sum of $f(-2016) + f(-2015) + \\ldots + f(0) + f(1) + \\ldots + f(2017)$.",
+      "workflow_summary": "We need sum S = sum_{k=-2016}^{2017} f(k) where f(x) = 2^x / (2^x + sqrt(2)). Observe symmetry: f(x) + f(1 - x) ?\n\nLet's test: compute f(x) + f(1 - x) symbolic. Use Python.</think>\nimport sympy as sp\nx=sp.symbols('x')\nf= lambda x: 2**x/(2**x+sp.sqrt(2))\nprint(sp.simplify(f(x)+f(1-x)))\n1\nThe identity we found is\n\n\\[\nf(x) + f(1-x) = 1 .\n\\]\n\nNow we need to sum \\(f(k)\\) for all integers \\(k\\) from \\(-2016\\) to \\(2017\\).\n\nPair each term \\(f(k)\\) with the term \\(f(1-k)\\). For any integer \\(k\\),\n\n\\[\nf(k) + f(1-k) = 1 .\n\\]\n\nThus, \nFinal answer: 2017",
+      "workflow_plan": "import sympy as sp\nx=sp.symbols('x')\nf= lambda x: 2**x/(2**x+sp.sqrt(2))\nprint(sp.simplify(f(x)+f(1-x)))",
+      "workflow_decision": "fresh",
+      "final_answer": "2017",
+      "source_problem": "Let the function be $$f(x)= \\frac {2^{x}}{2^{x}+ \\sqrt {2}}$$. Calculate the sum of $f(-2016) + f(-2015) + \\ldots + f(0) + f(1) + \\ldots + f(2017)$.",
+      "retrieved_skills": [],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Let the function be $$f(x)= \\frac {2^{x}}{2^{x}+ \\sqrt {2}}$$. Calculate the sum of $f(-2016) + f(-2015) + \\ldots + f(0) + f(1) + \\ldots + f(2017)$.",
+      "workflow_summary": "We need to sum the function \\(f(x) = \\dfrac{2^x}{2^x+\\sqrt{2}}\\) over all integer arguments from \\(-2016\\) to \\(2017\\).  \n\nA good first step is to look for a symmetry or a functional equation that simplifies the sum.\n\n---\n\n### 1. Find a pai\nFinal answer: 2017",
+      "workflow_plan": "",
+      "workflow_decision": "fresh",
+      "final_answer": "2017",
+      "source_problem": "Let the function be $$f(x)= \\frac {2^{x}}{2^{x}+ \\sqrt {2}}$$. Calculate the sum of $f(-2016) + f(-2015) + \\ldots + f(0) + f(1) + \\ldots + f(2017)$.",
+      "retrieved_skills": [],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Let the function be $$f(x)= \\frac {2^{x}}{2^{x}+ \\sqrt {2}}$$. Calculate the sum of $f(-2016) + f(-2015) + \\ldots + f(0) + f(1) + \\ldots + f(2017)$.",
+      "workflow_summary": "We need to sum  \n\n\\[\nS=\\sum_{k=-2016}^{2017} f(k), \\qquad \nf(x)=\\frac{2^{x}}{2^{x}+\\sqrt{2}} .\n\\]\n\n---\n\n### 1. Find a symmetry\n\nCheck whether \\(f(x)+f(1-x)\\) simplifies:\n\n\\[\nf(x)+f(1-x)=\\frac{2^{x}}{2^{x}+\\sqrt2}+\\frac{2^{\\,1-x}}{2^{\\,1-x}+\nFinal answer: 2017",
+      "workflow_plan": "",
+      "workflow_decision": "fresh",
+      "final_answer": "2017",
+      "source_problem": "Let the function be $$f(x)= \\frac {2^{x}}{2^{x}+ \\sqrt {2}}$$. Calculate the sum of $f(-2016) + f(-2015) + \\ldots + f(0) + f(1) + \\ldots + f(2017)$.",
+      "retrieved_skills": [],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Find the number of 7 -tuples $\\left(n_{1}, \\ldots, n_{7}\\right)$ of integers such that $$\\sum_{i=1}^{7} n_{i}^{6}=96957$$",
+      "workflow_summary": "We need to count integer 7-tuples (n_1,...,n_7) such that sum of sixth powers equals 96957.\n\nFirst, analyze possible values of n^6 for integer n.\n\nn^6 grows quickly. Compute n^6 for small |n|.\n\nUse Python to compute all possible n^6 <= 9695\ndef sixth_powers(limit):\n    res = {}\n    for n in range(-int(limit**(1/6)+2), int(limit**(1/6)+3)):\n        val = n**6\n        if val <= limit:\n            res[n] = val\n    return res\n\nsp = sixth_powers(96957)\nprint(len(sp), list(sp.items(\n13 [(-6, 46656), (-5, 15625), (-4, 4096), (-3, 729), (-2, 64), (-1, 1), (0, 0), (1, 1), (2, 64), (3, 729)]\nWe have the list of possible sixth‑power values for a single integer:\n\n\\[\nn^6\\in\\{0,1,64,729,4096,15625,46656\\}\n\\]\n\nwith the multiplicities\n\n\\[\n\\begin{array}{c|c}\nn^6 & \\text{how many integers }n\\text{ give this value}\\\\ \\hline\n0 & 1\\;(n=0)\nFinal answer: 128",
+      "workflow_plan": "def sixth_powers(limit):\n    res = {}\n    for n in range(-int(limit**(1/6)+2), int(limit**(1/6)+3)):\n        val = n**6\n        if val <= limit:\n            res[n] = val\n    return res\n\nsp = sixth_powers(96957)\nprint(len(sp), list(sp.items())[:10])",
+      "workflow_decision": "fresh",
+      "final_answer": "128",
+      "source_problem": "Find the number of 7 -tuples $\\left(n_{1}, \\ldots, n_{7}\\right)$ of integers such that $$\\sum_{i=1}^{7} n_{i}^{6}=96957$$",
+      "retrieved_skills": [],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Find the number of 7 -tuples $\\left(n_{1}, \\ldots, n_{7}\\right)$ of integers such that $$\\sum_{i=1}^{7} n_{i}^{6}=96957$$",
+      "workflow_summary": "We need to count integer 7‑tuples \\((n_1,\\dots,n_7)\\) satisfying  \n\n\\[\n\\sum_{i=1}^7 n_i^6 = 96957 .\n\\]\n\n---\n\n### 1. Determine the possible sixth powers\n\nThe sixth power grows quickly, so only small integers can appear.  \nCompute all \\(k^6\\)\nFinal answer: 0",
+      "workflow_plan": "",
+      "workflow_decision": "fresh",
+      "final_answer": "0",
+      "source_problem": "Find the number of 7 -tuples $\\left(n_{1}, \\ldots, n_{7}\\right)$ of integers such that $$\\sum_{i=1}^{7} n_{i}^{6}=96957$$",
+      "retrieved_skills": [],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Find the number of 7 -tuples $\\left(n_{1}, \\ldots, n_{7}\\right)$ of integers such that $$\\sum_{i=1}^{7} n_{i}^{6}=96957$$",
+      "workflow_summary": "We need to count integer 7‑tuples \\((n_1,\\dots,n_7)\\) satisfying  \n\n\\[\n\\sum_{i=1}^7 n_i^6 = 96957 .\n\\]\n\n---\n\n### 1. Determine the possible sixth powers\n\nThe sixth power grows quickly, so only small integers can appear.  \nCompute all \\(k^6\\)\nlimit = 96957\nmax_n = int(limit ** (1/6)) + 2   # a bit extra to be safe\nprint(max_n)\n8\n# Build list of possible sixth powers\npowers = {}\nfor n in range(-8, 9):\n    val = n**6\n    if val <= limit:\n        powers[n] = val\n\nprint(powers)\nFinal answer: 2688",
+      "workflow_plan": "limit = 96957\nmax_n = int(limit ** (1/6)) + 2   # a bit extra to be safe\nprint(max_n)\n# Build list of possible sixth powers\npowers = {}\nfor n in range(-8, 9):\n    val = n**6\n    if val <= limit:\n        powers[n] = val\n\nprint(powers)",
+      "workflow_decision": "fresh",
+      "final_answer": "2688",
+      "source_problem": "Find the number of 7 -tuples $\\left(n_{1}, \\ldots, n_{7}\\right)$ of integers such that $$\\sum_{i=1}^{7} n_{i}^{6}=96957$$",
+      "retrieved_skills": [],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points.",
+      "workflow_summary": "We have an 8-by-6 rectangular grid of lattice points. That means points with integer coordinates (x, y) where x ranges from 0 to 8 and y ranges from 0 to 6, inclusive. Thus there are \\(9 \\times 7 = 63\\) points, not 48. Wait—maybe the rectan\nimport itertools\nimport math\n\n# Define grid points for 8 by 6 grid (8 columns, 6 rows)\npoints = [(i, j) for i in range(1, 9) for j in range(1, 7)]  # i=1..8, j=1..6\nprint(len(points))\n48\nNow let’s compute which grid points \\(Q\\) make line \\(PQ\\) a line of symmetry.\n\nThe center of the rectangle (midpoint of opposite corners) is at:\n\n\\[\nP = \\left(\\frac{1+8}{2}, \\frac{1+6}{2}\\right) = (4.5, 3.5).\n\\]\n\nWe need to check each of t\nFinal answer: 0",
+      "workflow_plan": "import itertools\nimport math\n\n# Define grid points for 8 by 6 grid (8 columns, 6 rows)\npoints = [(i, j) for i in range(1, 9) for j in range(1, 7)]  # i=1..8, j=1..6\nprint(len(points))\nP = (4.5, 3.5)\n\ndef is_symmetry_line(Q):\n    \"\"\"Return True if line PQ is a symmetry line for the rectangle.\"\"\"\n    # If Q == P, skip (but we only have other points)\n    if Q == P:\n        return False\n\n    # Line PQ: direction vector v = Q - P\n    vx, vy = Q[0] - P[0], Q[1] - P[1]\n    \n    # Compute reflected point of each grid point about line PQ.\n    # Formula: reflect point X about line through P with direction v\n    for X in points:\n        # Vector from P to X\n        wx = X[0] - P[0]\n        wy = X[1] - P[1]\n        \n        # Project w onto v: proj = (w·v)/(v·v) * v\n        v_dot_v = vx*vx + vy*vy\n        if v_dot_v == 0:  # Shouldn't happen since Q != P\n            return False\n        w_dot_v = wx*vx + wy*vy\n        proj_x = (w_dot_v / v_dot_v) * vx\n        proj_y = (w_dot_v / v_dot_v) * vy\n        \n        # Reflected point: X' = 2*proj - w + P\n        Xprime_x = 2*proj_x - wx + P[0]\n        Xprime_y = 2*proj_y - wy + P[1]\n        \n        # Check if X' is a grid point (i.e., integer coordi",
+      "workflow_decision": "fresh",
+      "final_answer": "0",
+      "source_problem": "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given t",
+      "retrieved_skills": [
+        "count_unique_permutations_of_multiset"
+      ],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points.",
+      "workflow_summary": "We have an $8 \\times 6$ rectangle with grid points at integer coordinates:\n- $x = 1,2,\\dots,8$ (8 columns)\n- $y = 1,2,\\dots,6$ (6 rows)\n\nThus there are indeed $8 \\times 6 = 48$ lattice points.  \nThe center $P$ of the rectangle is at $(4.5, \n# Define grid points\npoints = [(x, y) for x in range(1, 9) for y in range(1, 7)]\nP = (4.5, 3.5)\n\n# Function to check if a point lies on a line\ndef point_on_vertical(Q, x_val):\n    return Q[0] == x_val\n\ndef point_on_horizontal(Q, y_val):\n   \n0 0 2 2\nThe diagonal lines each have 2 grid points. Since the vertical and horizontal lines have no grid points (0), only the two diagonal symmetry lines are possible.\n\nHowever, we must check whether any of the 2 grid points on each diagonal coinci\nFinal answer: \\frac{4}{47}",
+      "workflow_plan": "# Define grid points\npoints = [(x, y) for x in range(1, 9) for y in range(1, 7)]\nP = (4.5, 3.5)\n\n# Function to check if a point lies on a line\ndef point_on_vertical(Q, x_val):\n    return Q[0] == x_val\n\ndef point_on_horizontal(Q, y_val):\n    return Q[1] == y_val\n\ndef point_on_diagonal1(Q):\n    # Line from (1,1) to (8,6): y = (5/7)(x-1) + 1\n    # Check if Q satisfies y*7 = 5*(x-1) + 7\n    return 7 * Q[1] == 5 * (Q[0] - 1) + 7\n\ndef point_on_diagonal2(Q):\n    # Line from (1,6) to (8,1): y = -(5/7)(x-1) + 6\n    # Check if y*7 = -5*(x-1) + 42\n    return 7 * Q[1] == -5 * (Q[0] - 1) + 42\n\n# Count points on each line (excluding P itself)\ncount_vertical = sum(1 for Q in points if point_on_vertical(Q, 4.5))\ncount_horizontal = sum(1 for Q in points if point_on_horizontal(Q, 3.5))\ncount_diagonal1 = sum(1 for Q in points if point_on_diagonal1(Q))\ncount_diagonal2 = sum(1 for Q in points if point_on_diagonal2(Q))\n\nprint(count_vertical, count_horizontal, count_diagonal1, count_diagonal2)\n# Find the actual points on each diagonal\ndiag1_points = [Q for Q in points if point_on_diagonal1(Q)]\ndiag2_points = [Q for Q in points if point_on_diagonal2(Q)]\nprint(diag1_points, diag2_points)",
+      "workflow_decision": "fresh",
+      "final_answer": "\\frac{4}{47}",
+      "source_problem": "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given t",
+      "retrieved_skills": [
+        "reflect_point_across_line",
+        "count_unique_permutations_of_multiset"
+      ],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given that point $Q$ is randomly selected from the other $47$ points.",
+      "workflow_summary": "## Understanding the problem\n\nWe have an $8 \\times 6$ rectangular grid of lattice points:\n- $x$ coordinates: $1, 2, \\dots, 8$ (8 columns)\n- $y$ coordinates: $1, 2, \\dots, 6$ (6 rows)\n\nTotal points: $8 \\times 6 = 48$\n\nPoint $P$ is at the cen\n# Define grid points for 8 by 6 grid\npoints = [(x, y) for x in range(1, 9) for y in range(1, 7)]\nprint(f\"Total points: {len(points)}\")\n\n# Center of the rectangle\nP = (4.5, 3.5)\nprint(f\"Center P: {P}\")\n\n# Check each symmetry line for grid po\nTotal points: 48\nCenter P: (4.5, 3.5)\nVertical line points: []\nHorizontal line points: []\nDiagonal 1 points (slope 5/7): [(1, 1), (8, 6)]\nDiagonal 2 points (slope -5/7): [(1, 6), (8, 1)]\n\nTotal unique points on symmetry lines: 4\nPoints: [(1\nNow I have the answer. Let me verify it with a computational check using the reflection helper to ensure correctness.",
+      "workflow_plan": "# Define grid points for 8 by 6 grid\npoints = [(x, y) for x in range(1, 9) for y in range(1, 7)]\nprint(f\"Total points: {len(points)}\")\n\n# Center of the rectangle\nP = (4.5, 3.5)\nprint(f\"Center P: {P}\")\n\n# Check each symmetry line for grid points lying on it\n\n# 1. Vertical line through center: x = 4.5\nvertical_points = [Q for Q in points if abs(Q[0] - 4.5) < 1e-9]\nprint(f\"Vertical line points: {vertical_points}\")\n\n# 2. Horizontal line through center: y = 3.5\nhorizontal_points = [Q for Q in points if abs(Q[1] - 3.5) < 1e-9]\nprint(f\"Horizontal line points: {horizontal_points}\")\n\n# 3. Diagonal from (1,1) to (8,6)\n# Equation: passes through (1,1) and (8,6)\n# Slope = (6-1)/(8-1) = 5/7\n# y - 1 = (5/7)(x - 1)\n# 7(y - 1) = 5(x - 1)\n# 7y - 7 = 5x - 5\n# 7y = 5x + 2\n# Check if 7*Q[1] == 5*Q[0] + 2\ndiag1_points = [Q for Q in points if 7*Q[1] == 5*Q[0] + 2]\nprint(f\"Diagonal 1 points (slope 5/7): {diag1_points}\")\n\n# 4. Diagonal from (1,6) to (8,1)\n# Equation: passes through (1,6) and (8,1)\n# Slope = (1-6)/(8-1) = -5/7\n# y - 6 = (-5/7)(x - 1)\n# 7(y - 6) = -5(x - 1)\n# 7y - 42 = -5x + 5\n# 7y = -5x + 47\n# Check if 7*Q[1] == -5*Q[0] + 47\ndiag2_points = [Q for Q in points if 7*Q[1] == -5*Q[0] + 47]\nprin",
+      "workflow_decision": "fresh",
+      "final_answer": "",
+      "source_problem": "Given a rectangular grid measuring 8 by 6, there are $48$ grid points, including those on the edges. Point $P$ is placed at the center of the rectangle. Find the probability that the line $PQ$ is a line of symmetry of the rectangle, given t",
+      "retrieved_skills": [
+        "reflect_point_across_line",
+        "is_point_on_grid_line",
+        "count_unique_permutations_of_multiset"
+      ],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence.",
+      "workflow_summary": "I need to find the position (term number) of the 69th term in the new sequence after inserting 3 numbers between each consecutive pair of the original sequence.\n\nLet me denote:\n- Original sequence: $a_1, a_2, \\ldots, a_n, \\ldots$\n- New sequ\ndef get_term_info(position):\n    \"\"\"Determine what the term at given position is in the new sequence.\"\"\"\n    # Positions are 1-indexed\n    if position <= 0:\n        return None\n    \n    # Find which group this position falls in\n    group = \nPosition 1: a_1 (original term)\nPosition 2: inserted number 1 between a_1 and a_2\nPosition 3: inserted number 2 between a_1 and a_2\nPosition 4: inserted number 3 between a_1 and a_2\nPosition 5: a_2 (original term)\nPosition 6: inserted numbe\n# Find the 69th term\nposition = 69\ngroup = (position - 1) // 4\npos_in_group = (position - 1) % 4\n\nprint(f\"Position 69: group = {group}, pos_in_group = {pos_in_group}\")\nprint(f\"T",
+      "workflow_plan": "def get_term_info(position):\n    \"\"\"Determine what the term at given position is in the new sequence.\"\"\"\n    # Positions are 1-indexed\n    if position <= 0:\n        return None\n    \n    # Find which group this position falls in\n    group = (position - 1) // 4  # 0-indexed group number\n    pos_in_group = (position - 1) % 4  # 0, 1, 2, or 3\n    \n    if pos_in_group == 0:\n        return f\"a_{group + 1} (original term)\"\n    else:\n        return f\"inserted number {pos_in_group} between a_{group + 1} and a_{group + 2}\"\n\n# Test with first few positions\nfor i in range(1, 11):\n    print(f\"Position {i}: {get_term_info(i)}\")\n# Find the 69th term\nposition = 69\ngroup = (position - 1) // 4\npos_in_group = (position - 1) % 4\n\nprint(f\"Position 69: group = {group}, pos_in_group = {pos_in_group}\")\nprint(f\"Term at position 69: {get_term_info(69)}\")",
+      "workflow_decision": "fresh",
+      "final_answer": "18",
+      "source_problem": "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence.",
+      "retrieved_skills": [
+        "count_unique_permutations_of_multiset",
+        "get_grid_points",
+        "find_points_on_line",
+        "reflect_point_across_line",
+        "get_rectangle_center"
+      ],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence.",
+      "workflow_summary": "Let me analyze this problem. We have an original sequence $a_1, a_2, \\ldots, a_n, \\ldots$ and we insert 3 numbers between each pair of consecutive terms to form a new sequence.\n\nThe new sequence structure is:\n- $a_1$, (3 inserted numbers), \n# Let's determine what type of term the 69th position is\nposition = 69\ngroup_size = 4  # 1 original + 3 inserted\n\n# Find which group (0-indexed) and position within group (0-indexed)\ngroup = (position - 1) // group_size\npos_in_group = (posi\nPosition 69:\n  Group number: 17 (0-indexed)\n  Position in group: 0 (0-indexed)\n  This is an original term: a_18\nBased on the analysis, the 69th term of the new sequence falls in group 17 (0-indexed) at position 0 within the group.\n\nSince position 0 within each group corresponds to the original term, and we're in group 17 (0-indexed), this means:\n- Th\nFinal answer: a_{18}",
+      "workflow_plan": "# Let's determine what type of term the 69th position is\nposition = 69\ngroup_size = 4  # 1 original + 3 inserted\n\n# Find which group (0-indexed) and position within group (0-indexed)\ngroup = (position - 1) // group_size\npos_in_group = (position - 1) % group_size\n\nprint(f\"Position {position}:\")\nprint(f\"  Group number: {group} (0-indexed)\")\nprint(f\"  Position in group: {pos_in_group} (0-indexed)\")\n\nif pos_in_group == 0:\n    print(f\"  This is an original term: a_{group + 1}\")\nelse:\n    print(f\"  This is inserted number {pos_in_group} between a_{group + 1} and a_{group + 2}\")\n\n__tool_result = map_expanded_sequence_position(69, 3)\nprint(__tool_result)",
+      "workflow_decision": "fresh",
+      "final_answer": "a_{18}",
+      "source_problem": "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence.",
+      "retrieved_skills": [
+        "map_expanded_sequence_position",
+        "count_unique_permutations_of_multiset",
+        "get_grid_points",
+        "find_points_on_line",
+        "reflect_point_across_line"
+      ],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence.",
+      "workflow_summary": "Let me analyze this problem. We have an original sequence $a_1, a_2, \\ldots, a_n, \\ldots$ and we insert 3 numbers between each pair of consecutive terms to form a new sequence.\n\nThe new sequence structure is:\n- $a_1$, (3 inserted numbers), \n__tool_result = map_expanded_sequence_position(69, 3)\nprint(__tool_result)\n(18, 0)\nThe result $(18, 0)$ tells me that position 69 falls in the 18th block (original index 18) at offset 0 within that block.\n\nSince offset 0 corresponds to the original term (the first position in each 4-term block), the 69th term of the new s\nFinal answer: a_{18}",
+      "workflow_plan": "__tool_result = map_expanded_sequence_position(69, 3)\nprint(__tool_result)",
+      "workflow_decision": "fresh",
+      "final_answer": "a_{18}",
+      "source_problem": "Given the sequence $a_1, a_2, \\ldots, a_n, \\ldots$, insert 3 numbers between each pair of consecutive terms to form a new sequence. Determine the term number of the 69th term of the new sequence.",
+      "retrieved_skills": [
+        "map_expanded_sequence_position",
+        "count_unique_permutations_of_multiset",
+        "get_grid_points",
+        "find_points_on_line",
+        "reflect_point_across_line"
+      ],
+      "timestamp": 0.0
+    },
+    {
+      "query": "Let $\\\\((2-x)^5 = a_0 + a_1x + a_2x^2 + \\ldots + a_5x^5\\\\)$. Evaluate the value of $\\dfrac{a_0 + a_2 + a_4}{a_1 + a_3}$.",
+      "workflow_summary": "Looking at this problem, I need to find the coefficients of the polynomial expansion and compute a ratio.\n\nLet me expand $(2-x)^5$ using Python to get the coefficients:\nimport sympy as sp\nx = sp.symbols('x')\nexpanded = sp.expand((2 - x)**5)\nprint(expanded)\n-x**5 + 10*x**4 - 40*x**3 + 80*x**2 - 80*x + 32\nFrom the expansion $(2-x)^5 = -x^5 + 10x^4 - 40x^3 + 80x^2 - 80x + 32$, I can read off the coefficients:\n\n- $a_0 = 32$ (constant term)\n- $a_1 = -80$ (coefficient of $x$)\n- $a_2 = 80$ (coefficient of $x^2$)\n- $a_3 = -40$ (coefficient of $x^3\nFinal answer: -\\frac{61}{60}",
+      "workflow_plan": "import sympy as sp\nx = sp.symbols('x')\nexpanded = sp.expand((2 - x)**5)\nprint(expanded)\n# Verify the calculation\na0, a1, a2, a3, a4 = 32, -80, 80, -40, 10\nnumerator = a0 + a2 + a4\ndenominator = a1 + a3\nratio = numerator / denominator\nprint(numerator, denominator, ratio)",
+      "workflow_decision": "fresh",
+      "final_answer": "-\\frac{61}{60}",
+      "source_problem": "Let $\\\\((2-x)^5 = a_0 + a_1x + a_2x^2 + \\ldots + a_5x^5\\\\)$. Evaluate the value of $\\dfrac{a_0 + a_2 + a_4}{a_1 + a_3}$.",
+      "retrieved_skills": [
+        "map_expanded_sequence_position",
+        "get_grid_points",
+        "find_points_on_line",
+        "reflect_point_across_line",
+        "count_unique_permutations_of_multiset"
+      ],
+      "timestamp": 0.0
+    }
+  ]
+}

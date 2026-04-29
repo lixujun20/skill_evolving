@@ -30,7 +30,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path.home()))
@@ -40,7 +40,11 @@ from academic.config import (
     MAX_AGENT_STEPS, LLM_CALL_TIMEOUT,
 )
 from academic.executor import ExecTrace, solve, SOLVE_SYSTEM, MATH_SOLVE_SYSTEM
-from academic.extractor import extract_skills
+from academic.extractor import extract_skills, refine_skill_after_test_failure
+from academic.maintenance_refactor import (
+    MaintenanceRefactorConfig,
+    run_maintenance_refactor,
+)
 from academic.skill_store import SkillStore
 from academic.tester import test_skill, test_stale_skills
 from academic.pipeline import Problem, check_answer
@@ -54,6 +58,7 @@ logger = logging.getLogger("tool_evolving")
 
 CONCURRENCY = 4
 MAX_RUN_ATTEMPTS = 3
+MAX_REFINE_ATTEMPTS = 3
 
 
 # ── Dataset configuration ─────────────────────────────────────────────────────
@@ -66,16 +71,21 @@ class DatasetConfig:
     default_n_train: int
     default_n_test: int
     default_concurrency: int
+    # Optional: different system prompt for test phase (e.g. mixed-dataset experiments)
+    test_system_prompt_template: Optional[str] = None
+
+    def get_test_prompt(self) -> str:
+        return self.test_system_prompt_template or self.system_prompt_template
 
 
 DATASET_CONFIGS = {
     "aime": DatasetConfig(
         name="aime",
-        file_prefix="aime_v2",
+        file_prefix="aime_v3",
         system_prompt_template=SOLVE_SYSTEM,
         default_n_train=30,
         default_n_test=30,
-        default_concurrency=4,
+        default_concurrency=8,
     ),
     "math500": DatasetConfig(
         name="math500",
@@ -93,6 +103,16 @@ DATASET_CONFIGS = {
         default_n_test=200,
         default_concurrency=8,
     ),
+    # Evolve on DeepScaler train.shuffle (100 problems), test on AIME-25 (30 problems)
+    "ds100_aime": DatasetConfig(
+        name="ds100_aime",
+        file_prefix="ds100_aime_v1",
+        system_prompt_template=MATH_SOLVE_SYSTEM,   # used during evolve phase
+        test_system_prompt_template=SOLVE_SYSTEM,   # used during test phase (AIME integers)
+        default_n_train=100,
+        default_n_test=30,
+        default_concurrency=4,
+    ),
 }
 
 
@@ -107,6 +127,13 @@ def load_dataset(dataset: str, n_train: int, n_test: int, seed: int) -> Tuple[Li
         from academic.datasets.math_dataset import load_train_test, _TRAIN_PARQUET_PATH
         return load_train_test(n_train=n_train, n_test=n_test, seed=seed,
                                parquet_path=_TRAIN_PARQUET_PATH)
+    elif dataset == "ds100_aime":
+        # Train from DeepScaler train.shuffle.parquet, test from AIME-25
+        from academic.datasets.math_dataset import load_from_parquet, _TRAIN_PARQUET_PATH
+        from academic.datasets.aime_dataset import load_aime_2025
+        train = load_from_parquet(n=n_train, seed=seed, parquet_path=_TRAIN_PARQUET_PATH)
+        test = load_aime_2025(n=n_test, seed=seed)
+        return train, test
     else:
         raise ValueError(f"Unknown dataset: {dataset}. Choose from: {list(DATASET_CONFIGS)}")
 
@@ -139,9 +166,22 @@ def load_checkpoint(exp_name: str) -> Optional[dict]:
 # ── Logging helper ────────────────────────────────────────────────────────────
 
 def log_trace(prob_idx: int, run_idx: int, prob: Problem, trace: ExecTrace,
-              correct: bool, elapsed: float, label: str) -> dict:
+              correct: bool, elapsed: float, label: str,
+              skills_retrieved: list | None = None) -> dict:
+    assistant_text = "\n".join(
+        s["content"] for s in trace.steps if s.get("type") == "assistant_raw" and s.get("content")
+    )[:1500]
+    workflow_decision = "fresh"
+    lowered = assistant_text.lower()
+    if "reuse" in lowered and "fragment" in lowered:
+        workflow_decision = "reuse_workflow_fragment"
+    elif "reuse" in lowered:
+        workflow_decision = "reuse_plan"
+    elif "adapt" in lowered or "modify" in lowered:
+        workflow_decision = "adapt_plan"
     entry = {
         "label": label,
+        "solver_mode": trace.solver_mode,
         "problem_idx": prob_idx,
         "run_idx": run_idx,
         "problem_id": prob.id,
@@ -154,6 +194,15 @@ def log_trace(prob_idx: int, run_idx: int, prob: Problem, trace: ExecTrace,
         "n_steps": len(trace.steps),
         "n_code_blocks": len(trace.code_blocks),
         "elapsed_s": round(elapsed, 1),
+        "skills_retrieved": [s.name for s in skills_retrieved] if skills_retrieved else [],
+        "skill_tool_counts": dict(trace.skill_tool_counts),
+        "skill_runtime_call_counts": dict(trace.skill_runtime_call_counts),
+        "skills_called": sorted(
+            [name for name, count in trace.skill_runtime_call_counts.items() if count > 0]
+        ),
+        "workflow_summary": assistant_text[:900],
+        "workflow_decision": workflow_decision,
+        "workflow_plan": "\n".join(trace.code_blocks[:2])[:1200],
         "steps": [{"step": si, "type": s["type"], "content": s["content"]}
                   for si, s in enumerate(trace.steps)],
         "conversation": trace.messages,
@@ -179,6 +228,7 @@ async def run_problem_n_times(
     label: str,
     agent_model: str,
     system_prompt_template: str,
+    solver_mode: str = "tir",
     existing_runs: Optional[list] = None,
     on_run_complete: Optional[Callable[[list], None]] = None,
 ) -> dict:
@@ -205,6 +255,7 @@ async def run_problem_n_times(
                     store=store if (store and skills) else None,
                     resume_state=resume_state,
                     system_prompt_template=system_prompt_template,
+                    solver_mode=solver_mode,
                 )
                 elapsed = time.monotonic() - t0
 
@@ -221,7 +272,8 @@ async def run_problem_n_times(
                     break
 
                 correct = check_answer(trace.final_answer, prob.answer)
-                entry = log_trace(prob_idx, run_idx, prob, trace, correct, elapsed, label)
+                entry = log_trace(prob_idx, run_idx, prob, trace, correct, elapsed, label,
+                                  skills_retrieved=skills or [])
                 break
             except Exception as exc:
                 if attempt >= MAX_RUN_ATTEMPTS:
@@ -287,6 +339,43 @@ def _agg(results: list):
     return total_correct, total_runs, mean_acc, avg_tok, avg_comp
 
 
+def _sum_counts(entries: List[dict]) -> Dict[str, int]:
+    merged: Dict[str, int] = {}
+    for entry in entries:
+        if not entry:
+            continue
+        for name, count in entry.items():
+            merged[name] = merged.get(name, 0) + int(count)
+    return dict(sorted(merged.items()))
+
+
+def _collect_phase_skill_stats(problem_results: List[dict]) -> dict:
+    retrieved_counts: Dict[str, int] = {}
+    called_counts: Dict[str, int] = {}
+    tool_counts: Dict[str, int] = {}
+
+    for problem_entry in problem_results or []:
+        if not problem_entry:
+            continue
+        for run in problem_entry.get("runs", []) or []:
+            if not run or run.get("timed_out"):
+                continue
+            for name in run.get("skills_retrieved", []) or []:
+                retrieved_counts[name] = retrieved_counts.get(name, 0) + 1
+            for name, count in (run.get("skill_runtime_call_counts") or {}).items():
+                called_counts[name] = called_counts.get(name, 0) + int(count)
+            for name, count in (run.get("skill_tool_counts") or {}).items():
+                tool_counts[name] = tool_counts.get(name, 0) + int(count)
+
+    return {
+        "retrieved_counts": dict(sorted(retrieved_counts.items())),
+        "called_counts": dict(sorted(called_counts.items())),
+        "tool_call_counts": dict(sorted(tool_counts.items())),
+        "n_unique_retrieved": len(retrieved_counts),
+        "n_unique_called": len(called_counts),
+    }
+
+
 def _make_persist(results: list, i: int, prob: Problem, n_runs: int):
     """Create a callback to persist partial results after each run."""
     def persist(runs_list: list) -> None:
@@ -312,12 +401,14 @@ async def run_baseline(
     test: List[Problem], n_runs: int, tag: str,
     agent_model: str, cfg: DatasetConfig,
     checkpoint: Optional[dict] = None,
+    solver_mode: str = "tir",
 ) -> dict:
     exp_name = build_exp_name("baseline", tag, epochs=1, file_prefix=cfg.file_prefix)
     logger.info(f"=== BASELINE [{cfg.name}]: {len(test)} × {n_runs} runs (concurrency={CONCURRENCY}) ===")
 
     summary = checkpoint or {
         "dataset": cfg.name, "mode": "baseline", "tag": tag,
+        "solver_mode": solver_mode,
         "n_problems": len(test), "n_runs_per_problem": n_runs,
         "total_correct": 0, "total_runs": 0,
         "accuracy_micro": 0.0, "accuracy_macro": 0.0,
@@ -344,7 +435,8 @@ async def run_baseline(
             r = await run_problem_n_times(
                 prob, i, n_runs, skills=[], store=None, label="baseline",
                 agent_model=agent_model,
-                system_prompt_template=cfg.system_prompt_template,
+                system_prompt_template=cfg.get_test_prompt(),
+                solver_mode=solver_mode,
                 existing_runs=(existing or {}).get("runs", []),
                 on_run_complete=persist,
             )
@@ -371,7 +463,8 @@ async def run_baseline(
             r = await run_problem_n_times(
                 prob, idx, n_runs, skills=[], store=None, label="baseline",
                 agent_model=agent_model,
-                system_prompt_template=cfg.system_prompt_template,
+                system_prompt_template=cfg.get_test_prompt(),
+                solver_mode=solver_mode,
                 existing_runs=results[idx].get("runs", []),
                 on_run_complete=persist_retry,
             )
@@ -382,6 +475,7 @@ async def run_baseline(
 
     total_correct, total_runs, mean_acc, avg_tok, avg_comp = _agg(results)
     summary.update({
+        "solver_mode": solver_mode,
         "n_problems": len(test), "n_runs_per_problem": n_runs,
         "total_correct": total_correct, "total_runs": total_runs,
         "accuracy_micro": round(total_correct / total_runs, 4) if total_runs else 0,
@@ -402,13 +496,21 @@ async def run_evolve_and_test(
     agent_model: str, extract_model: str,
     cfg: DatasetConfig,
     checkpoint: Optional[dict] = None,
+    epoch_mode: str = "passes",
+    maintenance_refactor_cfg: Optional[MaintenanceRefactorConfig] = None,
+    solver_mode: str = "tir",
 ) -> dict:
     import random as _random
     exp_name = build_exp_name("evolve", tag, epochs=n_epochs, file_prefix=cfg.file_prefix)
+    if epoch_mode == "consecutive" and n_epochs > 1:
+        exp_name += "_cons"
     summary = checkpoint or {
         "dataset": cfg.name,
-        "mode": f"evolve_{n_epochs}ep", "tag": tag,
-        "n_epochs": n_epochs, "n_train": len(train), "n_test": len(test),
+        "mode": f"evolve_{n_epochs}ep" + ("_cons" if epoch_mode == "consecutive" else ""),
+        "tag": tag,
+        "solver_mode": solver_mode,
+        "n_epochs": n_epochs, "epoch_mode": epoch_mode,
+        "n_train": len(train), "n_test": len(test),
         "n_runs_per_problem": n_runs,
         "evolve": {"accuracy": 0.0, "total_tokens": 0, "avg_tokens": 0.0, "skills_evolved": 0},
         "test_with_skills": {
@@ -427,92 +529,189 @@ async def run_evolve_and_test(
         logger.info(f"Resumed skill store: {store_path}  ({len(store)} skills)")
 
     # Phase 1: Evolve
-    total_rounds = len(train) * n_epochs
-    logger.info(f"=== EVOLVE [{cfg.name}]: {len(train)} × {n_epochs} = {total_rounds} rounds ===")
+    # Build the round schedule depending on epoch_mode:
+    #   - 'passes':       N shuffled passes over the full train set (original behaviour)
+    #   - 'consecutive':  one pass, but each problem is attempted N_epochs times in a row
+    if epoch_mode == "consecutive":
+        shuffled = list(train)
+        _random.Random(42).shuffle(shuffled)
+        schedule = [(0, i, p) for i, p in enumerate(shuffled) for _ in range(n_epochs)]
+        logger.info(f"=== EVOLVE [{cfg.name}] (consecutive): {len(train)} problems × {n_epochs} attempts = {len(schedule)} rounds ===")
+    else:
+        schedule = []
+        for epoch in range(n_epochs):
+            epoch_train = list(train)
+            _random.Random(42 + epoch).shuffle(epoch_train)
+            for i, p in enumerate(epoch_train):
+                schedule.append((epoch, i, p))
+        logger.info(f"=== EVOLVE [{cfg.name}] (passes): {len(train)} × {n_epochs} = {len(schedule)} rounds ===")
+
+    total_rounds = len(schedule)
     evolve_results = summary["evolve_details"]
     completed_evolve = len(evolve_results)
     round_counter = completed_evolve
+    maintenance_cfg = maintenance_refactor_cfg or MaintenanceRefactorConfig(enabled=False)
+    maintenance_by_epoch: Dict[int, dict] = summary.setdefault("maintenance_refactor", {})
+    new_skills_this_epoch = 0
 
-    for epoch in range(n_epochs):
-        epoch_train = list(train)
-        _random.Random(42 + epoch).shuffle(epoch_train)
-        logger.info(f"--- Epoch {epoch+1}/{n_epochs} ({len(epoch_train)} problems) ---")
+    for global_idx, (epoch, i, prob) in enumerate(schedule):
+        if global_idx < completed_evolve:
+            continue
+        if round_counter >= total_rounds:
+            break
+        t0 = time.monotonic()
+        logger.info(
+            f"\n[evolve e{epoch+1} {i+1}/{len(train)} "
+            f"(total {round_counter+1}/{total_rounds})] "
+            f"skills={len(store)} | {prob.id}"
+        )
 
-        for i, prob in enumerate(epoch_train):
-            global_idx = epoch * len(train) + i
-            if round_counter >= total_rounds:
-                break
-            if global_idx < completed_evolve:
-                continue
+        relevant = await store.retrieve(prob.question, top_k=5)
+        for sk in relevant:
+            sk.usage_count += 1
 
-            t0 = time.monotonic()
-            logger.info(
-                f"\n[evolve e{epoch+1} {i+1}/{len(epoch_train)} "
-                f"(total {round_counter+1}/{total_rounds})] "
-                f"skills={len(store)} | {prob.id}"
-            )
+        trace = await solve(
+            prob.question, relevant, store=store, llm_config=agent_model,
+            system_prompt_template=cfg.system_prompt_template,
+            solver_mode=solver_mode,
+        )
+        elapsed = time.monotonic() - t0
+        correct = check_answer(trace.final_answer, prob.answer)
 
-            relevant = await store.retrieve(prob.question, top_k=5)
+        if correct:
             for sk in relevant:
-                sk.usage_count += 1
+                sk.success_count += 1
 
-            trace = await solve(
-                prob.question, relevant, store=store, llm_config=agent_model,
-                system_prompt_template=cfg.system_prompt_template,
+        entry = log_trace(round_counter, 0, prob, trace, correct, elapsed, "evolve",
+                          skills_retrieved=relevant)
+
+        new_skills = []
+        if trace.code_blocks and not trace.timed_out:
+            candidates = await extract_skills(
+                query=prob.question,
+                code_blocks=trace.code_blocks,
+                outputs=trace.outputs,
+                existing_skills_prompt=store.build_skills_prompt(relevant),
+                llm_config=extract_model,
+                reasoning_traces=trace.reasoning_traces or [],
             )
-            elapsed = time.monotonic() - t0
-            correct = check_answer(trace.final_answer, prob.answer)
-
-            if correct:
-                for sk in relevant:
-                    sk.success_count += 1
-
-            entry = log_trace(round_counter, 0, prob, trace, correct, elapsed, "evolve")
-
-            new_skills = []
-            if trace.code_blocks and not trace.timed_out:
-                candidates = await extract_skills(
-                    query=prob.question,
-                    code_blocks=trace.code_blocks,
-                    outputs=trace.outputs,
-                    existing_skills_prompt=store.build_skills_prompt(relevant),
-                    llm_config=extract_model,
-                    reasoning_traces=trace.reasoning_traces or [],
-                )
-                for sk in candidates:
-                    tr = test_skill(sk, store)
+            for sk in candidates:
+                candidate = sk
+                refinement_history = []
+                fixed_test_code = sk.test_code
+                for attempt_idx in range(1, MAX_REFINE_ATTEMPTS + 2):
+                    tr = test_skill(candidate, store)
                     if tr.passed:
-                        old = store.get(sk.name)
+                        old = store.get(candidate.name)
                         old_ver = old.version if old else 0
-                        store.add(sk)
-                        cur = store.get(sk.name)
+                        store.add(candidate)
+                        cur = store.get(candidate.name)
                         logger.info(
-                            f"    skill '{sk.name}' "
+                            f"    skill '{candidate.name}' "
                             + (f"updated v{old_ver}→v{cur.version}" if old_ver > 0 else f"added v1  deps={cur.dependencies}")
                         )
-                        new_skills.append(sk.name)
-                    else:
-                        logger.info(f"    skill '{sk.name}' REJECTED: {tr.error}")
+                        new_skills.append(candidate.name)
+                        new_skills_this_epoch += 1
+                        break
+                    logger.info(
+                        f"    skill '{candidate.name}' failed test on attempt {attempt_idx}: {tr.error}"
+                    )
+                    refinement_history.append({
+                        "attempt": attempt_idx,
+                        "test_error": tr.error,
+                        "skill_code": candidate.code,
+                    })
+                    if attempt_idx > MAX_REFINE_ATTEMPTS:
+                        logger.info(f"    skill '{candidate.name}' REJECTED after refine loop")
+                        break
+                    refined = await refine_skill_after_test_failure(
+                        query=prob.question,
+                        skill=candidate,
+                        test_error=tr.error,
+                        fixed_test_code=fixed_test_code,
+                        existing_skills_prompt=store.build_skills_prompt(relevant),
+                        llm_config=extract_model,
+                        refinement_history=refinement_history,
+                    )
+                    if not refined:
+                        logger.info(f"    skill '{candidate.name}' refine returned no candidate")
+                        break
+                    candidate = refined[0]
 
-            stale_results = test_stale_skills(store)
-            for sr in stale_results:
-                if not sr.passed:
-                    logger.info(f"    stale skill '{sr.skill_name}' rolled back: {sr.error}")
+        stale_results = test_stale_skills(store)
+        for sr in stale_results:
+            if not sr.passed:
+                logger.info(f"    stale skill '{sr.skill_name}' rolled back: {sr.error}")
 
-            entry["new_skills"] = new_skills
-            entry["skills_total"] = len(store)
-            if round_counter < len(evolve_results):
-                evolve_results[round_counter] = entry
-            else:
-                evolve_results.append(entry)
+        entry["new_skills"] = new_skills
+        entry["skills_total"] = len(store)
+        if round_counter < len(evolve_results):
+            evolve_results[round_counter] = entry
+        else:
+            evolve_results.append(entry)
 
-            summary["evolve"]["skills_evolved"] = len(store)
+        summary["evolve"]["skills_evolved"] = len(store)
+        store.save(store_path)
+        save_checkpoint(exp_name, summary)
+
+        round_counter += 1
+        if INTER_PROBLEM_DELAY > 0 and round_counter < total_rounds:
+            await asyncio.sleep(INTER_PROBLEM_DELAY)
+
+        is_last_round_of_epoch = (
+            global_idx == len(schedule) - 1 or schedule[global_idx + 1][0] != epoch
+        )
+        if is_last_round_of_epoch and maintenance_cfg.enabled:
+            if new_skills_this_epoch < maintenance_cfg.min_new_skills_since_last_refactor:
+                stats_payload = {
+                    "runtime_s": 0.0,
+                    "attempted": False,
+                    "stopped_early": False,
+                    "stop_reason": "skip_too_few_new_skills",
+                    "n_input_skills": len(store),
+                    "n_pairs_considered": 0,
+                    "n_pairs_skipped": 0,
+                    "n_candidate_groups": 0,
+                    "n_shared_helpers": 0,
+                    "n_skills_rewritten": 0,
+                    "metadata": {"new_skills_this_epoch": new_skills_this_epoch},
+                }
+                maintenance_by_epoch[str(epoch + 1)] = stats_payload
+                logger.info(
+                    f"[maintenance_refactor] epoch={epoch+1} skipped "
+                    f"(new_skills_this_epoch={new_skills_this_epoch})"
+                )
+                new_skills_this_epoch = 0
+                continue
+            stats = run_maintenance_refactor(store, maintenance_cfg)
+            maintenance_by_epoch[str(epoch + 1)] = {
+                "runtime_s": stats.runtime_s,
+                "attempted": stats.attempted,
+                "stopped_early": stats.stopped_early,
+                "stop_reason": stats.stop_reason,
+                "n_input_skills": stats.n_input_skills,
+                "n_pairs_considered": stats.n_pairs_considered,
+                "n_pairs_skipped": stats.n_pairs_skipped,
+                "n_candidate_groups": stats.n_candidate_groups,
+                "n_shared_helpers": stats.n_shared_helpers,
+                "n_skills_rewritten": stats.n_skills_rewritten,
+                "metadata": stats.metadata,
+            }
             store.save(store_path)
             save_checkpoint(exp_name, summary)
-
-            round_counter += 1
-            if INTER_PROBLEM_DELAY > 0 and round_counter < total_rounds:
-                await asyncio.sleep(INTER_PROBLEM_DELAY)
+            logger.info(
+                f"[maintenance_refactor] epoch={epoch+1} runtime={stats.runtime_s}s "
+                f"shared={stats.n_shared_helpers} rewritten={stats.n_skills_rewritten} "
+                f"stopped_early={stats.stopped_early} reason={stats.stop_reason}"
+            )
+            if stats.stopped_early:
+                summary["maintenance_refactor_aborted"] = True
+                summary["maintenance_refactor_abort_reason"] = stats.stop_reason
+                save_checkpoint(exp_name, summary)
+                raise RuntimeError(
+                    f"maintenance refactor exceeded runtime budget at epoch {epoch+1}: {stats.stop_reason}"
+                )
+            new_skills_this_epoch = 0
 
     store.save(store_path)
     logger.info(f"Skill store saved: {store_path}  ({len(store)} skills)")
@@ -545,7 +744,8 @@ async def run_evolve_and_test(
             r = await run_problem_n_times(
                 prob, i, n_runs, skills=relevant, store=store,
                 label="test_skills", agent_model=agent_model,
-                system_prompt_template=cfg.system_prompt_template,
+                system_prompt_template=cfg.get_test_prompt(),
+                solver_mode=solver_mode,
                 existing_runs=(existing or {}).get("runs", []),
                 on_run_complete=persist,
             )
@@ -573,7 +773,8 @@ async def run_evolve_and_test(
             r = await run_problem_n_times(
                 prob, idx, n_runs, skills=relevant_retry, store=store,
                 label="test_skills", agent_model=agent_model,
-                system_prompt_template=cfg.system_prompt_template,
+                system_prompt_template=cfg.get_test_prompt(),
+                solver_mode=solver_mode,
                 existing_runs=test_results[idx].get("runs", []),
                 on_run_complete=persist_retry,
             )
@@ -589,6 +790,7 @@ async def run_evolve_and_test(
     summary.update({
         "dataset": cfg.name,
         "mode": f"evolve_{n_epochs}ep", "tag": tag,
+        "solver_mode": solver_mode,
         "n_epochs": n_epochs, "n_train": len(train), "n_test": len(test),
         "n_runs_per_problem": n_runs,
         "evolve": {
@@ -596,6 +798,12 @@ async def run_evolve_and_test(
             "total_tokens": evolve_tokens,
             "avg_tokens": round(evolve_tokens / len(evolve_results), 1) if evolve_results else 0,
             "skills_evolved": len(store),
+        },
+        "skill_stats": {
+            "train": _collect_phase_skill_stats([
+                {"runs": [entry]} for entry in evolve_results if entry
+            ]),
+            "test": _collect_phase_skill_stats(test_results),
         },
         "test_with_skills": {
             "total_correct": test_correct,
@@ -617,9 +825,12 @@ async def run_evolve_and_test(
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Skill Evolving Experiment Runner")
     parser.add_argument("--dataset", choices=list(DATASET_CONFIGS), required=True,
-                        help="Dataset to use: aime or math500")
+                        help="Dataset: aime | math500 | math_train | ds100_aime")
     parser.add_argument("--mode", choices=["baseline", "evolve"], required=True)
     parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epoch_mode", choices=["passes", "consecutive"], default="passes",
+                        help="'passes': N shuffled passes over train set (default). "
+                             "'consecutive': one pass where each problem is attempted N times in a row.")
     parser.add_argument("--n_runs", type=int, default=4)
     parser.add_argument("--n_train", type=int, default=None,
                         help="Override default train size for dataset")
@@ -631,6 +842,12 @@ async def main() -> None:
     parser.add_argument("--tag", type=str, default="exp1")
     parser.add_argument("--agent_model", type=str, default=AGENT_MODEL)
     parser.add_argument("--extract_model", type=str, default=EXTRACT_MODEL)
+    parser.add_argument("--solver_mode", choices=["tir", "oneshot"], default="tir")
+    parser.add_argument("--enable_refactor", action="store_true")
+    parser.add_argument("--refactor_mode", choices=["filtered_only"], default="filtered_only")
+    parser.add_argument("--refactor_budget_s", type=float, default=90.0)
+    parser.add_argument("--refactor_max_skills", type=int, default=24)
+    parser.add_argument("--refactor_max_pairs", type=int, default=32)
     args = parser.parse_args()
 
     cfg = DATASET_CONFIGS[args.dataset]
@@ -650,6 +867,10 @@ async def main() -> None:
     print(f"  N test          : {n_test}")
     print(f"  Agent model     : {args.agent_model}")
     print(f"  Extract model   : {args.extract_model}")
+    print(f"  Solver mode     : {args.solver_mode}")
+    print(f"  Refactor enabled: {args.enable_refactor}")
+    print(f"  Refactor mode   : {args.refactor_mode}")
+    print(f"  Refactor budget : {args.refactor_budget_s}s")
     print(f"  Concurrency     : {concurrency}")
     print(f"  MAX_AGENT_STEPS : {MAX_AGENT_STEPS}")
     print(f"  LLM_CALL_TIMEOUT: {LLM_CALL_TIMEOUT}s")
@@ -671,12 +892,39 @@ async def main() -> None:
 
     if args.mode == "baseline":
         summary = await run_baseline(
-            test, args.n_runs, args.tag, args.agent_model, cfg, checkpoint=checkpoint)
+            test, args.n_runs, args.tag, args.agent_model, cfg,
+            checkpoint=checkpoint, solver_mode=args.solver_mode)
     else:
-        summary = await run_evolve_and_test(
-            train, test, args.epochs, args.n_runs, args.tag,
-            args.agent_model, args.extract_model, cfg, checkpoint=checkpoint,
+        maintenance_cfg = MaintenanceRefactorConfig(
+            enabled=args.enable_refactor,
+            mode=args.refactor_mode,
+            max_skills=args.refactor_max_skills,
+            max_pairs=args.refactor_max_pairs,
+            per_epoch_budget_s=args.refactor_budget_s,
         )
+        try:
+            summary = await run_evolve_and_test(
+                train, test, args.epochs, args.n_runs, args.tag,
+                args.agent_model, args.extract_model, cfg, checkpoint=checkpoint,
+                epoch_mode=args.epoch_mode,
+                maintenance_refactor_cfg=maintenance_cfg,
+                solver_mode=args.solver_mode,
+            )
+        except RuntimeError as exc:
+            if checkpoint:
+                summary = checkpoint
+            else:
+                summary = {
+                    "dataset": cfg.name,
+                    "mode": f"evolve_{args.epochs}ep",
+                    "tag": args.tag,
+                    "aborted": True,
+                }
+            summary["aborted"] = True
+            summary["abort_reason"] = str(exc)
+            save_checkpoint(exp_name, summary)
+            print(f"\nABORTED: {exc}\n", flush=True)
+            return
 
     elapsed = time.monotonic() - t0
     summary["total_elapsed_s"] = round(elapsed, 1)

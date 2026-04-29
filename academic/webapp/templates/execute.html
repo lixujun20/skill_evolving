@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Execute Lab — Tool Evolution</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="top-nav">
+      <a href="/" class="nav-link">Skill Explorer</a>
+      <a href="/replay" class="nav-link">Replay Lab</a>
+      <a href="/execute" class="nav-link active">Execute Lab</a>
+    </div>
+    <h1>Execute Lab</h1>
+    <p class="page-subtitle">Run the real `academic` execution path, watch stages stream in, and inspect each node through a structured timeline instead of raw JSON dumps.</p>
+  </header>
+
+  <section class="control-panel execute-controls">
+    <div class="control-card wide-card">
+      <h3>Run Configuration</h3>
+      <label>Query</label>
+      <textarea id="execute-query" class="code-editor short-editor" placeholder="Enter a real problem/query here..."></textarea>
+
+      <div class="form-grid compact-grid">
+        <div>
+          <label>Skills File</label>
+          <input id="execute-skills-path" type="text">
+        </div>
+        <div>
+          <label>LLM Config</label>
+          <select id="execute-llm-config"></select>
+        </div>
+        <div>
+          <label>Prompt Mode</label>
+          <select id="execute-prompt-mode">
+            <option value="solve">AIME / Integer</option>
+            <option value="math">General Math</option>
+          </select>
+        </div>
+        <div>
+          <label>Top-K Skills</label>
+          <input id="execute-top-k" type="number" min="1" max="20" value="5">
+        </div>
+      </div>
+
+      <div class="inline-chip-row" id="execute-library-row"></div>
+
+      <div class="action-row">
+        <label class="check-row">
+          <input id="execute-run-extract" type="checkbox" checked>
+          <span>Run extract</span>
+        </label>
+          <label class="check-row">
+            <input id="execute-run-test" type="checkbox" checked>
+            <span>Run test</span>
+          </label>
+        <label class="check-row">
+          <input id="execute-copy-memory" type="checkbox" checked>
+          <span>Copy memory session</span>
+        </label>
+        <button class="btn btn-run" id="btn-run-execute">Run Execute Pipeline</button>
+      </div>
+      <div id="execute-job-status" class="mini-output">No execute job running.</div>
+    </div>
+  </section>
+
+  <div class="main-layout single-column-layout">
+    <main class="detail-panel execute-detail-panel">
+      <div id="execute-placeholder" class="placeholder">
+        <p>Run a query to watch the pipeline stream through retrieve, plan, execute, extract, and test.</p>
+      </div>
+
+      <div id="execute-detail" class="detail-content" style="display:none">
+        <div class="detail-header">
+          <h2>Execution Timeline</h2>
+          <span id="execute-final-answer" class="badge"></span>
+          <span id="execute-token-summary" class="badge muted-badge"></span>
+        </div>
+        <p id="execute-query-preview" class="detail-desc"></p>
+
+        <section class="detail-section">
+          <div id="execute-summary-cards" class="timeline-summary-grid"></div>
+        </section>
+
+        <section class="detail-section">
+          <div id="execute-memory-panel" class="structured-stack"></div>
+        </section>
+
+        <section class="detail-section">
+          <div id="execute-memory-editor" class="structured-stack"></div>
+        </section>
+
+        <section class="detail-section">
+          <div id="execute-timeline" class="timeline"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/static/execute.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "mode": "baseline",
+  "tag": "exp11",
+  "n_problems": 30,
+  "n_runs_per_problem": 4,
+  "total_correct": 47,
+  "total_runs": 120,
+  "accuracy_micro": 0.3917,
+  "accuracy_macro": 0.3917,
+  "avg_total_tokens": 82905.9,
+  "avg_completion_tokens": 11777.7,
+  "total_elapsed_s": 4052.6
+}

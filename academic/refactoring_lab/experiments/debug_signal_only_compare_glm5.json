@@ -1,0 +1,675 @@
+{
+  "baseline": "no_skills",
+  "skill_sets": [
+    {
+      "skill_set": "no_skills",
+      "summary": {
+        "skill_set": "no_skills",
+        "n_problems": 8,
+        "n_runs_per_problem": 1,
+        "total_correct": 4,
+        "total_runs": 8,
+        "accuracy_micro": 0.5,
+        "avg_total_tokens": 2407.5,
+        "avg_completion_tokens": 601.6,
+        "total_elapsed_s": 167.2,
+        "n_skills": 0,
+        "metadata": {}
+      },
+      "details": [
+        {
+          "problem_idx": 0,
+          "problem_id": "detect_local_peaks_q0",
+          "question": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+          "expected": "[2, 5]",
+          "runs": [
+            {
+              "problem_idx": 0,
+              "run_idx": 0,
+              "problem_id": "detect_local_peaks_q0",
+              "expected": "[2, 5]",
+              "predicted": "1",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 1048,
+              "completion_tokens": 510,
+              "elapsed_s": 19.1,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 1,
+          "problem_id": "detect_local_peaks_q1",
+          "question": "Peak indices in [0,2,1,2,0] with threshold 2?",
+          "expected": "[1, 3]",
+          "runs": [
+            {
+              "problem_idx": 1,
+              "run_idx": 0,
+              "problem_id": "detect_local_peaks_q1",
+              "expected": "[1, 3]",
+              "predicted": "2",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 871,
+              "completion_tokens": 339,
+              "elapsed_s": 11.0,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 2,
+          "problem_id": "first_peak_after_q0",
+          "question": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+          "expected": "2",
+          "runs": [
+            {
+              "problem_idx": 2,
+              "run_idx": 0,
+              "problem_id": "first_peak_after_q0",
+              "expected": "2",
+              "predicted": "2",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 974,
+              "completion_tokens": 437,
+              "elapsed_s": 12.6,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 3,
+          "problem_id": "first_peak_after_q1",
+          "question": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+          "expected": "4",
+          "runs": [
+            {
+              "problem_idx": 3,
+              "run_idx": 0,
+              "problem_id": "first_peak_after_q1",
+              "expected": "4",
+              "predicted": "4",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 2295,
+              "completion_tokens": 706,
+              "elapsed_s": 23.3,
+              "n_steps": 6,
+              "n_code_blocks": 2
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 4,
+          "problem_id": "pair_nearby_peaks_q0",
+          "question": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+          "expected": "[(1, 2)]",
+          "runs": [
+            {
+              "problem_idx": 4,
+              "run_idx": 0,
+              "problem_id": "pair_nearby_peaks_q0",
+              "expected": "[(1, 2)]",
+              "predicted": "2",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 1272,
+              "completion_tokens": 721,
+              "elapsed_s": 24.3,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 5,
+          "problem_id": "pair_nearby_peaks_q1",
+          "question": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+          "expected": "[(1, 2)]",
+          "runs": [
+            {
+              "problem_idx": 5,
+              "run_idx": 0,
+              "problem_id": "pair_nearby_peaks_q1",
+              "expected": "[(1, 2)]",
+              "predicted": "2",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 11559,
+              "completion_tokens": 1911,
+              "elapsed_s": 63.3,
+              "n_steps": 18,
+              "n_code_blocks": 6
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 6,
+          "problem_id": "global_argmax_index_q0",
+          "question": "Argmax index of [1,5,2,4]?",
+          "expected": "1",
+          "runs": [
+            {
+              "problem_idx": 6,
+              "run_idx": 0,
+              "problem_id": "global_argmax_index_q0",
+              "expected": "1",
+              "predicted": "1",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 647,
+              "completion_tokens": 121,
+              "elapsed_s": 9.7,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 7,
+          "problem_id": "global_argmax_index_q1",
+          "question": "Argmax index of [0,1,9,3]?",
+          "expected": "2",
+          "runs": [
+            {
+              "problem_idx": 7,
+              "run_idx": 0,
+              "problem_id": "global_argmax_index_q1",
+              "expected": "2",
+              "predicted": "2",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 594,
+              "completion_tokens": 68,
+              "elapsed_s": 3.9,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        }
+      ]
+    },
+    {
+      "skill_set": "original_skills",
+      "summary": {
+        "skill_set": "original_skills",
+        "n_problems": 8,
+        "n_runs_per_problem": 1,
+        "total_correct": 5,
+        "total_runs": 8,
+        "accuracy_micro": 0.625,
+        "avg_total_tokens": 1567.5,
+        "avg_completion_tokens": 195.8,
+        "total_elapsed_s": 56.3,
+        "n_skills": 4,
+        "metadata": {
+          "corpus": "skillsbench_signal_only"
+        },
+        "delta_vs_baseline": {
+          "accuracy_micro": 0.125,
+          "avg_total_tokens": -840.0,
+          "avg_completion_tokens": -405.8,
+          "total_elapsed_s": -110.9
+        }
+      },
+      "details": [
+        {
+          "problem_idx": 0,
+          "problem_id": "detect_local_peaks_q0",
+          "question": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+          "expected": "[2, 5]",
+          "runs": [
+            {
+              "problem_idx": 0,
+              "run_idx": 0,
+              "problem_id": "detect_local_peaks_q0",
+              "expected": "[2, 5]",
+              "predicted": "2",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 1216,
+              "completion_tokens": 160,
+              "elapsed_s": 5.5,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 1,
+          "problem_id": "detect_local_peaks_q1",
+          "question": "Peak indices in [0,2,1,2,0] with threshold 2?",
+          "expected": "[1, 3]",
+          "runs": [
+            {
+              "problem_idx": 1,
+              "run_idx": 0,
+              "problem_id": "detect_local_peaks_q1",
+              "expected": "[1, 3]",
+              "predicted": "[1, 3]",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1175,
+              "completion_tokens": 125,
+              "elapsed_s": 4.4,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 2,
+          "problem_id": "first_peak_after_q0",
+          "question": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+          "expected": "2",
+          "runs": [
+            {
+              "problem_idx": 2,
+              "run_idx": 0,
+              "problem_id": "first_peak_after_q0",
+              "expected": "2",
+              "predicted": "2",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1332,
+              "completion_tokens": 277,
+              "elapsed_s": 8.3,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 3,
+          "problem_id": "first_peak_after_q1",
+          "question": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+          "expected": "4",
+          "runs": [
+            {
+              "problem_idx": 3,
+              "run_idx": 0,
+              "problem_id": "first_peak_after_q1",
+              "expected": "4",
+              "predicted": "4",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1172,
+              "completion_tokens": 117,
+              "elapsed_s": 5.3,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 4,
+          "problem_id": "pair_nearby_peaks_q0",
+          "question": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+          "expected": "[(1, 2)]",
+          "runs": [
+            {
+              "problem_idx": 4,
+              "run_idx": 0,
+              "problem_id": "pair_nearby_peaks_q0",
+              "expected": "[(1, 2)]",
+              "predicted": "1",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 2623,
+              "completion_tokens": 347,
+              "elapsed_s": 13.2,
+              "n_steps": 4,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 5,
+          "problem_id": "pair_nearby_peaks_q1",
+          "question": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+          "expected": "[(1, 2)]",
+          "runs": [
+            {
+              "problem_idx": 5,
+              "run_idx": 0,
+              "problem_id": "pair_nearby_peaks_q1",
+              "expected": "[(1, 2)]",
+              "predicted": "1**",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 2668,
+              "completion_tokens": 274,
+              "elapsed_s": 10.6,
+              "n_steps": 4,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 6,
+          "problem_id": "global_argmax_index_q0",
+          "question": "Argmax index of [1,5,2,4]?",
+          "expected": "1",
+          "runs": [
+            {
+              "problem_idx": 6,
+              "run_idx": 0,
+              "problem_id": "global_argmax_index_q0",
+              "expected": "1",
+              "predicted": "1",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1177,
+              "completion_tokens": 133,
+              "elapsed_s": 4.4,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 7,
+          "problem_id": "global_argmax_index_q1",
+          "question": "Argmax index of [0,1,9,3]?",
+          "expected": "2",
+          "runs": [
+            {
+              "problem_idx": 7,
+              "run_idx": 0,
+              "problem_id": "global_argmax_index_q1",
+              "expected": "2",
+              "predicted": "2",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1177,
+              "completion_tokens": 133,
+              "elapsed_s": 4.5,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        }
+      ]
+    },
+    {
+      "skill_set": "refactored_skills",
+      "summary": {
+        "skill_set": "refactored_skills",
+        "n_problems": 8,
+        "n_runs_per_problem": 1,
+        "total_correct": 6,
+        "total_runs": 8,
+        "accuracy_micro": 0.75,
+        "avg_total_tokens": 1239.8,
+        "avg_completion_tokens": 146.5,
+        "total_elapsed_s": 41.1,
+        "n_skills": 4,
+        "metadata": {
+          "corpus": "skillsbench_signal_only"
+        },
+        "delta_vs_baseline": {
+          "accuracy_micro": 0.25,
+          "avg_total_tokens": -1167.7,
+          "avg_completion_tokens": -455.1,
+          "total_elapsed_s": -126.1
+        }
+      },
+      "details": [
+        {
+          "problem_idx": 0,
+          "problem_id": "detect_local_peaks_q0",
+          "question": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+          "expected": "[2, 5]",
+          "runs": [
+            {
+              "problem_idx": 0,
+              "run_idx": 0,
+              "problem_id": "detect_local_peaks_q0",
+              "expected": "[2, 5]",
+              "predicted": "2",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 1248,
+              "completion_tokens": 153,
+              "elapsed_s": 4.2,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 1,
+          "problem_id": "detect_local_peaks_q1",
+          "question": "Peak indices in [0,2,1,2,0] with threshold 2?",
+          "expected": "[1, 3]",
+          "runs": [
+            {
+              "problem_idx": 1,
+              "run_idx": 0,
+              "problem_id": "detect_local_peaks_q1",
+              "expected": "[1, 3]",
+              "predicted": "[1, 3]",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1234,
+              "completion_tokens": 145,
+              "elapsed_s": 6.1,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 2,
+          "problem_id": "first_peak_after_q0",
+          "question": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+          "expected": "2",
+          "runs": [
+            {
+              "problem_idx": 2,
+              "run_idx": 0,
+              "problem_id": "first_peak_after_q0",
+              "expected": "2",
+              "predicted": "2",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1269,
+              "completion_tokens": 175,
+              "elapsed_s": 8.9,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 3,
+          "problem_id": "first_peak_after_q1",
+          "question": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+          "expected": "4",
+          "runs": [
+            {
+              "problem_idx": 3,
+              "run_idx": 0,
+              "problem_id": "first_peak_after_q1",
+              "expected": "4",
+              "predicted": "4",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1235,
+              "completion_tokens": 141,
+              "elapsed_s": 5.1,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 4,
+          "problem_id": "pair_nearby_peaks_q0",
+          "question": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+          "expected": "[(1, 2)]",
+          "runs": [
+            {
+              "problem_idx": 4,
+              "run_idx": 0,
+              "problem_id": "pair_nearby_peaks_q0",
+              "expected": "[(1, 2)]",
+              "predicted": "[(1, 2)]",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1168,
+              "completion_tokens": 60,
+              "elapsed_s": 2.4,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 5,
+          "problem_id": "pair_nearby_peaks_q1",
+          "question": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+          "expected": "[(1, 2)]",
+          "runs": [
+            {
+              "problem_idx": 5,
+              "run_idx": 0,
+              "problem_id": "pair_nearby_peaks_q1",
+              "expected": "[(1, 2)]",
+              "predicted": "1",
+              "correct": false,
+              "timed_out": false,
+              "total_tokens": 1351,
+              "completion_tokens": 251,
+              "elapsed_s": 7.1,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 0,
+          "n_runs": 1,
+          "accuracy": 0.0
+        },
+        {
+          "problem_idx": 6,
+          "problem_id": "global_argmax_index_q0",
+          "question": "Argmax index of [1,5,2,4]?",
+          "expected": "1",
+          "runs": [
+            {
+              "problem_idx": 6,
+              "run_idx": 0,
+              "problem_id": "global_argmax_index_q0",
+              "expected": "1",
+              "predicted": "1",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1196,
+              "completion_tokens": 113,
+              "elapsed_s": 3.9,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        },
+        {
+          "problem_idx": 7,
+          "problem_id": "global_argmax_index_q1",
+          "question": "Argmax index of [0,1,9,3]?",
+          "expected": "2",
+          "runs": [
+            {
+              "problem_idx": 7,
+              "run_idx": 0,
+              "problem_id": "global_argmax_index_q1",
+              "expected": "2",
+              "predicted": "2",
+              "correct": true,
+              "timed_out": false,
+              "total_tokens": 1217,
+              "completion_tokens": 134,
+              "elapsed_s": 3.4,
+              "n_steps": 3,
+              "n_code_blocks": 1
+            }
+          ],
+          "n_correct": 1,
+          "n_runs": 1,
+          "accuracy": 1.0
+        }
+      ]
+    }
+  ]
+}

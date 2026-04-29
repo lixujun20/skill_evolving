@@ -21,9 +21,12 @@ import time
 from collections import deque
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-import numpy as np
+try:
+    import numpy as np
+except Exception:  # pragma: no cover
+    np = None
 
 logger = logging.getLogger("tool_evolving")
 
@@ -46,6 +49,7 @@ class Skill:
     description: str
     code: str                       # full function source
     source_problems: List[str] = field(default_factory=list)
+    test_queries: List[Tuple[str, Any]] = field(default_factory=list)
     version: int = 1
     usage_count: int = 0
     success_count: int = 0
@@ -77,6 +81,19 @@ class Skill:
         return True
 
 
+@dataclass
+class WorkflowRecord:
+    """Compact historical workflow summary for future planning reuse."""
+    query: str
+    workflow_summary: str
+    workflow_plan: str = ""
+    workflow_decision: str = ""
+    final_answer: str = ""
+    source_problem: str = ""
+    retrieved_skills: List[str] = field(default_factory=list)
+    timestamp: float = 0.0
+
+
 # ── Skill Store ───────────────────────────────────────────────────────────────
 
 class SkillStore:
@@ -84,6 +101,7 @@ class SkillStore:
 
     def __init__(self) -> None:
         self._skills: Dict[str, Skill] = {}
+        self._workflow_records: List[WorkflowRecord] = []
 
     # ── CRUD ──────────────────────────────────────────────────────────────
     def add(self, skill: Skill) -> None:
@@ -122,6 +140,10 @@ class SkillStore:
     @property
     def skills(self) -> List[Skill]:
         return list(self._skills.values())
+
+    @property
+    def workflow_records(self) -> List[WorkflowRecord]:
+        return list(self._workflow_records)
 
     def __len__(self) -> int:
         return len(self._skills)
@@ -229,6 +251,15 @@ class SkillStore:
             f"code:\n{skill.code}"
         )
 
+    def _workflow_text(self, record: WorkflowRecord) -> str:
+        return (
+            f"query: {record.query}\n"
+            f"decision: {record.workflow_decision}\n"
+            f"summary: {record.workflow_summary}\n"
+            f"plan:\n{record.workflow_plan}\n"
+            f"skills: {' '.join(record.retrieved_skills)}"
+        )
+
     async def _get_embedding(self, text: str) -> Optional[List[float]]:
         """Get embedding vector via BigModel API."""
         try:
@@ -265,11 +296,19 @@ class SkillStore:
                 base_url=emb_cfg.base_url,
             )
             truncated = [t[:8000] for t in texts]
-            resp = await client.embeddings.create(
-                model=emb_cfg.model,
-                input=truncated,
-            )
-            return [item.embedding for item in resp.data]
+
+            # Some embedding backends reject batches larger than 64 items.
+            # Chunk requests so retrieval remains usable for medium-sized stores.
+            batch_size = 64
+            outputs: List[Optional[List[float]]] = []
+            for start in range(0, len(truncated), batch_size):
+                batch = truncated[start : start + batch_size]
+                resp = await client.embeddings.create(
+                    model=emb_cfg.model,
+                    input=batch,
+                )
+                outputs.extend(item.embedding for item in resp.data)
+            return outputs
         except Exception as e:
             logger.warning(f"Batch embedding failed: {e}")
             return [None] * len(texts)
@@ -292,6 +331,10 @@ class SkillStore:
         Falls back to TF-IDF if embeddings are unavailable."""
         if not self._skills:
             return []
+
+        if np is None:
+            logger.info("NumPy unavailable; falling back to TF-IDF retrieval")
+            return self._retrieve_tfidf(query, top_k)
 
         # Try embedding-based retrieval
         await self.ensure_embeddings()
@@ -317,6 +360,58 @@ class SkillStore:
         # Fallback: TF-IDF bag-of-words
         logger.info("Falling back to TF-IDF retrieval")
         return self._retrieve_tfidf(query, top_k)
+
+    async def retrieve_workflows(self, query: str, top_k: int = 3) -> List[WorkflowRecord]:
+        """Return the most relevant historical workflow summaries."""
+        if not self._workflow_records:
+            return []
+        query_tokens = _tokenize(query)
+        scored: List[tuple] = []
+        for record in self._workflow_records:
+            doc_tokens = _tokenize(self._workflow_text(record))
+            sim = _cosine(query_tokens, doc_tokens)
+            scored.append((sim, record))
+        scored.sort(key=lambda t: t[0], reverse=True)
+        return [record for score, record in scored[:top_k] if score > 0.0]
+
+    def retrieve_sync_workflows(self, query: str, top_k: int = 3) -> List[WorkflowRecord]:
+        if not self._workflow_records:
+            return []
+        query_tokens = _tokenize(query)
+        scored: List[tuple] = []
+        for record in self._workflow_records:
+            doc_tokens = _tokenize(self._workflow_text(record))
+            sim = _cosine(query_tokens, doc_tokens)
+            scored.append((sim, record))
+        scored.sort(key=lambda t: t[0], reverse=True)
+        return [record for score, record in scored[:top_k] if score > 0.0]
+
+    def add_workflow_record(self, record: WorkflowRecord, max_records: int = 400) -> None:
+        if not record.query.strip() or not record.workflow_summary.strip():
+            return
+        self._workflow_records.append(record)
+        if len(self._workflow_records) > max_records:
+            self._workflow_records = self._workflow_records[-max_records:]
+
+    def build_workflow_prompt(self, records: Optional[List[WorkflowRecord]] = None) -> str:
+        target = records if records is not None else self._workflow_records[-3:]
+        if not target:
+            return "(no historical workflows available)"
+        parts = []
+        for idx, rec in enumerate(target, start=1):
+            skills_str = ", ".join(rec.retrieved_skills[:5]) if rec.retrieved_skills else "(none)"
+            parts.append(
+                f"### Historical Workflow {idx}\n"
+                f"Query: {rec.query[:240]}\n"
+                f"Decision: {rec.workflow_decision or 'unknown'}\n"
+                f"Skills used: {skills_str}\n"
+                f"Summary: {rec.workflow_summary[:500]}\n"
+                + (
+                    f"Plan:\n```text\n{rec.workflow_plan[:800]}\n```"
+                    if rec.workflow_plan.strip() else ""
+                )
+            )
+        return "\n\n".join(parts)
 
     def retrieve_sync(self, query: str, top_k: int = 5) -> List[Skill]:
         """Synchronous wrapper for retrieve (uses TF-IDF if no event loop)."""
@@ -350,17 +445,37 @@ class SkillStore:
             d = asdict(s)
             d.pop("embedding", None)  # don't persist large embedding vectors
             data.append(d)
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        payload = {
+            "skills": data,
+            "workflow_records": [asdict(r) for r in self._workflow_records],
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
 
     @classmethod
     def load(cls, path: Path) -> "SkillStore":
         store = cls()
         if path.exists():
-            for d in json.loads(path.read_text()):
+            raw = json.loads(path.read_text())
+            if isinstance(raw, list):
+                skill_items = raw
+                workflow_items = []
+            else:
+                skill_items = raw.get("skills", [])
+                workflow_items = raw.get("workflow_records", [])
+            for d in skill_items:
+                # Older saved skills may not contain newer optional fields
+                # such as `test_queries`; dataclass defaults preserve compatibility.
                 store._skills[d["name"]] = Skill(**{
                     k: v for k, v in d.items()
                     if k in Skill.__dataclass_fields__
                 })
+            store._workflow_records = [
+                WorkflowRecord(**{
+                    k: v for k, v in d.items()
+                    if k in WorkflowRecord.__dataclass_fields__
+                })
+                for d in workflow_items
+            ]
         store.refresh_all_dependencies()
         return store
 

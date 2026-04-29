@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Replay Benchmark Lab — Tool Evolution</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="top-nav">
+      <a href="/" class="nav-link">Skill Explorer</a>
+      <a href="/replay" class="nav-link active">Replay Lab</a>
+      <a href="/execute" class="nav-link">Execute Lab</a>
+    </div>
+    <h1>Replay Benchmark Lab</h1>
+    <p class="page-subtitle">Batch-annotate replay cases with LLM-as-a-judge context, inspect full prompts and outputs, and manage replay benchmark artifacts without touching code.</p>
+  </header>
+
+  <section class="control-panel replay-controls">
+    <div class="control-card">
+      <h3>Case Files</h3>
+      <label>Cases File</label>
+      <input id="cases-path" type="text">
+      <div class="quick-links">
+        <button class="btn" id="btn-cases-validated">Validated</button>
+        <button class="btn" id="btn-cases-drafts">Drafts</button>
+        <button class="btn" id="btn-cases-merged">Merged</button>
+      </div>
+
+      <label>Result File</label>
+      <input id="results-path" type="text">
+      <div class="quick-links">
+        <button class="btn" id="btn-results-validated">Validated Result</button>
+        <button class="btn" id="btn-results-merged">Merged Result</button>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-primary" id="btn-load-cases">Load Cases</button>
+        <button class="btn btn-primary" id="btn-load-results">Load Results</button>
+      </div>
+    </div>
+
+    <div class="control-card">
+      <h3>LLM Annotation</h3>
+      <label>LLM Config</label>
+      <input id="annotation-llm-config" type="text" value="tool_maker">
+      <label class="check-row">
+        <input id="annotation-save-results" type="checkbox" checked>
+        <span>Persist annotations back to case file</span>
+      </label>
+      <div class="action-grid">
+        <button class="btn btn-primary" id="btn-select-all-visible">Select Visible</button>
+        <button class="btn" id="btn-clear-selection">Clear Selection</button>
+        <button class="btn btn-run" id="btn-run-annotation">Annotate Selected</button>
+      </div>
+      <div id="annotation-job-status" class="mini-output">No annotation job running.</div>
+    </div>
+
+    <div class="control-card">
+      <h3>Replay Pipeline</h3>
+      <label>DB URL</label>
+      <input id="db-url" type="text">
+      <label class="check-row">
+        <input id="allow-live-llm" type="checkbox">
+        <span>Allow live LLM judge during benchmark run</span>
+      </label>
+      <div class="action-grid">
+        <button class="btn btn-run" id="btn-run-benchmark">Run Benchmark</button>
+        <button class="btn" id="btn-mine-candidates">Mine Candidates</button>
+        <button class="btn" id="btn-build-drafts">Build Drafts</button>
+        <button class="btn" id="btn-merge-cases">Merge Cases</button>
+      </div>
+      <pre id="pipeline-output" class="mini-output">Pipeline output will appear here.</pre>
+    </div>
+  </section>
+
+  <div id="replay-stats" class="stats-bar"></div>
+
+  <div class="main-layout replay-layout">
+    <aside class="skill-list-panel replay-list-panel">
+      <div class="search-box">
+        <input type="text" id="case-search" placeholder="Search case id, query, historical query..." autocomplete="off">
+      </div>
+      <div class="sort-controls stacked-controls">
+        <select id="status-filter">
+          <option value="">All Statuses</option>
+          <option value="validated">Validated</option>
+          <option value="draft">Draft</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <select id="selection-filter">
+          <option value="">All Cases</option>
+          <option value="selected">Selected Only</option>
+          <option value="annotated">Has LLM Annotation</option>
+          <option value="unannotated">No LLM Annotation</option>
+        </select>
+      </div>
+      <ul id="case-list" class="skill-list"></ul>
+    </aside>
+
+    <main class="detail-panel replay-detail-panel">
+      <div id="case-placeholder" class="placeholder">
+        <p>← Select a replay case to inspect historical query, workflow, and LLM annotation details</p>
+      </div>
+
+      <div id="case-detail" class="detail-content" style="display:none">
+        <div class="detail-header">
+          <h2 id="case-title"></h2>
+          <span id="case-status" class="badge"></span>
+          <span id="case-source" class="badge muted-badge"></span>
+        </div>
+        <p id="case-query" class="detail-desc"></p>
+
+        <div class="meta-grid replay-meta-grid">
+          <div class="meta-card">
+            <div class="meta-label">Problem ID</div>
+            <div class="meta-value small" id="meta-problem-id">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Failure Type</div>
+            <div class="meta-value small" id="meta-failure-type">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Skills</div>
+            <div class="meta-value" id="meta-skill-count">0</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Fragments</div>
+            <div class="meta-value" id="meta-fragment-count">0</div>
+          </div>
+        </div>
+
+        <section class="detail-section">
+          <h3>Historical Query & Workflow</h3>
+          <div class="detail-columns">
+            <div>
+              <h4>Historical Query</h4>
+              <pre id="history-query"></pre>
+            </div>
+            <div>
+              <h4>Workflow Summary</h4>
+              <pre id="history-summary"></pre>
+            </div>
+          </div>
+          <div class="detail-columns">
+            <div>
+              <h4>Previous Workflow Plan</h4>
+              <pre id="history-plan"></pre>
+            </div>
+            <div>
+              <h4>Workflow Fragments</h4>
+              <pre id="history-fragments"></pre>
+            </div>
+          </div>
+          <div class="detail-columns">
+            <div>
+              <h4>Trace Snippets</h4>
+              <pre id="history-traces"></pre>
+            </div>
+            <div>
+              <h4>Retrieved Skills</h4>
+              <div id="retrieved-skills" class="chip-grid"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="detail-section">
+          <h3>Structured Annotation</h3>
+          <div class="detail-columns">
+            <div>
+              <h4>Notes</h4>
+              <pre id="annotation-notes"></pre>
+            </div>
+            <div>
+              <h4>References</h4>
+              <pre id="annotation-references"></pre>
+            </div>
+          </div>
+          <div class="detail-columns">
+            <div>
+              <h4>Judge Summary</h4>
+              <pre id="annotation-judge-summary"></pre>
+            </div>
+            <div>
+              <h4>Candidate Metadata</h4>
+              <pre id="candidate-metadata"></pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="detail-section">
+          <h3>LLM Annotation Trace</h3>
+          <div id="annotation-trace-empty" class="empty-box">Run LLM annotation to inspect prompt, raw output, and parsed result.</div>
+          <div id="annotation-trace-detail" style="display:none">
+            <div class="judge-strip">
+              <div class="judge-chip"><span>Annotated At</span><strong id="annotation-time">—</strong></div>
+              <div class="judge-chip"><span>LLM Config</span><strong id="annotation-llm-name">—</strong></div>
+            </div>
+            <details class="trace-block" open>
+              <summary>LLM Input Prompt</summary>
+              <pre id="annotation-full-prompt"></pre>
+            </details>
+            <details class="trace-block">
+              <summary>LLM Raw Output</summary>
+              <pre id="annotation-full-output"></pre>
+            </details>
+            <details class="trace-block">
+              <summary>Parsed Output</summary>
+              <pre id="annotation-parsed-output"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section class="detail-section">
+          <h3>Benchmark Result</h3>
+          <div id="result-empty" class="empty-box">Load a benchmark result file to inspect judged outputs.</div>
+          <div id="result-detail" style="display:none">
+            <div class="judge-strip">
+              <div class="judge-chip"><span>Winner</span><strong id="result-winner">—</strong></div>
+              <div class="judge-chip"><span>Judge</span><strong id="result-judge-type">—</strong></div>
+              <div class="judge-chip"><span>Confidence</span><strong id="result-confidence">—</strong></div>
+              <div class="judge-chip"><span>Heuristic</span><strong id="result-heuristic">—</strong></div>
+            </div>
+            <h4>Judge Reasoning</h4>
+            <pre id="result-reasoning"></pre>
+            <div class="detail-columns">
+              <div>
+                <h4>Joint Refactor</h4>
+                <pre id="result-joint"></pre>
+              </div>
+              <div>
+                <h4>Legacy Planner</h4>
+                <pre id="result-legacy"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="/static/replay.js"></script>
+</body>
+</html>

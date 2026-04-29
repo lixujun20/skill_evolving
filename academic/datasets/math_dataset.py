@@ -152,6 +152,6 @@ def _load_from_hf(
     rng.shuffle(problems)
     if offset:
         problems = problems[offset:]
-    if n and n < len(problems):
+    if n is not None and n < len(problems):
         problems = problems[:n]
     return problems

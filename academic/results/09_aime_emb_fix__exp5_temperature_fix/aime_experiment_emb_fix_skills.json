@@ -1,0 +1,246 @@
+[
+  {
+    "name": "calc_side_product_ia_perp_oi",
+    "description": "Calculates the product of sides AB and AC given circumradius R and inradius r under the condition IA is perpendicular to OI.",
+    "code": "def calc_side_product_ia_perp_oi(R, r):\n    \"\"\"Calculates AB * AC given circumradius R and inradius r when IA is perpendicular to OI.\"\"\"\n    return 6 * R * r",
+    "source_problems": [
+      "Let $\\triangle ABC$ have circumcenter $O$ and incenter $I$ with $\\overline{IA}\\perp\\overline{OI}$, circumradius $13$, and inradius $6$. Find $AB\\cdot AC$."
+    ],
+    "version": 1,
+    "usage_count": 18,
+    "success_count": 6,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert calc_side_product_ia_perp_oi(13, 6) == 468"
+  },
+  {
+    "name": "count_ways_with_min_matches",
+    "description": "Calculates the number of ways to choose a sample such that at least a minimum number of items are from a specific target subset.",
+    "code": "def count_ways_with_min_matches(population_size, target_size, sample_size, min_matches):\n    \"\"\"Calculates the number of ways to choose a sample of size sample_size from population_size items such that at least min_matches items are from a specific subset of size target_size.\"\"\"\n    import math\n    non_target_size = population_size - target_size\n    count = 0\n    # Iterate through the number of successful matches (k) from min_matches up to the maximum possible\n    for k in range(min_matches, min(target_size, sample_size) + 1):\n        count += math.comb(target_size, k) * math.comb(non_target_size, sample_size - k)\n    return count",
+    "source_problems": [
+      "Jen enters a lottery by picking $4$ distinct numbers from $S=\\{1,2,3,\\cdots,9,10\\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 23,
+    "success_count": 12,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert count_ways_with_min_matches(10, 4, 4, 2) == 115\nassert count_ways_with_min_matches(10, 4, 4, 4) == 1"
+  },
+  {
+    "name": "count_nonnegative_solutions",
+    "description": "Counts the number of non-negative integer solutions to x1 + ... + xk = n, optionally with an upper bound for each xi.",
+    "code": "def count_nonnegative_solutions(n, k, max_val=None):\n    \"\"\"Counts the number of non-negative integer solutions to x1 + ... + xk = n, optionally with an upper bound for each xi.\"\"\"\n    import math\n    \n    if n < 0:\n        return 0\n        \n    if max_val is None or n <= max_val:\n        # Standard stars and bars: C(n + k - 1, k - 1)\n        return math.comb(n + k - 1, k - 1)\n    \n    # Inclusion-Exclusion principle for upper bounds\n    # Sum_{j=0}^{floor(n / (max_val + 1))} (-1)^j * C(k, j) * C(n - j*(max_val + 1) + k - 1, k - 1)\n    count = 0\n    limit = n // (max_val + 1)\n    for j in range(limit + 1):\n        term_n = n - j * (max_val + 1)\n        if term_n < 0:\n            continue\n        ways = math.comb(k, j) * math.comb(term_n + k - 1, k - 1)\n        if j % 2 == 0:\n            count += ways\n        else:\n            count -= ways\n    return count",
+    "source_problems": [
+      "Find the number of ways to place a digit in each cell of a 2x3 grid so that the sum of the two numbers formed by reading left to right is $999$, and the sum of the three numbers formed by reading top to bottom is $99$. The grid below is an example of such an arrangement because $8+991=999$ and $9+9+81=99$.\n\\[\\begin{array}{|c|c|c|} \\hline 0 & 0 & 8 \\\\ \\hline 9 & 9 & 1 \\\\ \\hline \\end{array}\\]"
+    ],
+    "version": 1,
+    "usage_count": 23,
+    "success_count": 10,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert count_nonnegative_solutions(8, 3, 9) == 45\nassert count_nonnegative_solutions(5, 2) == 6\nassert count_nonnegative_solutions(5, 2, 3) == 2"
+  },
+  {
+    "name": "count_surjective_assignments",
+    "description": "Counts the number of ways to assign k colors to n items such that all k colors are used at least once.",
+    "code": "def count_surjective_assignments(n, k):\n    \"\"\"Counts the number of ways to assign k colors to n items such that all k colors are used at least once.\"\"\"\n    import math\n    \n    if k == 0:\n        return 1 if n == 0 else 0\n    if k > n:\n        return 0\n        \n    # Inclusion-Exclusion Principle\n    # Sum_{i=0}^{k} (-1)^i * C(k, i) * (k - i)^n\n    count = 0\n    for i in range(k + 1):\n        term = math.comb(k, i) * ((k - i) ** n)\n        if i % 2 == 0:\n            count += term\n        else:\n            count -= term\n    return count",
+    "source_problems": [
+      "There is a collection of $25$ indistinguishable white chips and $25$ indistinguishable black chips. Find the number of ways to place some of these chips in the $25$ unit cells of a $5\\times5$ grid such that: \n\neach cell contains at most one chip\nall chips in the same row and all chips in the same column have the same colour\nany additional chip placed on the grid would violate one or more of the previous two conditions."
+    ],
+    "version": 1,
+    "usage_count": 13,
+    "success_count": 5,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert count_surjective_assignments(5, 2) == 30\nassert count_surjective_assignments(3, 3) == 6"
+  },
+  {
+    "name": "count_maximal_grid_colorings",
+    "description": "Counts the number of maximal chip configurations on an n x n grid with k colors where chips are placed at matching row/col colors.",
+    "code": "def count_maximal_grid_colorings(n, k):\n    \"\"\"Counts the number of maximal chip configurations on an n x n grid with k colors where chips are placed at matching row/col colors.\"\"\"\n    import math\n    \n    total = 0\n    # We sum over all possible subsets of colors S of size m (1 <= m <= k)\n    # For each subset S, we count assignments where rows use colors in S and cols use colors in S,\n    # and both use ALL colors in S (surjective onto S).\n    # Number of such assignments = (count_surjective_assignments(n, m))^2\n    # We multiply by C(k, m) to choose the subset S.\n    for m in range(1, k + 1):\n        ways = count_surjective_assignments(n, m)\n        total += math.comb(k, m) * (ways ** 2)\n    return total",
+    "source_problems": [
+      "There is a collection of $25$ indistinguishable white chips and $25$ indistinguishable black chips. Find the number of ways to place some of these chips in the $25$ unit cells of a $5\\times5$ grid such that: \n\neach cell contains at most one chip\nall chips in the same row and all chips in the same column have the same colour\nany additional chip placed on the grid would violate one or more of the previous two conditions."
+    ],
+    "version": 1,
+    "usage_count": 16,
+    "success_count": 6,
+    "history": [],
+    "dependencies": [
+      "count_surjective_assignments"
+    ],
+    "stale": false,
+    "test_code": "assert count_maximal_grid_colorings(5, 2) == 902"
+  },
+  {
+    "name": "calc_exact_k_from_sum",
+    "description": "Calculates the number of elements belonging to exactly k sets given the sum of set sizes and counts for fewer sets.",
+    "code": "def calc_exact_k_from_sum(sum_sizes, k, lower_counts):\n    \"\"\"Calculates the number of elements belonging to exactly k sets given the sum of set sizes and counts for fewer sets.\"\"\"\n    # The sum of the sizes of the sets is equal to the sum of (number of sets an element belongs to) * (count of such elements).\n    # sum_sizes = 1*c1 + 2*c2 + ... + k*ck\n    # We solve for ck: ck = (sum_sizes - (1*c1 + ... + (k-1)*c(k-1))) / k\n    weighted_sum = sum((i + 1) * count for i, count in enumerate(lower_counts))\n    return (sum_sizes - weighted_sum) // k",
+    "source_problems": [
+      "Among the 900 residents of Aimeville, there are 195 who own a diamond ring, 367 who own a set of golf clubs, and 562 who own a garden spade. In addition, each of the 900 residents owns a bag of candy hearts. There are 437 residents who own exactly two of these things, and 234 residents who own exactly three of these things. Find the number of residents of Aimeville who own all four of these things."
+    ],
+    "version": 1,
+    "usage_count": 13,
+    "success_count": 6,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# From the problem: sum of sizes of 3 sets is 1124.\n# 437 elements in exactly 1 set, 234 in exactly 2 sets.\n# We want the count in exactly 3 sets.\nassert calc_exact_k_from_sum(1124, 3, [437, 234]) == 73"
+  },
+  {
+    "name": "solve_quadratic",
+    "description": "Solves the quadratic equation a*x^2 + b*x + c = 0 and returns a list of real roots.",
+    "code": "def solve_quadratic(a, b, c):\n    \"\"\"Solves the quadratic equation a*x^2 + b*x + c = 0 and returns a list of real roots.\"\"\"\n    import math\n    if a == 0:\n        if b == 0:\n            return []\n        return [-c / b]\n    discriminant = b**2 - 4*a*c\n    if discriminant < 0:\n        return []\n    sqrt_disc = math.sqrt(discriminant)\n    root1 = (-b + sqrt_disc) / (2*a)\n    root2 = (-b - sqrt_disc) / (2*a)\n    if discriminant == 0:\n        return [root1]\n    return [root1, root2]",
+    "source_problems": [
+      "Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop."
+    ],
+    "version": 1,
+    "usage_count": 5,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# Test case from the problem: 4s^2 + 8s - 45 = 0\nroots = solve_quadratic(4, 8, -45)\nassert 2.5 in roots\nassert -4.5 in roots"
+  },
+  {
+    "name": "generate_integer_partitions",
+    "description": "Generates all non-decreasing sequences of positive integers that sum to n.",
+    "code": "def generate_integer_partitions(n, min_val=1):\n    \"\"\"Generates all non-decreasing sequences of positive integers that sum to n.\"\"\"\n    if n == 0:\n        yield []\n    else:\n        for i in range(min_val, n + 1):\n            for rest in generate_integer_partitions(n - i, i):\n                yield [i] + rest",
+    "source_problems": [
+      "A list of positive integers has the following properties:\n$\\bullet$ The sum of the items in the list is $30$.\n$\\bullet$ The unique mode of the list is $9$.\n$\\bullet$ The median of the list is a positive integer that does not appear in the list itself.\nFind the sum of the squares of all the items in the list."
+    ],
+    "version": 1,
+    "usage_count": 6,
+    "success_count": 6,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert list(generate_integer_partitions(4)) == [[1, 1, 1, 1], [1, 1, 2], [1, 3], [2, 2], [4]]"
+  },
+  {
+    "name": "is_unique_mode",
+    "description": "Checks if the specified value is the unique mode of the sequence.",
+    "code": "def is_unique_mode(sequence, value):\n    \"\"\"Checks if the specified value is the unique mode of the sequence.\"\"\"\n    from collections import Counter\n    counts = Counter(sequence)\n    if not counts:\n        return False\n    max_freq = max(counts.values())\n    if counts.get(value, 0) != max_freq:\n        return False\n    return sum(1 for v in counts.values() if v == max_freq) == 1",
+    "source_problems": [
+      "A list of positive integers has the following properties:\n$\\bullet$ The sum of the items in the list is $30$.\n$\\bullet$ The unique mode of the list is $9$.\n$\\bullet$ The median of the list is a positive integer that does not appear in the list itself.\nFind the sum of the squares of all the items in the list."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert is_unique_mode([1, 2, 2, 3], 2) == True\nassert is_unique_mode([1, 2, 2, 3, 3], 2) == False"
+  },
+  {
+    "name": "is_median_integer_and_exclusive",
+    "description": "Checks if the median of a sorted list is an integer not present in the list.",
+    "code": "def is_median_integer_and_exclusive(sorted_list):\n    \"\"\"Checks if the median of a sorted list is an integer not present in the list.\"\"\"\n    n = len(sorted_list)\n    if n % 2 != 0:\n        return False\n    left = sorted_list[n // 2 - 1]\n    right = sorted_list[n // 2]\n    if (left + right) % 2 != 0:\n        return False\n    median = (left + right) // 2\n    return median not in sorted_list",
+    "source_problems": [
+      "A list of positive integers has the following properties:\n$\\bullet$ The sum of the items in the list is $30$.\n$\\bullet$ The unique mode of the list is $9$.\n$\\bullet$ The median of the list is a positive integer that does not appear in the list itself.\nFind the sum of the squares of all the items in the list."
+    ],
+    "version": 1,
+    "usage_count": 2,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert is_median_integer_and_exclusive([1, 2, 4, 5]) == True\nassert is_median_integer_and_exclusive([1, 2, 3, 4]) == False"
+  },
+  {
+    "name": "max_real_part_az_plus_b_over_z",
+    "description": "Calculates the maximum real part of A*z + B/z for complex numbers A, B and real R where |z|=R.",
+    "code": "def max_real_part_az_plus_b_over_z(A, B, R):\n    \"\"\"Calculates the maximum real part of A*z + B/z for complex numbers A, B and real R where |z|=R.\"\"\"\n    import math\n    # z = R * e^(i*theta), 1/z = (1/R) * e^(-i*theta)\n    # Real(A*z) = R * (Re(A)*cos(theta) - Im(A)*sin(theta))\n    # Real(B/z) = (1/R) * (Re(B)*cos(theta) + Im(B)*sin(theta))\n    # Sum = (R*Re(A) + Re(B)/R)*cos(theta) + (-R*Im(A) + Im(B)/R)*sin(theta)\n    # Max value is sqrt(coeff_cos^2 + coeff_sin^2)\n    coeff_cos = R * A.real + B.real / R\n    coeff_sin = -R * A.imag + B.imag / R\n    return math.hypot(coeff_cos, coeff_sin)",
+    "source_problems": [
+      "Find the largest possible real part of \\[(75+117i)z+\\frac{96+144i}{z}\\]where $z$ is a complex number with $|z|=4$."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert max_real_part_az_plus_b_over_z(75+117j, 96+144j, 4) == 540.0"
+  },
+  {
+    "name": "count_paths_with_direction_changes",
+    "description": "Counts the number of paths from (0,0) to (right_moves, up_moves) with exactly num_changes direction changes.",
+    "code": "def count_paths_with_direction_changes(right_moves, up_moves, num_changes):\n    \"\"\"Counts the number of paths from (0,0) to (right_moves, up_moves) with exactly num_changes direction changes.\"\"\"\n    num_segments = num_changes + 1\n    \n    # Helper to calculate ways for a specific distribution of segments\n    def get_ways(num_r_segs, num_u_segs):\n        ways_r = 0\n        if num_r_segs == 0:\n            ways_r = 1 if right_moves == 0 else 0\n        else:\n            # Distribute right_moves into num_r_segs segments, each >= 1\n            # Equivalent to non-negative solutions to sum = right_moves - num_r_segs\n            ways_r = count_nonnegative_solutions(right_moves - num_r_segs, num_r_segs)\n            \n        ways_u = 0\n        if num_u_segs == 0:\n            ways_u = 1 if up_moves == 0 else 0\n        else:\n            # Distribute up_moves into num_u_segs segments, each >= 1\n            ways_u = count_nonnegative_solutions(up_moves - num_u_segs, num_u_segs)\n            \n        return ways_r * ways_u\n\n    # Determine number of segments for each direction based on start direction\n    # If num_segments is odd, the start direction has one more segment than the other\n    # If num_segments is even, both have equal segments\n    \n    # Pattern 1: Starts with Right\n    r_segs_1 = (num_segments + 1) // 2\n    u_segs_1 = num_segments // 2\n        \n    # Pattern 2: Starts with Up\n    # Swap the counts\n    r_segs_2 = u_segs_1\n    u_segs_2 = r_segs_1\n    \n    return get_ways(r_segs_1, u_segs_1) + get_ways(r_segs_2, u_segs_2)",
+    "source_problems": [
+      "Consider the paths of length $16$ that follow the lines from the lower left corner to the upper right corner on an $8\\times 8$ grid. Find the number of such paths that change direction exactly four times, as in the examples shown below."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [
+      "count_nonnegative_solutions"
+    ],
+    "stale": false,
+    "test_code": "assert count_paths_with_direction_changes(8, 8, 4) == 294\nassert count_paths_with_direction_changes(2, 2, 1) == 2"
+  },
+  {
+    "name": "solve_log_ratio_system",
+    "description": "Solves the linear system a - b - c = k1, -a + b - c = k2, -a - b + c = k3.",
+    "code": "def solve_log_ratio_system(k1, k2, k3):\n    \"\"\"Solves the linear system a - b - c = k1, -a + b - c = k2, -a - b + c = k3.\"\"\"\n    # The system matrix is [[1, -1, -1], [-1, 1, -1], [-1, -1, 1]]\n    # The solution can be derived by summing the equations:\n    # -(a + b + c) = k1 + k2 + k3  => a + b + c = -total\n    # Adding this to the first equation: 2a = k1 - total => a = (k1 - total) / 2\n    # Similarly for b and c.\n    total = k1 + k2 + k3\n    return ((k1 - total) / 2, (k2 - total) / 2, (k3 - total) / 2)",
+    "source_problems": [
+      "Let $x,y$ and $z$ be positive real numbers that satisfy the following system of equations:\n\\[\\log_2\\left({x \\over yz}\\right) = {1 \\over 2}\\]\\[\\log_2\\left({y \\over xz}\\right) = {1 \\over 3}\\]\\[\\log_2\\left({z \\over xy}\\right) = {1 \\over 4}\\]\nThen the value of $\\left|\\log_2(x^4y^3z^2)\\right|$ is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 3,
+    "success_count": 3,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\n# Test with the problem's values: 1/2, 1/3, 1/4\na, b, c = solve_log_ratio_system(Fraction(1, 2), Fraction(1, 3), Fraction(1, 4))\nassert a == Fraction(-7, 24)\nassert b == Fraction(-3, 8)\nassert c == Fraction(-5, 12)"
+  },
+  {
+    "name": "compute_product_quadratic_over_roots",
+    "description": "Computes the product of (a + b*omega^k + c*omega^(2k)) for k=0..n-1, where omega is a primitive n-th root of unity.",
+    "code": "import cmath\n\ndef compute_product_quadratic_over_roots(n, a, b, c):\n    \"\"\"\n    Computes the product of (a + b*omega^k + c*omega^(2k)) for k=0..n-1,\n    where omega is a primitive n-th root of unity.\n    \"\"\"\n    # Handle linear case c = 0: Product is a^n - (-b)^n\n    if c == 0:\n        if b == 0:\n            return a ** n\n        return a ** n - (-b) ** n\n    \n    # Quadratic case: a + b*x + c*x^2 = c(x - r1)(x - r2)\n    # Product = c^n * (r1^n - 1) * (r2^n - 1)\n    # where r1, r2 are roots of c*x^2 + b*x + a = 0\n    discriminant = b**2 - 4*a*c\n    sqrt_disc = cmath.sqrt(discriminant)\n    r1 = (-b + sqrt_disc) / (2*c)\n    r2 = (-b - sqrt_disc) / (2*c)\n    \n    val = (c ** n) * (r1 ** n - 1) * (r2 ** n - 1)\n    \n    # If the result is effectively real, return the real part to avoid floating point noise\n    if abs(val.imag) < 1e-9:\n        return val.real\n    return val",
+    "source_problems": [
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# Test case from the problem: n=13, a=2, b=-2, c=1\n# Product is 8321\nassert compute_product_quadratic_over_roots(13, 2, -2, 1) == 8321\n\n# Test linear case: n=3, a=1, b=1, c=0. Product (1+w)(1+w^2)(1+1) = (1+w+w^2+w^3)*2 = (0+1)*2 = 2\n# Formula: a^n - (-b)^n = 1 - (-1)^3 = 2\nassert compute_product_quadratic_over_roots(3, 1, 1, 0) == 2"
+  },
+  {
+    "name": "sum_of_set_bit_indices",
+    "description": "Calculates the sum of the 1-based indices of the set bits in the binary representation of n.",
+    "code": "def sum_of_set_bit_indices(n):\n    \"\"\"Calculates the sum of the 1-based indices of the set bits in the binary representation of n.\"\"\"\n    total = 0\n    index = 1\n    while n > 0:\n        if n & 1:\n            total += index\n        n >>= 1\n        index += 1\n    return total",
+    "source_problems": [
+      "Alice chooses a set $A$ of positive integers. Then Bob lists all finite nonempty sets $B$ of positive integers with the property that the maximum element of $B$ belongs to $A$. Bob's list has 2024 sets. Find the sum of the elements of A."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert sum_of_set_bit_indices(2024) == 55\nassert sum_of_set_bit_indices(13) == 8  # 13 is 1101, indices 1, 3, 4 -> 1+3+4=8\nassert sum_of_set_bit_indices(0) == 0"
+  },
+  {
+    "name": "compute_symmetric_sum_a2b",
+    "description": "Computes the sum of a^2*b + a^2*c + b^2*a + b^2*c + c^2*a + c^2*b using the identity (a+b+c)(ab+bc+ca) - 3abc.",
+    "code": "def compute_symmetric_sum_a2b(a, b, c):\n    \"\"\"Computes the sum of a^2*b + a^2*c + b^2*a + b^2*c + c^2*a + c^2*b using the identity (a+b+c)(ab+bc+ca) - 3abc.\"\"\"\n    return (a + b + c) * (a * b + b * c + c * a) - 3 * a * b * c",
+    "source_problems": [
+      "Find the number of triples of nonnegative integers \\((a,b,c)\\) satisfying \\(a + b + c = 300\\) and\n\\begin{equation*}\na^2b + a^2c + b^2a + b^2c + c^2a + c^2b = 6,000,000.\n\\end{equation*}"
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert compute_symmetric_sum_a2b(1, 1, 1) == 6\nassert compute_symmetric_sum_a2b(1, 2, 3) == 48\nassert compute_symmetric_sum_a2b(2, 2, 0) == 16"
+  }
+]

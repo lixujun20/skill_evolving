@@ -1,0 +1,14 @@
+{
+  "dataset": "math_train",
+  "mode": "baseline",
+  "tag": "exp1",
+  "n_problems": 200,
+  "n_runs_per_problem": 4,
+  "total_correct": 499,
+  "total_runs": 800,
+  "accuracy_micro": 0.6238,
+  "accuracy_macro": 0.6238,
+  "avg_total_tokens": 65109.4,
+  "avg_completion_tokens": 14241.7,
+  "total_elapsed_s": 22856.6
+}

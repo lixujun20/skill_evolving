@@ -1,0 +1,25 @@
+{
+  "dataset": "ds100_aime",
+  "mode": "evolve_1ep",
+  "tag": "exp1",
+  "n_epochs": 1,
+  "epoch_mode": "passes",
+  "n_train": 100,
+  "n_test": 30,
+  "n_runs_per_problem": 4,
+  "evolve": {
+    "accuracy": 0.67,
+    "total_tokens": 2820765,
+    "avg_tokens": 28207.7,
+    "skills_evolved": 116
+  },
+  "test_with_skills": {
+    "total_correct": 86,
+    "total_runs": 120,
+    "accuracy_micro": 0.7167,
+    "accuracy_macro": 0.7167,
+    "avg_total_tokens": 130559.9,
+    "avg_completion_tokens": 8893.4
+  },
+  "total_elapsed_s": 21498.4
+}

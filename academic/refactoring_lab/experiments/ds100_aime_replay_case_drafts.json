@@ -1,0 +1,1239 @@
+{
+  "source_candidates_path": "/home/lixujun/skill_evolving/academic/refactoring_lab/experiments/ds100_aime_replay_candidates.json",
+  "source_evolve_detail_path": "/home/lixujun/skill_evolving/academic/results/ds100_aime_v1_exp1_evolve_1ep_detail.json",
+  "source_baseline_detail_path": "/home/lixujun/skill_evolving/academic/results/ds100_aime_v1_exp1_baseline_detail.json",
+  "source_skills_path": "/home/lixujun/skill_evolving/academic/results/ds100_aime_v1_exp1_skills.json",
+  "n_drafts": 14,
+  "draft_cases": [
+    {
+      "case_id": "draft::7::Problem_13",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_13",
+      "query": "Let $x_1, x_2, x_3, \\ldots$ be a sequence of rational numbers defined by $x_1 = \\frac{25}{11}$ and\n$$x_{k+1} = \\frac{1}{",
+      "retrieved_skills": [
+        {
+          "name": "regular_polygon_segment_lengths",
+          "description": "Compute the segment (chord) counts and lengths for a regular n-gon.",
+          "code": "import math\nfrom math import comb\n\ndef regular_polygon_segment_lengths(n):\n    \"\"\"Compute segment counts and chord lengths for a regular n-gon.\n    \n    For a regular n-gon with vertices on a unit circle, segments are classified\n    by their \"distance\" d = min(|i-j|, n-|i-j|) where i,j are vertex indices.\n    Distance d corresponds to chord length 2*sin(d*π/n).\n    \n    Key insight: Distance d has n segments for d < n/2, and n/2 segments (diameters)\n    for d = n/2 (only when n is even).\n    \n    Args:\n        n: number of vertices in the regular polygon\n    \n    Returns:\n        dict mapping distance d to {'count': number of segments, 'length': chord length}\n    \"\"\"\n    result = {}\n    for d in range(1, n // 2 + 1):\n        # Chord length formula for unit circumradius\n        length = 2 * math.sin(d * math.pi / n)\n        # Count: n segments for d < n/2, n/2 for d = n/2 (diameters)\n        count = n // 2 if d == n / 2 else n\n        result[d] = {'count': count, 'length': length}\n    return result"
+        },
+        {
+          "name": "rectangle_grid_symmetry_points",
+          "description": "Count grid points on lines of symmetry for a rectangular grid.",
+          "code": "def rectangle_grid_symmetry_points(width_units, height_units):\n    \"\"\"Count grid points on symmetry lines of a rectangular grid.\n    \n    Key insight: A rectangle with integer unit dimensions has a grid of\n    (width_units + 1) × (height_units + 1) points. Lines of symmetry pass\n    through the center. For a grid point to be at center, both dimensions\n    must be even (so center is at integer coordinates).\n    \n    The two lines of symmetry are:\n    - Vertical: x = width_units / 2\n    - Horizontal: y = height_units / 2\n    \n    Args:\n        width_units: width of rectangle in unit lengths (integer)\n        height_units: height of rectangle in unit lengths (integer)\n    \n    Returns:\n        dict with keys:\n        - 'total_points': total grid points\n        - 'center': (x, y) tuple of center coordinates (may be half-integer)\n        - 'center_on_grid': bool, whether center is a grid point\n        - 'vertical_sym_count': points on vertical symmetry line\n        - 'horizontal_sym_count': points on horizontal symmetry line\n        - 'on_symmetry_lines': total points on either symmetry line\n    \"\"\"\n    total_points = (width_units + 1) * (height_units + 1)\n    \n    center_x = width_units / 2\n    center_y = height_units / 2\n    center = (center_x, center_y)\n    center_on_grid = (width_units % 2 == 0) and (height_units % 2 == 0)\n    \n    # Points on vertical symmetry line (if center_x is on grid)\n    if width_units % 2 == 0:\n        vertical_sym_count = height_units + 1\n    else:\n        vertical_sym_count = 0  # No vertical symmetry line through grid points\n    \n    # Points on horizontal symmetry line (if center_y is on grid)\n    if height_units % 2 == 0:\n        horizontal_sym_count = width_units + 1\n    else:\n        horizontal_sym_count = 0  # No horizontal symmetry line through grid points\n    \n    # Total on symmetry lines (subtract center if counted twice)\n    if center_on_grid:\n        on_symmetry_lines = vertical_sym_count + horizontal_sym_count - 1\n    else:\n        on_symmetry_lines = 0  # No grid points on symmetry lines\n    \n    return {\n        'total_points': total_points,\n        'center': center,\n        'center_on_grid': center_on_grid,\n        'vertical_sym_count': vertical_sym_count,\n        'horizontal_sym_count': horizontal_sym_count,\n        'on_symmetry_lines': on_symmetry_lines\n    }"
+        },
+        {
+          "name": "convex_quadrilateral_area",
+          "description": "Compute the area of a convex quadrilateral given its four vertices using the shoelace formula with automatic vertex ordering.",
+          "code": "def convex_quadrilateral_area(v1, v2, v3, v4):\n    \"\"\"Compute area of convex quadrilateral given four vertices in any order.\n    \n    Key insight: For a convex quadrilateral, we need to order vertices cyclically.\n    Find the center (centroid), then sort vertices by angle around center.\n    Once ordered, apply shoelace formula: Area = |Σ(xᵢ·yᵢ₊₁ - xᵢ₊₁·yᵢ)| / 2\n    \n    Args:\n        v1, v2, v3, v4: Four vertices as (x, y) tuples\n    \n    Returns:\n        The area of the convex quadrilateral\n    \"\"\"\n    import math\n    \n    vertices = [v1, v2, v3, v4]\n    \n    # Find centroid\n    cx = sum(v[0] for v in vertices) / 4\n    cy = sum(v[1] for v in vertices) / 4\n    \n    # Sort by angle around centroid\n    def angle(v):\n        return math.atan2(v[1] - cy, v[0] - cx)\n    \n    sorted_vertices = sorted(vertices, key=angle)\n    \n    # Apply shoelace formula\n    n = 4\n    area = 0\n    for i in range(n):\n        j = (i + 1) % n\n        area += sorted_vertices[i][0] * sorted_vertices[j][1]\n        area -= sorted_vertices[j][0] * sorted_vertices[i][1]\n    \n    return abs(area) / 2"
+        },
+        {
+          "name": "square_vertices_from_side_and_center",
+          "description": "Generate vertices of a square given one side's midpoint coordinates and the center.",
+          "code": "def square_vertices_from_side_and_center(side_midpoint, center, side_length):\n    \"\"\"Compute all four vertices of a square given a side's midpoint and the center.\n    \n    Key insight: If M is the midpoint of one side and O is the center of the square,\n    then the vertex on that side in one direction is M + (M - O) rotated 90° (scaled).\n    The opposite vertex on that same side is M - (M - O) rotated 90°.\n    The remaining two vertices are on the opposite side, symmetric about O.\n    \n    Alternatively: the vector from center to midpoint is perpendicular to the side,\n    and the vertices are at distance side_length/2 along the side direction.\n    \n    Args:\n        side_midpoint: (x, y) tuple - midpoint of one side of the square\n        center: (x, y) tuple - center of the square\n        side_length: length of each side of the square\n    \n    Returns:\n        List of 4 vertices [(x1,y1), (x2,y2), (x3,y3), (x4,y4)] in counterclockwise order,\n        where the first two vertices are the ones adjacent to the given midpoint.\n    \"\"\"\n    mx, my = side_midpoint\n    cx, cy = center\n    h = side_length / 2  # half the side length\n    \n    # Vector from center to midpoint (perpendicular to side)\n    dx, dy = mx - cx, my - cy\n    \n    # Normalize to get perpendicular direction\n    import math\n    perp_len = math.sqrt(dx**2 + dy**2)\n    if perp_len == 0:\n        raise ValueError(\"Midpoint cannot be at center\")\n    dx_norm, dy_norm = dx / perp_len, dy / perp_len\n    \n    # Tangent direction (along the side)\n    tx, ty = -dy_norm, dx_norm\n    \n    # Two vertices on the side with given midpoint\n    v1 = (mx - h * tx, my - h * ty)\n    v2 = (mx + h * tx, my + h * ty)\n    \n    # Opposite side vertices (reflected through center)\n    v3 = (2*cx - v1[0], 2*cy - v1[1])\n    v4 = (2*cx - v2[0], 2*cy - v2[1])\n    \n    return [v1, v2, v3, v4]"
+        },
+        {
+          "name": "triangle_inequality_check",
+          "description": "Check if three lengths can form a non-degenerate triangle.",
+          "code": "def triangle_inequality_check(a, b, c):\n    \"\"\"Check if three lengths satisfy the triangle inequality.\n    \n    Three lengths can form a triangle with positive area iff the sum of any two\n    exceeds the third: a + b > c, a + c > b, b + c > a.\n    \n    This is equivalent to: sorted_lengths[0] + sorted_lengths[1] > sorted_lengths[2].\n    \n    Args:\n        a, b, c: three lengths (numeric values)\n    \n    Returns:\n        True if the lengths can form a triangle with positive area, False otherwise\n    \"\"\"\n    lengths = sorted([a, b, c])\n    return lengths[0] + lengths[1] > lengths[2]"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Let $x_1, x_2, x_3, \\ldots$ be a sequence of rational numbers defined by $x_1 = \\frac{25}{11}$ and\n$$x_{k+1} = \\frac{1}{",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Let me verify by computing the actual values for small k and comparing mod 1000\nfrom fractions import Fraction\nfrom math import gcd\n\nMOD = 1000\n\n# Method 1: Direct computation with exact fractions\nx = Fraction(25, 11)\nprint(\"Direct computation:\")\nfor k in range(1, 11):\n    num_mod = x.numerator % \n[ERROR]\n<string>:159: SyntaxWarning: invalid escape sequence '\\o'\nTraceback (most recent call last):\n  File \"<string>\", line 945, in <module>\nTypeError: unsupported operand type(s) for *: 'int' and 'NoneType'\nDirect computation:\nk=1: num % 1000 = 25, den % 1000 = 11, sum % 1000 = 36\nk=2: num % 1000 ",
+        "historical_agent_summary": "# Let me verify by computing the actual values for small k and comparing mod 1000\nfrom fractions import Fraction\nfrom math import gcd\n\nMOD = 1000\n\n# Method 1: Direct computation with exact fractions\nx = Fraction(25, 11)\nprint(\"Direct computation:\")\nfor k in range(1, 11):\n    num_mod = x.numerator % \n[ERROR]\n<string>:159: SyntaxWarning: invalid escape sequence '\\o'\nTraceback (most recent call last):\n  File \"<string>\", line 945, in <module>\nTypeError: unsupported operand type(s) for *: 'int' and 'NoneType'\nDirect computation:\nk=1: num % 1000 = 25, den % 1000 = 11, sum % 1000 = 36\nk=2: num % 1000 ",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Let me analyze this recursive sequence carefully.\n\nGiven: $x_1 = \\frac{25}{11}$ and $x_{k+1} = \\frac{1}{3}\\left(x_k + \\frac{1}{x_k} - 1\\right)$\n\nLet me first compute several terms to find a pattern.",
+          "from fractions import Fraction\n\ndef compute_sequence(n):\n    \"\"\"Compute the first n terms of the sequence.\"\"\"\n    x = Fraction(25, 11)\n    sequence = [x]\n    for i in range(1, n):\n        x = Fraction(1, 3) * (x + Fraction(1, x) - 1)\n        sequence.append(x)\n    return sequence\n\n# Compute first several terms\nseq = compute_sequence(10)\nfor i, x in enumerate(seq, 1):\n    print(f\"x_{i} = {x} = {x.numerator}/{x.denominator}\")",
+          "<string>:159: SyntaxWarning: invalid escape sequence '\\o'\nx_1 = 25/11 = 25/11\nx_2 = 157/275 = 157/275\nx_3 = 19033/43175 = 19033/43175\nx_4 = 468195313/821749775 = 468195313/821749775\nx_5 = 169913383571304673/384739393113804575 = 169913383571304673/384739393113804575\nx_6 = 37174195484363703821878726392096193/65372372077136852512227799506278975 = 37174195484363703821878726392096193/65372372077136852512227799506278975\nx_7 = 1075100834009754721649678888778058599607738529594060178108331799567233/2430165338872044663879765527842296378677526572095424108765115693442175 = 1075100834009754721649678888778058599607738529594060178108331799567233/2430165338872044663879765527842296378677526572095424108765115693442175\nx_8 = 1482957531646872142117908639120372024393838990775597938415411588358115510684425472334749863591589083954355230814502683581895755315015251713/2612672782602933423865779962008733139354696222879841026596684318379937423875566877127109612972608061290473293537327268208036190361110251775 = 1482957531646872142117908639120372024393838990775597938415411588358115510684425472334749863591589083954355230814502683581895755315015251713/26126727826029334238657799620087331393546962228798410265966843"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "regression,token_blow_up,planner_or_retrieval_mismatch",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 7,
+        "problem_id": "Problem_13",
+        "question": "Alex divides a disk into four quadrants with two perpendicular diameters intersecting at the center of the disk. He draw",
+        "baseline_accuracy": 0.5,
+        "evolve_accuracy": 0.25,
+        "baseline_avg_tokens": 294706.0,
+        "evolve_avg_tokens": 408637.2,
+        "baseline_avg_steps": 34.5,
+        "evolve_avg_steps": 39.0,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "regression",
+          "token_blow_up",
+          "planner_or_retrieval_mismatch"
+        ],
+        "priority_score": 12.5,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "regular_polygon_segment_lengths",
+          "rectangle_grid_symmetry_points",
+          "convex_quadrilateral_area",
+          "square_vertices_from_side_and_center",
+          "triangle_inequality_check"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::11::Problem_11",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_11",
+      "query": "Let $S$ be the set of vertices of a regular $24$-gon. Find the number of ways to draw $12$ segments of equal lengths so ",
+      "retrieved_skills": [
+        {
+          "name": "regular_polygon_vertices",
+          "description": "Generate vertices of a regular n-gon on a unit circle with optional starting angle.",
+          "code": "def regular_polygon_vertices(n, start_angle=0, clockwise=False, labels=None):\n    \"\"\"Generate vertices of a regular n-gon inscribed in a unit circle.\n    \n    Key insight: Vertices are at angles start_angle + k*(2π/n) for k = 0, 1, ..., n-1.\n    Coordinates are (cos(angle), sin(angle)) on the unit circle.\n    \n    Args:\n        n: number of vertices\n        start_angle: starting angle in radians (default 0, pointing right)\n        clockwise: if True, vertices go clockwise; otherwise counterclockwise\n        labels: optional list of n labels for vertices (e.g., ['A','B','C'...])\n    \n    Returns:\n        If labels is None: list of (x, y) tuples\n        If labels is provided: dict mapping each label to its (x, y) coordinates\n    \"\"\"\n    import math\n    \n    direction = -1 if clockwise else 1\n    vertices = []\n    for i in range(n):\n        angle = start_angle + direction * i * 2 * math.pi / n\n        vertices.append((math.cos(angle), math.sin(angle)))\n    \n    if labels is None:\n        return vertices\n    else:\n        return {labels[i]: vertices[i] for i in range(n)}"
+        },
+        {
+          "name": "regular_polygon_segment_lengths",
+          "description": "Compute the segment (chord) counts and lengths for a regular n-gon.",
+          "code": "import math\nfrom math import comb\n\ndef regular_polygon_segment_lengths(n):\n    \"\"\"Compute segment counts and chord lengths for a regular n-gon.\n    \n    For a regular n-gon with vertices on a unit circle, segments are classified\n    by their \"distance\" d = min(|i-j|, n-|i-j|) where i,j are vertex indices.\n    Distance d corresponds to chord length 2*sin(d*π/n).\n    \n    Key insight: Distance d has n segments for d < n/2, and n/2 segments (diameters)\n    for d = n/2 (only when n is even).\n    \n    Args:\n        n: number of vertices in the regular polygon\n    \n    Returns:\n        dict mapping distance d to {'count': number of segments, 'length': chord length}\n    \"\"\"\n    result = {}\n    for d in range(1, n // 2 + 1):\n        # Chord length formula for unit circumradius\n        length = 2 * math.sin(d * math.pi / n)\n        # Count: n segments for d < n/2, n/2 for d = n/2 (diameters)\n        count = n // 2 if d == n / 2 else n\n        result[d] = {'count': count, 'length': length}\n    return result"
+        },
+        {
+          "name": "count_event_assignments",
+          "description": "Count ways to assign students to events under various constraint configurations.",
+          "code": "from math import comb, factorial\n\ndef count_event_assignments(num_students, num_events, constraint_type):\n    \"\"\"Count assignment methods for students to events under given constraints.\n    \n    Args:\n        num_students: number of students available\n        num_events: number of events\n        constraint_type: one of 'one_event_per_student', 'one_student_per_event', \n                        'one_student_per_event_reuse', 'unlimited'\n    \n    Returns:\n        Total number of valid registration methods\n    \n    constraint_type meanings:\n        'one_event_per_student': Each student in at most 1 event, events unlimited size\n        'one_student_per_event': Each event at most 1 student, each student at most 1 event  \n        'one_student_per_event_reuse': Each event at most 1 student, students can do multiple\n        'unlimited': No constraints on either side\n    \"\"\"\n    n, m = num_students, num_events\n    \n    if constraint_type == 'one_event_per_student':\n        # Each student chooses: nothing or one of m events\n        return (m + 1) ** n\n    \n    elif constraint_type == 'one_student_per_event':\n        # Sum over k=0 to min(n,m): choose k students, assign to k events\n        total = 0\n        for k in range(min(n, m) + 1):\n            total += comb(n, k) * comb(m, k) * factorial(k)\n        return total\n    \n    elif constraint_type == 'one_student_per_event_reuse':\n        # Each event: choose one of n students or none\n        return (n + 1) ** m\n    \n    elif constraint_type == 'unlimited':\n        # Each student can attend any subset of events: (2^m)^n\n        return (2 ** m) ** n\n    \n    else:\n        raise ValueError(f\"Unknown constraint_type: {constraint_type}\")"
+        },
+        {
+          "name": "square_vertices_from_side_and_center",
+          "description": "Generate vertices of a square given one side's midpoint coordinates and the center.",
+          "code": "def square_vertices_from_side_and_center(side_midpoint, center, side_length):\n    \"\"\"Compute all four vertices of a square given a side's midpoint and the center.\n    \n    Key insight: If M is the midpoint of one side and O is the center of the square,\n    then the vertex on that side in one direction is M + (M - O) rotated 90° (scaled).\n    The opposite vertex on that same side is M - (M - O) rotated 90°.\n    The remaining two vertices are on the opposite side, symmetric about O.\n    \n    Alternatively: the vector from center to midpoint is perpendicular to the side,\n    and the vertices are at distance side_length/2 along the side direction.\n    \n    Args:\n        side_midpoint: (x, y) tuple - midpoint of one side of the square\n        center: (x, y) tuple - center of the square\n        side_length: length of each side of the square\n    \n    Returns:\n        List of 4 vertices [(x1,y1), (x2,y2), (x3,y3), (x4,y4)] in counterclockwise order,\n        where the first two vertices are the ones adjacent to the given midpoint.\n    \"\"\"\n    mx, my = side_midpoint\n    cx, cy = center\n    h = side_length / 2  # half the side length\n    \n    # Vector from center to midpoint (perpendicular to side)\n    dx, dy = mx - cx, my - cy\n    \n    # Normalize to get perpendicular direction\n    import math\n    perp_len = math.sqrt(dx**2 + dy**2)\n    if perp_len == 0:\n        raise ValueError(\"Midpoint cannot be at center\")\n    dx_norm, dy_norm = dx / perp_len, dy / perp_len\n    \n    # Tangent direction (along the side)\n    tx, ty = -dy_norm, dx_norm\n    \n    # Two vertices on the side with given midpoint\n    v1 = (mx - h * tx, my - h * ty)\n    v2 = (mx + h * tx, my + h * ty)\n    \n    # Opposite side vertices (reflected through center)\n    v3 = (2*cx - v1[0], 2*cy - v1[1])\n    v4 = (2*cx - v2[0], 2*cy - v2[1])\n    \n    return [v1, v2, v3, v4]"
+        },
+        {
+          "name": "count_arithmetic_sequences",
+          "description": "Count arithmetic sequences of given length within a range, optionally requiring a specific term.",
+          "code": "def count_arithmetic_sequences(max_term, seq_length, required_term=None):\n    \"\"\"Count arithmetic sequences of exact length within [1, max_term].\n    \n    For an arithmetic sequence with first term a and common difference d:\n    - Sequence: a, a+d, a+2d, ..., a+(seq_length-1)*d\n    - Last term must be <= max_term: a + (seq_length-1)*d <= max_term\n    - So a <= max_term - (seq_length-1)*d\n    \n    Key insight: For each valid difference d, count valid starting terms a.\n    The constraint a >= 1 and a + (seq_length-1)*d <= max_term gives:\n    - Number of choices for a = max_term - (seq_length-1)*d\n    - Valid d ranges from 1 to floor((max_term - 1) / (seq_length - 1))\n    \n    For sequences containing a specific term:\n    - If required term = k, then k = a + j*d for some 0 <= j < seq_length\n    - For each valid (d, j), a = k - j*d must satisfy a >= 1\n    \n    Args:\n        max_term: maximum value in range (minimum is always 1)\n        seq_length: exact length of arithmetic sequence (number of terms)\n        required_term: if specified, only count sequences containing this term\n    \n    Returns:\n        Total count of valid arithmetic sequences\n    \"\"\"\n    n = seq_length\n    total = 0\n    \n    if required_term is None:\n        # Count all sequences: for each d, sum (max_term - (n-1)*d)\n        # Max d such that max_term - (n-1)*d >= 1\n        max_d = (max_term - 1) // (n - 1)\n        for d in range(1, max_d + 1):\n            total += max_term - (n - 1) * d\n    else:\n        k = required_term\n        # For each valid d, check if k can appear in sequence\n        max_d = (max_term - 1) // (n - 1)\n        for d in range(1, max_d + 1):\n            # k = a + j*d for some j in [0, n-1]\n            # a = k - j*d must be in [1, max_term - (n-1)*d]\n            # Also a + (n-1)*d <= max_term, but since a <= k and j >= 0:\n            # if a >= 1, we need a <= max_term - (n-1)*d\n            # i.e., k - j*d <= max_term - (n-1)*d\n            # j*d >= k - max_term + (n-1)*d = k - max_term + n*d - d\n            for j in range(n):\n                a = k - j * d\n                last_term = a + (n - 1) * d\n                if a >= 1 and last_term <= max_term:\n                    total += 1\n    return total"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Let $S$ be the set of vertices of a regular $24$-gon. Find the number of ways to draw $12$ segments of equal lengths so ",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Final computation\nn = 24\ntotal = 0\n\nprint(\"Segment lengths and their matching counts:\")\nprint(\"=\" * 50)\n\nfor d in range(1, n):\n    m = count_matchings_detailed(n, d)\n    if m > 0:\n        length_type = min(d, n - d)\n        total += m\n\nprint(f\"\\nTotal number of ways: {total}\")\nprint(\"\\nANSWER:\", t\nSegment lengths and their matching counts:\n==================================================\n\nTotal number of ways: 48\n\nANSWER: 48",
+        "historical_agent_summary": "# Final computation\nn = 24\ntotal = 0\n\nprint(\"Segment lengths and their matching counts:\")\nprint(\"=\" * 50)\n\nfor d in range(1, n):\n    m = count_matchings_detailed(n, d)\n    if m > 0:\n        length_type = min(d, n - d)\n        total += m\n\nprint(f\"\\nTotal number of ways: {total}\")\nprint(\"\\nANSWER:\", t\nSegment lengths and their matching counts:\n==================================================\n\nTotal number of ways: 48\n\nANSWER: 48",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "I need to find the number of ways to draw 12 segments of equal length connecting 24 vertices, where each vertex is used exactly once.\n\nLet me start by understanding the possible segment lengths and their properties.",
+          "import math\n\n# Get segment lengths for a regular 24-gon\nn = 24\nsegment_info = regular_polygon_segment_lengths(n)\n\nprint(\"Segment lengths in regular 24-gon:\")\nfor d, info in segment_info.items():\n    print(f\"  Distance d={d}: length = {info['length']:.6f}, count = {info['count']}\")",
+          "Segment lengths in regular 24-gon:\n  Distance d=1: length = 0.261052, count = 24\n  Distance d=2: length = 0.517638, count = 24\n  Distance d=3: length = 0.765367, count = 24\n  Distance d=4: length = 1.000000, count = 24\n  Distance d=5: length = 1.217523, count = 24\n  Distance d=6: length = 1.414214, count = 24\n  Distance d=7: length = 1.586707, count = 24\n  Distance d=8: length = 1.732051, count = 24\n  Distance d=9: length = 1.847759, count = 24\n  Distance d=10: length = 1.931852, count = 24\n  Distance d=11: length = 1.982890, count = 24\n  Distance d=12: length = 2.000000, count = 12"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "regression,token_blow_up,planner_or_retrieval_mismatch",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 11,
+        "problem_id": "Problem_11",
+        "question": "Let $S$ be the set of vertices of a regular $24$-gon. Find the number of ways to draw $12$ segments of equal lengths so ",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 0.75,
+        "baseline_avg_tokens": 91630.5,
+        "evolve_avg_tokens": 215742.5,
+        "baseline_avg_steps": 34.5,
+        "evolve_avg_steps": 32.25,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "regression",
+          "token_blow_up",
+          "planner_or_retrieval_mismatch"
+        ],
+        "priority_score": 12.5,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "regular_polygon_vertices",
+          "regular_polygon_segment_lengths",
+          "count_event_assignments",
+          "square_vertices_from_side_and_center",
+          "count_arithmetic_sequences"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::13::Problem_7",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_7",
+      "query": "Let $A$ be the set of positive integer divisors of $2025$. Let $B$ be a randomly selected subset of $A$. The probability",
+      "retrieved_skills": [
+        {
+          "name": "min_with_exact_divisors",
+          "description": "Find the smallest positive integer with exactly k positive divisors.",
+          "code": "import itertools\n\ndef min_with_exact_divisors(k):\n    \"\"\"Find the smallest positive integer with exactly k positive divisors.\n    \n    Key insight: To minimize n with d(n) = k, factorize k and use the divisor\n    count formula in reverse. For k = (e1+1)*(e2+1)*...*(em+1), the candidates\n    are of the form n = p1^e1 * p2^e2 * ... * pm^em. To minimize n, assign\n    larger exponents to smaller primes. Check all partitions of k into factors.\n    \n    Args:\n        k: the exact number of divisors required\n    \n    Returns:\n        The smallest positive integer with exactly k divisors.\n    \"\"\"\n    def get_factorizations(k):\n        \"\"\"Get all ways to write k as product of integers > 1.\"\"\"\n        if k == 1:\n            return [[]]\n        results = []\n        for d in range(2, k + 1):\n            if k % d == 0:\n                for rest in get_factorizations(k // d):\n                    results.append([d] + rest)\n        # Remove duplicates by sorting each factorization\n        unique = []\n        seen = set()\n        for f in results:\n            sorted_f = tuple(sorted(f, reverse=True))\n            if sorted_f not in seen:\n                seen.add(sorted_f)\n                unique.append(list(sorted_f))\n        return unique\n    \n    primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]\n    \n    factorizations = get_factorizations(k)\n    min_n = float('inf')\n    \n    for factors in factorizations:\n        # factors are (ei + 1) values, so exponents are (f - 1)\n        exponents = [f - 1 for f in factors]\n        exponents.sort(reverse=True)  # largest exponent with smallest prime\n        \n        n = 1\n        for i, exp in enumerate(exponents):\n            n *= primes[i] ** exp\n        \n        min_n = min(min_n, n)\n    \n    return min_n"
+        },
+        {
+          "name": "count_divisors",
+          "description": "Count the number of positive divisors of an integer using prime factorization.",
+          "code": "def count_divisors(n):\n    \"\"\"Count positive divisors using prime factorization.\n    \n    Key insight: If n = p1^e1 * p2^e2 * ... * pk^ek, then the number of\n    positive divisors is (e1 + 1) * (e2 + 1) * ... * (ek + 1).\n    This follows because each divisor is uniquely determined by choosing\n    an exponent from 0 to ei for each prime factor pi.\n    \n    Args:\n        n: positive integer\n    \n    Returns:\n        Number of positive divisors of n.\n    \"\"\"\n    if n == 1:\n        return 1\n    count = 1\n    p = 2\n    while p * p <= n:\n        exp = 0\n        while n % p == 0:\n            n //= p\n            exp += 1\n        count *= (exp + 1)\n        p += 1\n    if n > 1:\n        count *= 2\n    return count"
+        },
+        {
+          "name": "max_subset_no_pairwise_coprime_triple",
+          "description": "Find the maximum size of a subset with no three pairwise coprime elements.",
+          "code": "import math\nfrom itertools import combinations\n\ndef max_subset_no_pairwise_coprime_triple(elements, max_search_size=20):\n    \"\"\"Find the maximum size of a subset containing no three pairwise coprime elements.\n    \n    Key insight: A set has no three pairwise coprime elements if and only if\n    every triple of elements has at least one pair with gcd > 1. This is useful\n    in extremal combinatorics problems involving coprime constraints.\n    \n    Uses exhaustive search for small sets; for larger sets, consider structural\n    approaches based on the observation that if 2 is included, all odd elements\n    must share a common prime factor.\n    \n    Args:\n        elements: iterable of positive integers\n        max_search_size: maximum set size for exhaustive search (default 20)\n    \n    Returns:\n        Maximum size of a subset with no three pairwise coprime elements,\n        or None if the set is too large for exhaustive search.\n    \"\"\"\n    def has_triple(subset):\n        subset = list(subset)\n        n = len(subset)\n        for i in range(n):\n            for j in range(i + 1, n):\n                if math.gcd(subset[i], subset[j]) != 1:\n                    continue\n                for k in range(j + 1, n):\n                    if (math.gcd(subset[i], subset[k]) == 1 and \n                        math.gcd(subset[j], subset[k]) == 1):\n                        return True\n        return False\n    \n    elements = list(elements)\n    n = len(elements)\n    \n    if n > max_search_size:\n        return None\n    \n    for size in range(n, 0, -1):\n        for subset in combinations(elements, size):\n            if not has_triple(subset):\n                return size\n    return 0"
+        },
+        {
+          "name": "count_multiples_in_range",
+          "description": "Count how many multiples of k are in the inclusive range [a, b].",
+          "code": "def count_multiples_in_range(a, b, k):\n    \"\"\"Count the number of multiples of k in the inclusive range [a, b].\n    \n    Key insight: If a and b are both multiples of k, the count is (b - a) / k + 1.\n    For general ranges, find the first multiple >= a and last multiple <= b.\n    \n    Args:\n        a: start of range (inclusive)\n        b: end of range (inclusive)\n        k: the divisor whose multiples we're counting\n    \n    Returns:\n        Number of multiples of k in [a, b].\n    \"\"\"\n    first = ((a + k - 1) // k) * k  # smallest multiple of k >= a\n    last = (b // k) * k  # largest multiple of k <= b\n    if first > last:\n        return 0\n    return (last - first) // k + 1"
+        },
+        {
+          "name": "smallest_multiple_perfect_power",
+          "description": "Find the smallest positive multiple of n that is a perfect k-th power.",
+          "code": "def smallest_multiple_perfect_power(n, k):\n    \"\"\"Find the smallest positive multiple of n that is a perfect k-th power.\n    \n    Key insight: Uses exhaustive search through multiples of n. For each multiple m,\n    checks if there exists an integer r such that r^k = m by computing the k-th root\n    and verifying the result.\n    \n    Note: A more efficient approach uses prime factorization. For n = p1^a1 * p2^a2 * ...,\n    the smallest k-th power multiple requires each exponent to be a multiple of k.\n    The multiplier is product of pi^(k - ai%k) for each prime factor.\n    \n    Args:\n        n: the base number whose multiples we're checking\n        k: the power (2 for square, 3 for cube, etc.)\n    \n    Returns:\n        The smallest positive multiple of n that is a perfect k-th power.\n    \"\"\"\n    m = n\n    while True:\n        root = round(m ** (1/k))\n        if root ** k == m:\n            return m\n        m += n"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Let $A$ be the set of positive integer divisors of $2025$. Let $B$ be a randomly selected subset of $A$. The probability",
+        "previous_workflow_plan": null,
+        "workflow_summary": "Theoretical calculation:\nValid subsets of A∪B: 128 - 16 - 4 + 1 = 109\nTotal valid = 109 * 256 = 27904\nAnswer: m + n = 27904 + 32767 = 60671\n**Summary:**\n\n- $2025 = 3^4 \\cdot 5^2$ has $(4+1)(2+1) = 15$ divisors\n- Total non-empty subsets: $2^{15} - 1 = 32767$\n- For LCM to be 2025, subset needs at least one element divisible by $3^4$ and one divisible by $5^2$\n- Elements with factor $3^4$: $\\{81, 405, 2025\\}$ (3 elements)\n- Elements with f",
+        "historical_agent_summary": "Theoretical calculation:\nValid subsets of A∪B: 128 - 16 - 4 + 1 = 109\nTotal valid = 109 * 256 = 27904\nAnswer: m + n = 27904 + 32767 = 60671\n**Summary:**\n\n- $2025 = 3^4 \\cdot 5^2$ has $(4+1)(2+1) = 15$ divisors\n- Total non-empty subsets: $2^{15} - 1 = 32767$\n- For LCM to be 2025, subset needs at least one element divisible by $3^4$ and one divisible by $5^2$\n- Elements with factor $3^4$: $\\{81, 405, 2025\\}$ (3 elements)\n- Elements with f",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "I need to solve this probability problem about subsets of divisors of 2025.\n\n**Step 1: Analyze 2025 and its divisors**\n$2025 = 5^2 \\cdot 9^2 = 3^4 \\cdot 5^2$\n\nSo divisors have the form $3^a \\cdot 5^b$ where $0 \\le a \\le 4$ and $0 \\le b \\le 2$.\n\n**Step 2: Determine when LCM equals 2025**\n\nFor a subset $B$ to have $\\text{lcm}(B) = 2025 = 3^4 \\cdot 5^2$, the subset must contain:\n- At least one element with $a = 4$ (to get the $3^4$ factor)\n- At least one element with $b = 2$ (to get the $5^2$ factor)\n\n**Step 3: Count using complementary counting**\n\nFor elements with $a = 4$: $\\{3^4 \\cdot 5^b : b \\in \\{0, 1, 2\\}\\}$ → 3 elements\n- Valid subsets: $2^3 - 1 = 7$ (non-empty subsets)\n\nFor elements with $b = 2$: $\\{3^a \\cdot 5^2 : a \\in \\{0, 1, 2, 3, 4\\}\\}$ → 5 elements\n- Valid subsets: $2^5 - 1 = 31$ (non-empty subsets)\n\nElements with neither $a = 4$ nor $b = 2$: $\\{3^a \\cdot 5^b : a \\in \\{0, 1, 2, 3\\}, b \\in \\{0, 1\\}\\}$ → $4 \\times 2 = 8$ elements\n- Any subset works: $2^8 = 256$\n\nBy multiplication principle:\n- Valid non-empty subsets = $7 \\times 31 \\times 256 = 55,552$\n\nLet me verify this with code:",
+          "import math\nfrom itertools import combinations\n\n# Generate all divisors of 2025\nn = 2025\ndivisors = []\nfor i in range(1, n + 1):\n    if n % i == 0:\n        divisors.append(i)\n\nprint(f\"2025 = {2025} = 3^4 * 5^2\")\nprint(f\"Number of divisors: {len(divisors)}\")\nprint(f\"Divisors: {divisors}\")\n\n# Count subsets with LCM = 2025 (non-empty)\nvalid_count = 0\ntotal_subsets = 2**len(divisors) - 1  # non-empty subsets\n\nfor r in range(1, len(divisors) + 1):\n    for subset in combinations(divisors, r):\n        lcm = subset[0]\n        for x in subset[1:]:\n            lcm = lcm * x // math.gcd(lcm, x)\n        if lcm == 2025:\n            valid_count += 1\n\nprint(f\"\\nTotal non-empty subsets: {total_subsets}\")\nprint(f\"Valid subsets (LCM = 2025): {valid_count}\")\n\n# Theoretical calculation\n# Elements with a=4 (i.e., divisible by 81): 3^4 * 5^b for b=0,1,2\n# These are: 81, 405, 2025\n# Subsets containing at least one: 2^3 - 1 = 7\n\n# Elements with b=2 (i.e., divisible by 25): 3^a * 5^2 for a=0,1,2,3,4  \n# These are: 25, 75, 225, 675, 2025\n# Subsets containing at least one: 2^5 - 1 = 31\n\n# Elements with neither: 3^a * 5^b for a=0,1,2,3 and b=0,1\n# Count: 4 * 2 = 8 elements\n# Any subset: 2^8 = 256\n\n# But 2025 ",
+          "2025 = 2025 = 3^4 * 5^2\nNumber of divisors: 15\nDivisors: [1, 3, 5, 9, 15, 25, 27, 45, 75, 81, 135, 225, 405, 675, 2025]\n\nTotal non-empty subsets: 32767\nValid subsets (LCM = 2025): 27904\n\nElements with a=4: [81, 405, 2025]\nElements with b=2: [25, 75, 225, 675, 2025]\nElements with neither: [1, 3, 5, 9, 15, 27, 45, 135]\nCount with a=4: 3\nCount with b=2: 5\nCount with neither: 8"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "regression,token_blow_up,planner_or_retrieval_mismatch",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 13,
+        "problem_id": "Problem_7",
+        "question": "Let $A$ be the set of positive integer divisors of $2025$. Let $B$ be a randomly selected subset of $A$. The probability",
+        "baseline_accuracy": 0.5,
+        "evolve_accuracy": 0.25,
+        "baseline_avg_tokens": 36226.5,
+        "evolve_avg_tokens": 53706.0,
+        "baseline_avg_steps": 10.75,
+        "evolve_avg_steps": 15.75,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "regression",
+          "token_blow_up",
+          "planner_or_retrieval_mismatch"
+        ],
+        "priority_score": 12.5,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "min_with_exact_divisors",
+          "count_divisors",
+          "max_subset_no_pairwise_coprime_triple",
+          "count_multiples_in_range",
+          "smallest_multiple_perfect_power"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::19::Problem_3",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_3",
+      "query": "Four unit squares form a $2\\times 2$ grid. Each of the $12$ unit line segments forming the sides of the squares is color",
+      "retrieved_skills": [
+        {
+          "name": "count_event_assignments",
+          "description": "Count ways to assign students to events under various constraint configurations.",
+          "code": "from math import comb, factorial\n\ndef count_event_assignments(num_students, num_events, constraint_type):\n    \"\"\"Count assignment methods for students to events under given constraints.\n    \n    Args:\n        num_students: number of students available\n        num_events: number of events\n        constraint_type: one of 'one_event_per_student', 'one_student_per_event', \n                        'one_student_per_event_reuse', 'unlimited'\n    \n    Returns:\n        Total number of valid registration methods\n    \n    constraint_type meanings:\n        'one_event_per_student': Each student in at most 1 event, events unlimited size\n        'one_student_per_event': Each event at most 1 student, each student at most 1 event  \n        'one_student_per_event_reuse': Each event at most 1 student, students can do multiple\n        'unlimited': No constraints on either side\n    \"\"\"\n    n, m = num_students, num_events\n    \n    if constraint_type == 'one_event_per_student':\n        # Each student chooses: nothing or one of m events\n        return (m + 1) ** n\n    \n    elif constraint_type == 'one_student_per_event':\n        # Sum over k=0 to min(n,m): choose k students, assign to k events\n        total = 0\n        for k in range(min(n, m) + 1):\n            total += comb(n, k) * comb(m, k) * factorial(k)\n        return total\n    \n    elif constraint_type == 'one_student_per_event_reuse':\n        # Each event: choose one of n students or none\n        return (n + 1) ** m\n    \n    elif constraint_type == 'unlimited':\n        # Each student can attend any subset of events: (2^m)^n\n        return (2 ** m) ** n\n    \n    else:\n        raise ValueError(f\"Unknown constraint_type: {constraint_type}\")"
+        },
+        {
+          "name": "count_tournament_outcomes",
+          "description": "Count distinct outcomes in an elimination tournament with a fixed seeding structure.",
+          "code": "def count_tournament_outcomes(num_players, structure='ascending_challenge'):\n    \"\"\"Count distinct final ranking outcomes in an elimination tournament.\n    \n    Key insight: For an ascending challenge tournament where players enter in \n    reverse seed order (lowest seed first), each match has 2 possible outcomes,\n    giving 2^(num_players-1) total outcomes. For the ascending challenge structure,\n    all outcomes produce distinct final rankings.\n    \n    Structure 'ascending_challenge': P_n plays P_{n-1}, winner plays P_{n-2}, etc.\n    Each match: current winner vs next challenger, loser gets next-lowest award.\n    \n    Args:\n        num_players: number of players in the tournament\n        structure: tournament format (currently only 'ascending_challenge')\n    \n    Returns:\n        Number of distinct possible final ranking sequences\n    \"\"\"\n    if structure == 'ascending_challenge':\n        # Each of (num_players - 1) matches has 2 outcomes\n        # All 2^(num_players-1) outcomes produce distinct rankings\n        return 2 ** (num_players - 1)\n    else:\n        raise ValueError(f\"Unknown tournament structure: {structure}\")"
+        },
+        {
+          "name": "digit_rearrangement_range",
+          "description": "Compute the difference between largest and smallest arrangements of digits (range of rearrangements).",
+          "code": "def digit_rearrangement_range(digits):\n    \"\"\"Compute the difference between largest and smallest arrangements of given digits.\n    \n    Key insight: For a digit set {d_1, ..., d_n} sorted in ascending order,\n    largest - smallest = sum(d[i] * (10^(n-1-i) - 10^i)) for i in 0..n-1.\n    \n    This represents how much \"spread\" there is in rearrangements of these digits.\n    \n    Args:\n        digits: list of digits (integers 0-9)\n    \n    Returns:\n        The difference (largest - smallest) between extreme arrangements.\n    \"\"\"\n    sorted_digits = sorted(digits)\n    n = len(sorted_digits)\n    \n    largest = sum(d * (10 ** (n - 1 - i)) for i, d in enumerate(sorted_digits[::-1]))\n    smallest = sum(d * (10 ** (n - 1 - i)) for i, d in enumerate(sorted_digits))\n    \n    return largest - smallest"
+        },
+        {
+          "name": "satisfies_4digit_constraints",
+          "description": "Check if a number satisfies common 4-digit number constraints.",
+          "code": "def satisfies_4digit_constraints(n, require_all_different=True, require_no_leading_zero=True):\n    \"\"\"Check if a number satisfies common constraints for 4-digit problems.\n    \n    Key insight: Many digit problems share common base constraints that can be\n    composed together, reducing boilerplate in constraint checking loops.\n    \n    Args:\n        n: integer to check\n        require_all_different: if True, all 4 digits must be distinct\n        require_no_leading_zero: if True, leading digit cannot be zero\n    \n    Returns:\n        True if number is a 4-digit integer satisfying the specified constraints.\n    \"\"\"\n    s = str(n)\n    \n    if len(s) != 4:\n        return False\n    \n    if require_no_leading_zero and s[0] == '0':\n        return False\n    \n    if require_all_different and len(set(s)) != 4:\n        return False\n    \n    return True"
+        },
+        {
+          "name": "generate_4digit_with_pattern",
+          "description": "Generate 4-digit numbers with specific digits at specific positions.",
+          "code": "def generate_4digit_with_pattern(first=None, second=None, third=None, fourth=None):\n    \"\"\"Generate all 4-digit numbers matching a specified digit pattern.\n    \n    Key insight: Using None as wildcard allows generating numbers that match\n    specific positions while iterating over all possibilities for others.\n    \n    Args:\n        first, second, third, fourth: digit (0-9) for each position, or None for wildcard\n    \n    Yields:\n        All 4-digit integers matching the pattern (leading digit won't be 0).\n    \"\"\"\n    first_digits = [first] if first is not None else range(1, 10)\n    second_digits = [second] if second is not None else range(10)\n    third_digits = [third] if third is not None else range(10)\n    fourth_digits = [fourth] if fourth is not None else range(10)\n    \n    for d1 in first_digits:\n        if d1 == 0:\n            continue\n        for d2 in second_digits:\n            for d3 in third_digits:\n                for d4 in fourth_digits:\n                    yield d1 * 1000 + d2 * 100 + d3 * 10 + d4"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Four unit squares form a $2\\times 2$ grid. Each of the $12$ unit line segments forming the sides of the squares is color",
+        "previous_workflow_plan": null,
+        "workflow_summary": "from itertools import product\n\ndef count_valid_colorings():\n    \"\"\"\n    Count colorings where each unit square has exactly 2 red and 2 blue sides.\n    Use 0 for blue, 1 for red.\n    \"\"\"\n    count = 0\n    \n    # Each segment: h[i][j] for horizontal segment in row i, position j\n    # v[i][j] for verti\nNumber of valid colorings: 82\nANSWER: 82",
+        "historical_agent_summary": "from itertools import product\n\ndef count_valid_colorings():\n    \"\"\"\n    Count colorings where each unit square has exactly 2 red and 2 blue sides.\n    Use 0 for blue, 1 for red.\n    \"\"\"\n    count = 0\n    \n    # Each segment: h[i][j] for horizontal segment in row i, position j\n    # v[i][j] for verti\nNumber of valid colorings: 82\nANSWER: 82",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Looking at this problem, I need to carefully identify all line segments and the constraints.\n\nLet me visualize the grid:\n- The $2 \\times 2$ grid of unit squares has $3 \\times 3 = 9$ points\n- There are 12 unit line segments: 6 horizontal (3 rows × 2 segments each) and 6 vertical (3 columns × 2 segments each)\n\nLet me label them:\n- Horizontal segments in row $i$ (from top): $h_{i,0}, h_{i,1}$ for $i = 0, 1, 2$\n- Vertical segments in column $j$ (from left): $v_{j,0}, v_{j,1}$ for $j = 0, 1, 2$\n\nThe four unit squares are:\n- Square 0 (top-left): sides are $v_{0,0}, h_{0,0}, v_{1,0}, h_{1,0}$\n- Square 1 (top-right): sides are $v_{1,0}, h_{0,1}, v_{2,0}, h_{1,1}$\n- Square 2 (bottom-left): sides are $v_{0,1}, h_{1,0}, v_{1,1}, h_{2,0}$\n- Square 3 (bottom-right): sides are $v_{1,1}, h_{1,1}, v_{2,1}, h_{2,1}$\n\nEach square must have exactly 2 red and 2 blue sides. Let me code this:",
+          "from itertools import product\n\ndef count_valid_colorings():\n    \"\"\"\n    Count colorings where each unit square has exactly 2 red and 2 blue sides.\n    Use 0 for blue, 1 for red.\n    \"\"\"\n    count = 0\n    \n    # Each segment: h[i][j] for horizontal segment in row i, position j\n    # v[i][j] for vertical segment in column i, position j\n    for bits in product([0, 1], repeat=12):\n        # Unpack bits\n        h00, h01, h10, h11, h20, h21 = bits[0:6]\n        v00, v01, v10, v11, v20, v21 = bits[6:12]\n        \n        # Square 0 (top-left): v00, h00, v10, h10\n        sq0 = v00 + h00 + v10 + h10\n        \n        # Square 1 (top-right): v10, h01, v20, h11\n        sq1 = v10 + h01 + v20 + h11\n        \n        # Square 2 (bottom-left): v01, h10, v11, h20\n        sq2 = v01 + h10 + v11 + h20\n        \n        # Square 3 (bottom-right): v11, h11, v21, h21\n        sq3 = v11 + h11 + v21 + h21\n        \n        # Each square must have exactly 2 red sides (sum = 2)\n        if sq0 == 2 and sq1 == 2 and sq2 == 2 and sq3 == 2:\n            count += 1\n    \n    return count\n\nresult = count_valid_colorings()\nprint(f\"Number of valid colorings: {result}\")\nprint(\"ANSWER:\", result)",
+          "Number of valid colorings: 82\nANSWER: 82"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "regression,token_blow_up,planner_or_retrieval_mismatch",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 19,
+        "problem_id": "Problem_3",
+        "question": "The 9 members of a baseball team went to an ice cream parlor after their game. Each player had a singlescoop cone of cho",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 0.75,
+        "baseline_avg_tokens": 6329.2,
+        "evolve_avg_tokens": 9851.2,
+        "baseline_avg_steps": 7.5,
+        "evolve_avg_steps": 5.25,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "regression",
+          "token_blow_up",
+          "planner_or_retrieval_mismatch"
+        ],
+        "priority_score": 12.5,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "count_event_assignments",
+          "count_tournament_outcomes",
+          "digit_rearrangement_range",
+          "satisfies_4digit_constraints",
+          "generate_4digit_with_pattern"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::25::Problem_9",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_9",
+      "query": "There are $n$ values of $x$ in the interval $0 < x < 2\\pi$ where $f(x) = \\sin\\left(7\\pi \\cdot \\sin(5x)\\right) = 0$. For ",
+      "retrieved_skills": [
+        {
+          "name": "absolute_value_curve_area",
+          "description": "Compute the area enclosed by equations of the form x² + y² = a|x| + b|y| by exploiting symmetry.",
+          "code": "import math\n\ndef absolute_value_curve_area(a, b):\n    \"\"\"Compute the area enclosed by x² + y² = a|x| + b|y| using quadrant symmetry.\n    \n    Key insight: Due to the absolute values, the curve is symmetric about both axes.\n    In each quadrant, the equation becomes a circle:\n    - Q1 (x≥0, y≥0): x² + y² = ax + by → circle centered at (a/2, b/2)\n    - Q2 (x≤0, y≥0): x² + y² = -ax + by → circle centered at (-a/2, b/2)\n    - Q3 (x≤0, y≤0): x² + y² = -ax - by → circle centered at (-a/2, -b/2)\n    - Q4 (x≥0, y≤0): x² + y² = ax - by → circle centered at (a/2, -b/2)\n    \n    All four circles have the same radius r = sqrt(a² + b²)/2.\n    The total area is 4 times the area in one quadrant.\n    \n    Args:\n        a: coefficient of |x| in the equation\n        b: coefficient of |y| in the equation\n    \n    Returns:\n        Total area enclosed by the curve\n    \"\"\"\n    # In Q1, the circle is: x² + y² = ax + by\n    # Rearranging: (x - a/2)² + (y - b/2)² = (a² + b²)/4\n    # Center: (a/2, b/2), Radius: sqrt(a² + b²)/2\n    \n    cx = a / 2\n    cy = b / 2\n    r = math.sqrt(a**2 + b**2) / 2\n    \n    # Compute area in Q1\n    area_q1 = circle_quadrant_intersection_area(cx, cy, r)\n    \n    # Total area is 4 times Q1 area (by symmetry)\n    return 4 * area_q1"
+        },
+        {
+          "name": "square_inscribed_on_axis_through_point",
+          "description": "Find side length of a square with one vertex at origin, sides parallel to axes, and opposite vertex on a line through origin.",
+          "code": "import sympy as sp\nfrom sympy import simplify, Rational, sqrt\n\ndef square_inscribed_on_axis_through_point(m):\n    \"\"\"Find side length of square with vertex at origin, sides parallel to axes, opposite vertex on line y = mx.\n    \n    Key insight: If square has side s with vertices at (0,0), (s,0), (s,s), (0,s), the opposite\n    vertex (s, s) lies on line y = m*x through the origin. So s = m*s, which would require m = 1.\n    \n    For a square with one corner on the line and one vertex at a point (x0, 0) on x-axis,\n    going counter-clockwise: vertices are (x0, 0), (x0-s, 0), (x0-s, s), (x0, s).\n    The vertex (x0-s, s) is on line y = m*x, so s = m*(x0-s).\n    Solving: s = m*x0 - m*s, thus s*(1+m) = m*x0, giving s = m*x0/(1+m).\n    \n    Args:\n        m: slope of the line through origin\n    \n    Returns:\n        Side length s = m/(1+m) for x0 = 1 (unit distance from origin)\n    \"\"\"\n    return simplify(m / (1 + m))"
+        },
+        {
+          "name": "triangle_area_max_on_conic_with_perpendicular_bisector",
+          "description": "Find maximum triangle area with vertices at origin and two points on a conic, where the perpendicular bisector passes through a fixed point.",
+          "code": "import sympy as sp\nfrom sympy import cos, sin, sqrt, Abs, simplify, pi, Rational\n\ndef triangle_area_max_on_conic_with_perpendicular_bisector(conic_params, fixed_point):\n    \"\"\"Find max area of triangle OAB where A, B are on conic and perpendicular bisector of AB passes through fixed point.\n    \n    Key insight: Parameterize points on ellipse x²/a² + y²/b² = 1 using trigonometric form:\n    A = (a*cos(α), b*sin(α)), B = (a*cos(β), b*sin(β))\n    \n    For perpendicular bisector to pass through D(dx, dy):\n    (D - M) · (B - A) = 0, where M is midpoint of AB\n    \n    Using u = (α+β)/2, v = (β-α)/2, the constraint simplifies to:\n    cos(u)*sin(v)*[b*sin(u)*cos(v) + b*dy*cos(v) - ...] = 0\n    \n    Area = |OA × OB|/2 = (a*b/2)|sin(β-α)| = (a*b/2)|sin(2v)|\n    \n    Args:\n        conic_params: tuple (a, b) for ellipse x²/a² + y²/b² = 1\n        fixed_point: tuple (dx, dy) for the point on perpendicular bisector\n    \n    Returns:\n        Maximum area achievable under the constraint\n    \"\"\"\n    a_semi, b_semi = conic_params\n    dx, dy = fixed_point\n    \n    # For ellipse x²/a² + y²/b² = 1, parameterize with angle θ:\n    # Point = (a*cos(θ), b*sin(θ))\n    \n    # Using symmetry analysis:\n    # Area = (a*b/2) * |sin(β-α)|\n    # The perpendicular bisector constraint can be satisfied when\n    # the points are symmetric (e.g., same y-coordinate for horizontal AB)\n    \n    # For maximum area, we need |sin(β-α)| = 1, i.e., β-α = ±π/2\n    \n    # Check if configuration with horizontal AB (same y-coord) works:\n    # A = (a*cos(θ), b*sin(θ)), B = (-a*cos(θ), b*sin(θ))\n    # Midpoint M = (0, b*sin(θ))\n    # Perpendicular bisector is x = 0 (vertical line)\n    # If dx = 0, D lies on this line ✓\n    \n    if dx == 0:\n        # Maximum area achievable with horizontal chord\n        max_area = a_semi * b_semi / 2\n        return max_area\n    \n    # For general case, use optimization over parameters\n    # (This is a simplified return for the common case)\n    return a_semi * b_semi / 2"
+        },
+        {
+          "name": "log_fraction_function_symmetry",
+          "description": "Find all points on a logarithmic function of the form log((ax+b)/(x-1)) that have a given y-value, exploiting the symmetry f(x) + f(-x) = 0.",
+          "code": "def log_fraction_function_symmetry(a, b, known_points):\n    \"\"\"Find symmetric points on f(x) = log((ax+b)/(x-1)) given some known points.\n    \n    Key insight: For f(x) = log((x+1)/(x-1)) with base 2, the function has the property\n    f(x) + f(-x) = 0, meaning f(-x) = -f(x). This comes from:\n    (x+1)(-x+1) = (1-x)(1+x) and (x-1)(-x-1) = -(x-1)(x+1)\n    So the ratio for -x is the reciprocal of the ratio for x, giving opposite log values.\n    \n    To find x-coordinates with a given y-value y₀:\n    Solve log₂((x+1)/(x-1)) = y₀\n    This gives (x+1)/(x-1) = 2^y₀\n    Solving: x = (2^y₀ + 1)/(2^y₀ - 1)\n    \n    Args:\n        a: coefficient in numerator (a=1 for standard form)\n        b: constant in numerator (b=1 for standard form)  \n        known_points: list of (x, y) tuples that are known to be on the curve\n    \n    Returns:\n        Dictionary mapping y-values to list of (x, y) points on the curve,\n        including the symmetric point (-x, -y) for each known point (x, y).\n    \"\"\"\n    import math\n    from fractions import Fraction\n    \n    result = {}\n    \n    for x_val, y_val in known_points:\n        # Add the known point\n        if y_val not in result:\n            result[y_val] = []\n        result[y_val].append((x_val, y_val))\n        \n        # Add symmetric point (-x, -y)\n        if -y_val not in result:\n            result[-y_val] = []\n        result[-y_val].append((-x_val, -y_val))\n        \n        # For y ≠ 0, find the other x with same y\n        # From the equation (x+1)/(x-1) = 2^y\n        if y_val != 0:\n            # Already have one x, but there might be another\n            # Actually for this function, each y ≠ 0 has exactly one x in each domain region\n            pass\n    \n    return result"
+        },
+        {
+          "name": "hyperbola_perpendicular_bisector_condition",
+          "description": "Find relationship between hyperbola parameters when a line through origin is the perpendicular bisector of a segment from a point on hyperbola to a focus.",
+          "code": "def hyperbola_perpendicular_bisector_condition(slope_of_bisector, target_focus='right', quadrant=2):\n    \"\"\"Find the eccentricity condition when a line through origin is the perpendicular bisector\n    of the segment from a point P on hyperbola to a focus.\n    \n    Key insight: For hyperbola x²/a² - y²/b² = 1 with focus F2 = (c,0):\n    - P in second quadrant: parameterize as P = (-a*cosh(u), b*sinh(u))\n    - Midpoint M of PF2 on line y = mx: gives sinh(u) + cosh(u) = c/a, so e^u = c/a\n    - PF2 perpendicular to bisector (slope m): gives slope of PF2 = -1/m\n    \n    The constraints lead to: b²/a² = m², so eccentricity e = sqrt(1 + m²)\n    \n    For this problem: m = b/a, giving b²/a² = 4, e = √5\n    \n    Args:\n        slope_of_bisector: slope m of the perpendicular bisector line y = mx\n        target_focus: 'right' for F2 = (c,0), 'left' for F1 = (-c,0)\n        quadrant: which quadrant point P lies in (2 for second quadrant)\n    \n    Returns:\n        Dictionary with b_over_a_squared (b²/a² ratio), eccentricity, and verification values\n    \"\"\"\n    from sympy import symbols, Eq, solve, sqrt, simplify\n    \n    m = slope_of_bisector\n    t = symbols('t', positive=True, real=True)\n    \n    # For line y = (b/a)x to be perpendicular bisector:\n    # The derivation shows b²/a² = m² when m = b/a (the line's slope equals b/a)\n    # This gives a polynomial t² - 3t - 4 = 0 where t = b²/a²\n    \n    # From the mathematical derivation:\n    # Midpoint condition: a(sinh + cosh) = c → e^u = c/a\n    # Slope condition: b²*sinh = a*c + a²*cosh\n    # Substituting sinh and cosh in terms of e^u gives:\n    # -4a⁴ - 3a²b² + b⁴ = 0 → t² - 3t - 4 = 0 → t = 4 (positive solution)\n    \n    poly_eq = Eq(t**2 - 3*t - 4, 0)\n    solutions_t = solve(poly_eq, t)\n    t_valid = float([sol for sol in solutions_t if sol > 0][0])\n    \n    eccentricity = sqrt(1 + t_valid)\n    \n    return {\n        'b_over_a_squared': t_valid,\n        'b_over_a': sqrt(t_valid),\n        'eccentricity': eccentricity,\n        'verification_note': f'For perpendicular bisector y = (b/a)x, eccentricity = √5'\n    }"
+        }
+      ],
+      "history_context": {
+        "previous_query": "There are $n$ values of $x$ in the interval $0 < x < 2\\pi$ where $f(x) = \\sin\\left(7\\pi \\cdot \\sin(5x)\\right) = 0$. For ",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Verify tangent point count\n# cos(5x) = 0 when 5x = pi/2 + m*pi, m integer\n# In 0 < x < 2*pi: 0 < 5x < 10*pi\n# pi/2 < 5x < 10*pi means pi/2 < pi/2 + m*pi < 10*pi\n# 0 < m*pi < 19*pi/2, so 0 <= m <= 9\n\n# Actually, let's solve more carefully:\n# x = (pi/2 + m*pi) / 5\n# We need 0 < (pi/2 + m*pi)/5 < 2*p\nNumber of tangent points (where cos(5x) = 0): 10\n\nAll tangent points x (simplified):\n  x_0 = pi/10 = 0.3142\n  x_1 = 3*pi/10 = 0.9425\n  x_2 = pi/2 = 1.5708\n  x_3 = 7*pi/10 = 2.1991\n  x_4 = 9*pi/10 = 2.8274\n  x_5 = 11*pi/10 = 3.4558\n  x_6 = 13*pi/10 = 4.0841\n  x_7 = 3*pi/2 = 4.7124\n  x_8 = 17*pi/10 = ",
+        "historical_agent_summary": "# Verify tangent point count\n# cos(5x) = 0 when 5x = pi/2 + m*pi, m integer\n# In 0 < x < 2*pi: 0 < 5x < 10*pi\n# pi/2 < 5x < 10*pi means pi/2 < pi/2 + m*pi < 10*pi\n# 0 < m*pi < 19*pi/2, so 0 <= m <= 9\n\n# Actually, let's solve more carefully:\n# x = (pi/2 + m*pi) / 5\n# We need 0 < (pi/2 + m*pi)/5 < 2*p\nNumber of tangent points (where cos(5x) = 0): 10\n\nAll tangent points x (simplified):\n  x_0 = pi/10 = 0.3142\n  x_1 = 3*pi/10 = 0.9425\n  x_2 = pi/2 = 1.5708\n  x_3 = 7*pi/10 = 2.1991\n  x_4 = 9*pi/10 = 2.8274\n  x_5 = 11*pi/10 = 3.4558\n  x_6 = 13*pi/10 = 4.0841\n  x_7 = 3*pi/2 = 4.7124\n  x_8 = 17*pi/10 = ",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "I need to find where $f(x) = \\sin(7\\pi \\cdot \\sin(5x)) = 0$ and determine which zeros are tangent points.\n\n**Part 1: Finding all zeros**\n\n$f(x) = 0$ when $7\\pi \\cdot \\sin(5x) = k\\pi$ for some integer $k$, which means $\\sin(5x) = \\frac{k}{7}$.\n\nFor solutions to exist: $-1 \\leq \\frac{k}{7} \\leq 1$, so $k \\in \\{-7, -6, ..., 6, 7\\}$.\n\nLet me verify the count systematically:",
+          "import math\n\n# Count solutions for each k\ntotal_solutions = 0\nsolutions_info = []\n\nfor k in range(-7, 8):  # -7 to 7 inclusive\n    val = k / 7\n    if -1 <= val <= 1:\n        # For each value of sin(5x), we get solutions\n        # In 0 < x < 2pi, we have 0 < 5x < 10pi\n        # sin(theta) = c for each c in (-1, 1): 2 solutions per period, 10 solutions in 5 periods\n        # sin(theta) = 1 or -1: 1 solution per period, 5 solutions in 5 periods\n        if abs(val) < 1:\n            count = 10  # 2 per period * 5 periods\n        else:  # val = 1 or -1\n            count = 5   # 1 per period * 5 periods\n        total_solutions += count\n        solutions_info.append((k, val, count))\n\nprint(f\"Total solutions n = {total_solutions}\")\nprint(f\"\\nBreakdown by k:\")\nfor k, val, count in solutions_info:\n    print(f\"  k={k:2d}, sin(5x)={val:6.3f}, count={count}\")",
+          "Total solutions n = 140\n\nBreakdown by k:\n  k=-7, sin(5x)=-1.000, count=5\n  k=-6, sin(5x)=-0.857, count=10\n  k=-5, sin(5x)=-0.714, count=10\n  k=-4, sin(5x)=-0.571, count=10\n  k=-3, sin(5x)=-0.429, count=10\n  k=-2, sin(5x)=-0.286, count=10\n  k=-1, sin(5x)=-0.143, count=10\n  k= 0, sin(5x)= 0.000, count=10\n  k= 1, sin(5x)= 0.143, count=10\n  k= 2, sin(5x)= 0.286, count=10\n  k= 3, sin(5x)= 0.429, count=10\n  k= 4, sin(5x)= 0.571, count=10\n  k= 5, sin(5x)= 0.714, count=10\n  k= 6, sin(5x)= 0.857, count=10\n  k= 7, sin(5x)= 1.000, count=5"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "regression,token_blow_up,planner_or_retrieval_mismatch",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 25,
+        "problem_id": "Problem_9",
+        "question": "The parabola with equation $y=x^{2}-4$ is rotated $60^{\\circ}$ counterclockwise around the origin. The unique point in t",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 0.75,
+        "baseline_avg_tokens": 55074.8,
+        "evolve_avg_tokens": 95327.8,
+        "baseline_avg_steps": 23.75,
+        "evolve_avg_steps": 25.0,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "regression",
+          "token_blow_up",
+          "planner_or_retrieval_mismatch"
+        ],
+        "priority_score": 12.5,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "absolute_value_curve_area",
+          "square_inscribed_on_axis_through_point",
+          "triangle_area_max_on_conic_with_perpendicular_bisector",
+          "log_fraction_function_symmetry",
+          "hyperbola_perpendicular_bisector_condition"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::26::Problem_9",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_9",
+      "query": "There are $n$ values of $x$ in the interval $0 < x < 2\\pi$ where $f(x) = \\sin\\left(7\\pi \\cdot \\sin(5x)\\right) = 0$. For ",
+      "retrieved_skills": [
+        {
+          "name": "trig_product_to_linear",
+          "description": "Convert product of trig functions into linear combination using compound angle identities.",
+          "code": "import sympy as sp\n\ndef trig_product_to_linear(expr, symbol):\n    \"\"\"Convert product of trig functions to linear form using compound angle identities.\n    \n    Key insight: Products of sin and cos can be converted using identities:\n    - sin(A)cos(B) = (1/2)[sin(A+B) + sin(A-B)]\n    - cos(A)sin(B) = (1/2)[sin(A+B) - sin(A-B)]\n    - cos(A)cos(B) = (1/2)[cos(A+B) + cos(A-B)]\n    - sin(A)sin(B) = (1/2)[cos(A-B) - cos(A+B)]\n    \n    Useful for simplifying functions to find derivatives and analyze monotonicity.\n    \n    Args:\n        expr: sympy expression containing trig products\n        symbol: the angle variable (e.g., x)\n    \n    Returns:\n        Simplified expression with products expanded to linear combinations\n    \"\"\"\n    # Use sympy's trig expansion\n    expanded = expr.expand(trig=True)\n    return sp.simplify(expanded)"
+        },
+        {
+          "name": "tangent_half_angle_substitution",
+          "description": "Compute the Weierstrass tangent half-angle substitution expressions for trigonometric integrals.",
+          "code": "import sympy as sp\n\ndef tangent_half_angle_substitution(t=None):\n    \"\"\"Compute Weierstrass substitution: t = tan(x/2) transforms trig integrals to rational.\n    \n    Key insight: The substitution t = tan(x/2) converts any rational function of sin(x) and cos(x)\n    into a rational function of t, making integration possible via partial fractions.\n    \n    The standard formulas:\n    - sin(x) = 2t/(1+t²)\n    - cos(x) = (1-t²)/(1+t²)  \n    - dx = 2dt/(1+t²)\n    - tan(x/2) = t\n    \n    Limits transform: x=0 → t=0, x=π/2 → t=1, x=π → t=∞\n    \n    Args:\n        t: optional symbol for the substitution variable (created if not provided)\n    \n    Returns:\n        dict with keys 't', 'sin', 'cos', 'dx' containing the substitution expressions\n    \"\"\"\n    if t is None:\n        t = sp.symbols('t', real=True)\n    \n    return {\n        't': t,\n        'sin': 2*t / (1 + t**2),\n        'cos': (1 - t**2) / (1 + t**2),\n        'dx': 2 / (1 + t**2)\n    }"
+        },
+        {
+          "name": "reference_angle_trig_eval",
+          "description": "Evaluate trig functions at any angle using reference angle and quadrant analysis.",
+          "code": "import sympy as sp\n\ndef reference_angle_trig_eval(angle_deg, func='sin'):\n    \"\"\"Evaluate a trig function at any angle using reference angle method.\n    \n    Key insight: Any angle θ can be expressed as a reference angle α in [0°, 90°]\n    relative to the x-axis, with the sign determined by the quadrant. This avoids\n    memorizing exact values for all angles.\n    \n    Steps:\n    1. Find the reference angle (acute angle to nearest x-axis)\n    2. Determine the quadrant and sign of the function\n    3. Evaluate at reference angle, apply sign\n    \n    Args:\n        angle_deg: Angle in degrees (can be any real number)\n        func: 'sin', 'cos', 'tan', 'csc', 'sec', or 'cot'\n    \n    Returns:\n        Tuple of (result, reference_angle_deg, quadrant, sign)\n    \"\"\"\n    # Normalize angle to [0, 360)\n    angle_deg = angle_deg % 360\n    \n    # Determine quadrant and reference angle\n    if 0 <= angle_deg < 90:\n        quadrant = 1\n        ref_angle = angle_deg\n    elif 90 <= angle_deg < 180:\n        quadrant = 2\n        ref_angle = 180 - angle_deg\n    elif 180 <= angle_deg < 270:\n        quadrant = 3\n        ref_angle = angle_deg - 180\n    else:\n        quadrant = 4\n        ref_angle = 360 - angle_deg\n    \n    # Sign patterns by quadrant (ASTC: All Students Take Calculus)\n    # Q1: All positive, Q2: Sin positive, Q3: Tan positive, Q4: Cos positive\n    signs = {\n        1: {'sin': 1, 'cos': 1, 'tan': 1, 'csc': 1, 'sec': 1, 'cot': 1},\n        2: {'sin': 1, 'cos': -1, 'tan': -1, 'csc': 1, 'sec': -1, 'cot': -1},\n        3: {'sin': -1, 'cos': -1, 'tan': 1, 'csc': -1, 'sec': -1, 'cot': 1},\n        4: {'sin': -1, 'cos': 1, 'tan': -1, 'csc': -1, 'sec': 1, 'cot': -1}\n    }\n    \n    sign = signs[quadrant][func]\n    \n    # Evaluate at reference angle (in radians)\n    ref_rad = sp.rad(ref_angle)\n    \n    if func == 'sin':\n        result = sign * sp.sin(ref_rad)\n    elif func == 'cos':\n        result = sign * sp.cos(ref_rad)\n    elif func == 'tan':\n        result = sign * sp.tan(ref_rad)\n    elif func == 'csc':\n        result = sign / sp.sin(ref_rad)\n    elif func == 'sec':\n        result = sign / sp.cos(ref_rad)\n    elif func == 'cot':\n        result = sign / sp.tan(ref_rad)\n    \n    return (sp.simplify(result), ref_angle, quadrant, sign)"
+        },
+        {
+          "name": "regular_polygon_segment_lengths",
+          "description": "Compute the segment (chord) counts and lengths for a regular n-gon.",
+          "code": "import math\nfrom math import comb\n\ndef regular_polygon_segment_lengths(n):\n    \"\"\"Compute segment counts and chord lengths for a regular n-gon.\n    \n    For a regular n-gon with vertices on a unit circle, segments are classified\n    by their \"distance\" d = min(|i-j|, n-|i-j|) where i,j are vertex indices.\n    Distance d corresponds to chord length 2*sin(d*π/n).\n    \n    Key insight: Distance d has n segments for d < n/2, and n/2 segments (diameters)\n    for d = n/2 (only when n is even).\n    \n    Args:\n        n: number of vertices in the regular polygon\n    \n    Returns:\n        dict mapping distance d to {'count': number of segments, 'length': chord length}\n    \"\"\"\n    result = {}\n    for d in range(1, n // 2 + 1):\n        # Chord length formula for unit circumradius\n        length = 2 * math.sin(d * math.pi / n)\n        # Count: n segments for d < n/2, n/2 for d = n/2 (diameters)\n        count = n // 2 if d == n / 2 else n\n        result[d] = {'count': count, 'length': length}\n    return result"
+        },
+        {
+          "name": "solve_trig_function_sum_difference",
+          "description": "Solve for sin(α) and cos(α) given sin(α)±cos(α) values or derived from compound angle equations.",
+          "code": "import sympy as sp\n\ndef solve_trig_function_sum_difference(sin_plus_cos=None, sin_minus_cos=None, \n                                        cos_plus_sin=None, cos_minus_sin=None):\n    \"\"\"Solve for sin(α) and cos(α) given sum/difference of the two.\n    \n    Key insight: If we know sin(α) + cos(α) and/or sin(α) - cos(α), we can solve\n    for both sin(α) and cos(α) using simultaneous equations:\n    - Adding: sin + cos + sin - cos = 2sin(α)\n    - Subtracting: sin + cos - (sin - cos) = 2cos(α)\n    \n    Useful when solving compound angle equations like cos(α + π/4) = c,\n    which gives (√2/2)(cos(α) - sin(α)) = c, so cos(α) - sin(α) = c√2.\n    \n    Args:\n        sin_plus_cos: value of sin(α) + cos(α) (or None if unknown)\n        sin_minus_cos: value of sin(α) - cos(α) (or None if unknown)\n        cos_plus_sin: same as sin_plus_cos (alternative name)\n        cos_minus_sin: value of cos(α) - sin(α) (or None if unknown)\n    \n    Returns:\n        dict with 'sin' and 'cos' values, or None if insufficient information\n    \"\"\"\n    # Normalize input names\n    if cos_plus_sin is not None:\n        sin_plus_cos = cos_plus_sin\n    if cos_minus_sin is not None:\n        # cos - sin = -(sin - cos), so sin_minus_cos = -(cos_minus_sin)\n        sin_minus_cos = -cos_minus_sin if cos_minus_sin is not None else None\n    \n    if sin_plus_cos is not None and sin_minus_cos is not None:\n        # sin + cos = A, sin - cos = B\n        # 2sin = A + B, 2cos = A - B\n        sin_val = (sin_plus_cos + sin_minus_cos) / 2\n        cos_val = (sin_plus_cos - sin_minus_cos) / 2\n        return {'sin': sp.simplify(sin_val), 'cos': sp.simplify(cos_val)}\n    \n    if sin_plus_cos is not None:\n        # sin + cos = A, also sin² + cos² = 1\n        # From sin = A - cos: (A-cos)² + cos² = 1\n        # A² - 2A*cos + cos² + cos² = 1\n        # 2cos² - 2A*cos + (A²-1) = 0\n        # cos = (2A ± √(4A² - 8(A²-1))) / 4 = (A ± √(2-A²)) / 2\n        A = sin_plus_cos\n        # Need quadrant info to resolve sign; return both possibilities\n        cos_val = sp.simplify((A + sp.sqrt(2 - A**2)) / 2)\n        cos_val2 = sp.simplify((A - sp.sqrt(2 - A**2)) / 2)\n        sin_val = sp.simplify(A - cos_val)\n        sin_val2 = sp.simplify(A - cos_val2)\n        return {'sin': sin_val, 'cos': cos_val, 'sin_alt': sin_val2, 'cos_alt': cos_val2}\n    \n    if sin_minus_cos is not None:\n        # sin - cos = B, also sin² + cos² = 1\n        B = sin_minus_cos\n        cos_val = sp.simplify((-B + sp.sqrt(2 - B**2)) / 2)\n        cos_val2 = sp.simplify((-B - sp.sqrt(2 - B**2)) / 2)\n        sin_val = sp.simplify(B + cos_val)\n        sin_val2 = sp.simplify(B + cos_val2)\n        return {'sin': sin_val, 'cos': cos_val, 'sin_alt': sin_val2, 'cos_alt': cos_val2}\n    \n    return None"
+        }
+      ],
+      "history_context": {
+        "previous_query": "There are $n$ values of $x$ in the interval $0 < x < 2\\pi$ where $f(x) = \\sin\\left(7\\pi \\cdot \\sin(5x)\\right) = 0$. For ",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Verify tangent point count\n# cos(5x) = 0 when 5x = pi/2 + m*pi, m integer\n# In 0 < x < 2*pi: 0 < 5x < 10*pi\n# pi/2 < 5x < 10*pi means pi/2 < pi/2 + m*pi < 10*pi\n# 0 < m*pi < 19*pi/2, so 0 <= m <= 9\n\n# Actually, let's solve more carefully:\n# x = (pi/2 + m*pi) / 5\n# We need 0 < (pi/2 + m*pi)/5 < 2*p\nNumber of tangent points (where cos(5x) = 0): 10\n\nAll tangent points x (simplified):\n  x_0 = pi/10 = 0.3142\n  x_1 = 3*pi/10 = 0.9425\n  x_2 = pi/2 = 1.5708\n  x_3 = 7*pi/10 = 2.1991\n  x_4 = 9*pi/10 = 2.8274\n  x_5 = 11*pi/10 = 3.4558\n  x_6 = 13*pi/10 = 4.0841\n  x_7 = 3*pi/2 = 4.7124\n  x_8 = 17*pi/10 = ",
+        "historical_agent_summary": "# Verify tangent point count\n# cos(5x) = 0 when 5x = pi/2 + m*pi, m integer\n# In 0 < x < 2*pi: 0 < 5x < 10*pi\n# pi/2 < 5x < 10*pi means pi/2 < pi/2 + m*pi < 10*pi\n# 0 < m*pi < 19*pi/2, so 0 <= m <= 9\n\n# Actually, let's solve more carefully:\n# x = (pi/2 + m*pi) / 5\n# We need 0 < (pi/2 + m*pi)/5 < 2*p\nNumber of tangent points (where cos(5x) = 0): 10\n\nAll tangent points x (simplified):\n  x_0 = pi/10 = 0.3142\n  x_1 = 3*pi/10 = 0.9425\n  x_2 = pi/2 = 1.5708\n  x_3 = 7*pi/10 = 2.1991\n  x_4 = 9*pi/10 = 2.8274\n  x_5 = 11*pi/10 = 3.4558\n  x_6 = 13*pi/10 = 4.0841\n  x_7 = 3*pi/2 = 4.7124\n  x_8 = 17*pi/10 = ",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "I need to find where $f(x) = \\sin(7\\pi \\cdot \\sin(5x)) = 0$ and determine which zeros are tangent points.\n\n**Part 1: Finding all zeros**\n\n$f(x) = 0$ when $7\\pi \\cdot \\sin(5x) = k\\pi$ for some integer $k$, which means $\\sin(5x) = \\frac{k}{7}$.\n\nFor solutions to exist: $-1 \\leq \\frac{k}{7} \\leq 1$, so $k \\in \\{-7, -6, ..., 6, 7\\}$.\n\nLet me verify the count systematically:",
+          "import math\n\n# Count solutions for each k\ntotal_solutions = 0\nsolutions_info = []\n\nfor k in range(-7, 8):  # -7 to 7 inclusive\n    val = k / 7\n    if -1 <= val <= 1:\n        # For each value of sin(5x), we get solutions\n        # In 0 < x < 2pi, we have 0 < 5x < 10pi\n        # sin(theta) = c for each c in (-1, 1): 2 solutions per period, 10 solutions in 5 periods\n        # sin(theta) = 1 or -1: 1 solution per period, 5 solutions in 5 periods\n        if abs(val) < 1:\n            count = 10  # 2 per period * 5 periods\n        else:  # val = 1 or -1\n            count = 5   # 1 per period * 5 periods\n        total_solutions += count\n        solutions_info.append((k, val, count))\n\nprint(f\"Total solutions n = {total_solutions}\")\nprint(f\"\\nBreakdown by k:\")\nfor k, val, count in solutions_info:\n    print(f\"  k={k:2d}, sin(5x)={val:6.3f}, count={count}\")",
+          "Total solutions n = 140\n\nBreakdown by k:\n  k=-7, sin(5x)=-1.000, count=5\n  k=-6, sin(5x)=-0.857, count=10\n  k=-5, sin(5x)=-0.714, count=10\n  k=-4, sin(5x)=-0.571, count=10\n  k=-3, sin(5x)=-0.429, count=10\n  k=-2, sin(5x)=-0.286, count=10\n  k=-1, sin(5x)=-0.143, count=10\n  k= 0, sin(5x)= 0.000, count=10\n  k= 1, sin(5x)= 0.143, count=10\n  k= 2, sin(5x)= 0.286, count=10\n  k= 3, sin(5x)= 0.429, count=10\n  k= 4, sin(5x)= 0.571, count=10\n  k= 5, sin(5x)= 0.714, count=10\n  k= 6, sin(5x)= 0.857, count=10\n  k= 7, sin(5x)= 1.000, count=5"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "regression,token_blow_up,planner_or_retrieval_mismatch",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 26,
+        "problem_id": "Problem_9",
+        "question": "There are $n$ values of $x$ in the interval $0 < x < 2\\pi$ where $f(x) = \\sin\\left(7\\pi \\cdot \\sin(5x)\\right) = 0$. For ",
+        "baseline_accuracy": 0.75,
+        "evolve_accuracy": 0.5,
+        "baseline_avg_tokens": 48597.0,
+        "evolve_avg_tokens": 127765.0,
+        "baseline_avg_steps": 23.0,
+        "evolve_avg_steps": 27.0,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "regression",
+          "token_blow_up",
+          "planner_or_retrieval_mismatch"
+        ],
+        "priority_score": 12.5,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "trig_product_to_linear",
+          "tangent_half_angle_substitution",
+          "reference_angle_trig_eval",
+          "regular_polygon_segment_lengths",
+          "solve_trig_function_sum_difference"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::4::Problem_8",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_8",
+      "query": "Let $k$ be real numbers such that the system $|25+20i-z|=5$ and $|z-4-k|=|z-3i-k|$ has exactly one complex solution $z$.",
+      "retrieved_skills": [
+        {
+          "name": "alternating_product_sign_range",
+          "description": "Find all integer values where a product of linear terms with alternating signs is negative.",
+          "code": "def alternating_product_sign_range(start, end, step, target_sign):\n    \"\"\"Find values where product of terms (n-start), (n-(start+step)), ..., (n-end) has target sign.\n    \n    For a product P(n) = (n-a1)(n-a2)...(n-ak) where a1 < a2 < ... < ak, \n    the sign of P(n) alternates based on how many factors are negative.\n    \n    Key insight: For consecutive arithmetic progression a_i = start + (i-1)*step,\n    between each pair (a_i, a_{i+1}), exactly one factor changes sign.\n    With k terms, the sign pattern repeats every k+1 intervals:\n    - If k is odd: negative for n in (a1, a2) ∪ (a3, a4) ∪ ... ∪ (a_{k-2}, a_{k-1})\n    - If k is even: negative for n in (a1, a2) ∪ (a3, a4) ∪ ...\n    \n    For positive integers n with product < 0 and k odd factors:\n    Valid n = a1+1, a1+1+2*step, ..., up to but not including a_k.\n    \n    Args:\n        start: first term in the arithmetic progression of constants\n        end: last term in the arithmetic progression (inclusive)\n        step: common difference of the arithmetic progression\n        target_sign: 1 for positive product, -1 for negative product, 0 for zero\n    \n    Returns:\n        List of integer n values where the product has the target sign.\n        For target_sign=0, returns the constants themselves (n = a_i makes factor zero).\n    \"\"\"\n    # Generate the arithmetic progression of constants\n    constants = list(range(start, end + 1, step))\n    k = len(constants)\n    \n    if target_sign == 0:\n        return constants\n    \n    # For non-zero sign, find ranges where the product has the desired sign\n    # Product is zero at each constant, sign changes between consecutive constants\n    result = []\n    \n    if k % 2 == 1:  # odd number of factors\n        # Product is negative between constants[0] and constants[1],\n        # positive between constants[1] and constants[2], etc.\n        # Starting sign for n < constants[0]: (-1)^k = negative (k odd)\n        # So intervals alternate: (−∞, a1): neg, (a1, a2): pos, (a2, a3): neg, ...\n        \n        if target_sign == -1:\n            # Negative intervals: (-∞, a1), (a2, a3), (a4, a5), ...\n            for i in range(0, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n        else:  # target_sign == 1\n            # Positive intervals: (a1, a2), (a3, a4), ...\n            for i in range(1, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n    else:  # even number of factors\n        # Starting sign for n < constants[0]: positive (k even)\n        # Intervals: (−∞, a1): pos, (a1, a2): neg, (a2, a3): pos, ...\n        \n        if target_sign == -1:\n            for i in range(0, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n        else:  # target_sign == 1\n            for i in range(1, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n    \n    return result"
+        },
+        {
+          "name": "arithmetic_sequence_bounds",
+          "description": "Given constraints on arithmetic sequence terms, find the range of valid common differences and resulting extreme term values.",
+          "code": "from fractions import Fraction\n\ndef arithmetic_sequence_bounds(n, total_sum, term_min, term_max, target_index):\n    \"\"\"Find min and max possible values of a specific term in a constrained arithmetic sequence.\n    \n    For an arithmetic sequence with n terms, fixed sum, and bounds on all terms,\n    computes the extreme possible values of the target_index-th term.\n    \n    Key insight: For arithmetic sequence with sum S and n terms, the average is S/n.\n    Let mean = S/n. Then a_k = mean + (k - (n+1)/2) * d.\n    \n    The common difference d is constrained by:\n    - For increasing sequences (d > 0): a_1 >= term_min and a_n <= term_max\n    - For decreasing sequences (d < 0): a_1 <= term_max and a_n >= term_min\n    \n    Args:\n        n: number of terms in sequence\n        total_sum: sum of all terms\n        term_min: minimum allowed value for any term\n        term_max: maximum allowed value for any term\n        target_index: 1-indexed position of term to analyze (1 <= target_index <= n)\n    \n    Returns:\n        tuple (min_value, max_value) of the target term, as Fractions\n    \"\"\"\n    mean = Fraction(total_sum, n)\n    k = target_index\n    \n    # Position relative to center: a_k = mean + (k - (n+1)/2) * d\n    # Let offset_k = k - (n+1)/2\n    offset_k = Fraction(2*k - n - 1, 2)\n    \n    # For a_1: offset_1 = 1 - (n+1)/2 = (1-n)/2\n    # For a_n: offset_n = n - (n+1)/2 = (n-1)/2\n    offset_1 = Fraction(1 - n, 2)\n    offset_n = Fraction(n - 1, 2)\n    \n    # Find max d (increasing sequence, a_1 min, a_n max):\n    # a_1 >= term_min: mean + offset_1 * d >= term_min\n    #   => d <= (term_min - mean) / offset_1  (offset_1 < 0, so this flips)\n    #   => d >= (mean - term_min) / |offset_1|  ... wait, let me redo\n    # offset_1 = (1-n)/2 < 0, so:\n    #   mean + offset_1 * d >= term_min\n    #   offset_1 * d >= term_min - mean  \n    #   d <= (term_min - mean) / offset_1  (dividing by negative)\n    \n    # Actually: d <= (term_min - mean) / offset_1, and since offset_1 < 0,\n    # this is d <= negative / negative = positive\n    \n    # a_n <= term_max: mean + offset_n * d <= term_max\n    #   offset_n * d <= term_max - mean\n    #   d <= (term_max - mean) / offset_n  (offset_n > 0)\n    \n    # Max d is min of these constraints\n    d_max_1 = Fraction(term_min - mean, offset_1)  # from a_1 >= term_min\n    d_max_n = Fraction(term_max - mean, offset_n)  # from a_n <= term_max\n    d_max = min(d_max_1, d_max_n)\n    \n    # Find min d (decreasing sequence, a_1 max, a_n min):\n    # a_1 <= term_max: mean + offset_1 * d <= term_max\n    #   d >= (term_max - mean) / offset_1  (offset_1 < 0, so this is neg/ neg)\n    \n    # a_n >= term_min: mean + offset_n * d >= term_min\n    #   d >= (term_min - mean) / offset_n  (offset_n > 0)\n    \n    d_min_1 = Fraction(term_max - mean, offset_1)  # from a_1 <= term_max\n    d_min_n = Fraction(term_min - mean, offset_n)  # from a_n >= term_min\n    d_min = max(d_min_1, d_min_n)\n    \n    # Compute target term at extreme d values\n    # a_k = mean + offset_k * d\n    # When d is max (increasing), a_k is min if offset_k < 0, max if offset_k > 0\n    # When d is min (decreasing), a_k is max if offset_k < 0, min if offset_k > 0\n    \n    a_k_at_dmax = mean + offset_k * d_max\n    a_k_at_dmin = mean + offset_k * d_min\n    \n    min_value = min(a_k_at_dmax, a_k_at_dmin)\n    max_value = max(a_k_at_dmax, a_k_at_dmin)\n    \n    return (min_value, max_value)"
+        },
+        {
+          "name": "gcd_equation_solver",
+          "description": "Count solutions to equations involving gcd by substituting a = d*m, b = d*n where gcd(m,n) = 1.",
+          "code": "import math\n\ndef gcd_equation_solver(total, equation_func):\n    \"\"\"Solve Diophantine equations involving gcd(a,b) by gcd-substitution method.\n    \n    Key insight: Let d = gcd(a, b), then a = d*m, b = d*n where gcd(m, n) = 1.\n    This transforms gcd(a, b) into d, simplifying the equation. For each valid d\n    (where d^2 divides certain expressions), find coprime pairs (m, n) satisfying\n    the reduced equation.\n    \n    Useful for equations like: gcd(a,b)*a + b^2 = N, gcd(a,b)*a + b = N, etc.\n    \n    Args:\n        total: the target value (e.g., N in the equation)\n        equation_func: a function f(d, m, n, total) that returns True if (m, n)\n                      is a valid solution for the given d. The function should\n                      check the reduced equation after gcd-substitution.\n                      Signature: f(d, m, n, total) -> bool\n    \n    Returns:\n        List of tuples (a, b, d, m, n) for all valid solutions.\n    \"\"\"\n    solutions = []\n    \n    for d in range(1, int(math.sqrt(total)) + 1):\n        if total % (d * d) == 0:\n            target = total // (d * d)\n            for n in range(1, int(math.sqrt(target)) + 1):\n                m = target - n * n\n                if m > 0 and math.gcd(m, n) == 1:\n                    a = d * m\n                    b = d * n\n                    if equation_func(d, m, n, total):\n                        solutions.append((a, b, d, m, n))\n    \n    return solutions\n\ndef count_gcd_equation_solutions(total):\n    \"\"\"Count solutions to gcd(a,b)*a + b^2 = total for positive integers a, b.\n    \n    This is a specialized solver for the specific equation form.\n    \n    Args:\n        total: the target value on the right side of the equation\n    \n    Returns:\n        The number of ordered pairs (a, b) satisfying the equation.\n    \"\"\"\n    count = 0\n    for d in range(1, int(math.sqrt(total)) + 1):\n        if total % (d * d) == 0:\n            target = total // (d * d)\n            for n in range(1, int(math.sqrt(target)) + 1):\n                m = target - n * n\n                if m > 0 and math.gcd(m, n) == 1:\n                    count += 1\n    return count"
+        },
+        {
+          "name": "max_subset_forbidden_differences",
+          "description": "Find maximum subset of {1,...,n} with no two elements differing by values in a forbidden set.",
+          "code": "def max_subset_forbidden_differences(n, forbidden_diffs):\n    \"\"\"Find maximum subset of {1,...,n} with no pairs having forbidden differences.\n    \n    Key insight: Uses iterative DP with state encoding which of the last k positions\n    are included, where k = max(forbidden_diffs). State is a bitmask where bit j\n    indicates whether position (current - j) was included. For each position, we can\n    either skip it (always valid) or include it (if no forbidden neighbor was included).\n    \n    Time complexity: O(n * 2^k) where k = max(forbidden_diffs).\n    \n    Args:\n        n: upper bound of the set {1, 2, ..., n}\n        forbidden_diffs: set of positive integers representing forbidden pairwise differences\n    \n    Returns:\n        Maximum size of a subset with no two elements differing by a forbidden value.\n    \"\"\"\n    if n <= 0:\n        return 0\n    \n    forbidden = set(forbidden_diffs)\n    max_diff = max(forbidden) if forbidden else 0\n    state_bits = max_diff + 1\n    mask = (1 << state_bits) - 1\n    \n    # dp[state] = max achievable size with current state\n    # state bit j = 1 means position (current_pos - j - 1) was included\n    dp = {0: 0}\n    \n    for pos in range(1, n + 1):\n        new_dp = {}\n        for state, size in dp.items():\n            # Option 1: don't include pos\n            new_state = (state << 1) & mask\n            if new_state not in new_dp or new_dp[new_state] < size:\n                new_dp[new_state] = size\n            \n            # Option 2: include pos (if allowed)\n            can_include = True\n            for diff in forbidden:\n                if diff < pos:\n                    # Check if pos - diff was included\n                    # Position pos - diff corresponds to bit (diff - 1) after shift\n                    bit_idx = diff - 1\n                    if (state >> bit_idx) & 1:\n                        can_include = False\n                        break\n            \n            if can_include:\n                new_state = ((state << 1) | 1) & mask\n                if new_state not in new_dp or new_dp[new_state] < size + 1:\n                    new_dp[new_state] = size + 1\n        \n        dp = new_dp\n    \n    return max(dp.values())"
+        },
+        {
+          "name": "count_arithmetic_sequences",
+          "description": "Count arithmetic sequences of given length within a range, optionally requiring a specific term.",
+          "code": "def count_arithmetic_sequences(max_term, seq_length, required_term=None):\n    \"\"\"Count arithmetic sequences of exact length within [1, max_term].\n    \n    For an arithmetic sequence with first term a and common difference d:\n    - Sequence: a, a+d, a+2d, ..., a+(seq_length-1)*d\n    - Last term must be <= max_term: a + (seq_length-1)*d <= max_term\n    - So a <= max_term - (seq_length-1)*d\n    \n    Key insight: For each valid difference d, count valid starting terms a.\n    The constraint a >= 1 and a + (seq_length-1)*d <= max_term gives:\n    - Number of choices for a = max_term - (seq_length-1)*d\n    - Valid d ranges from 1 to floor((max_term - 1) / (seq_length - 1))\n    \n    For sequences containing a specific term:\n    - If required term = k, then k = a + j*d for some 0 <= j < seq_length\n    - For each valid (d, j), a = k - j*d must satisfy a >= 1\n    \n    Args:\n        max_term: maximum value in range (minimum is always 1)\n        seq_length: exact length of arithmetic sequence (number of terms)\n        required_term: if specified, only count sequences containing this term\n    \n    Returns:\n        Total count of valid arithmetic sequences\n    \"\"\"\n    n = seq_length\n    total = 0\n    \n    if required_term is None:\n        # Count all sequences: for each d, sum (max_term - (n-1)*d)\n        # Max d such that max_term - (n-1)*d >= 1\n        max_d = (max_term - 1) // (n - 1)\n        for d in range(1, max_d + 1):\n            total += max_term - (n - 1) * d\n    else:\n        k = required_term\n        # For each valid d, check if k can appear in sequence\n        max_d = (max_term - 1) // (n - 1)\n        for d in range(1, max_d + 1):\n            # k = a + j*d for some j in [0, n-1]\n            # a = k - j*d must be in [1, max_term - (n-1)*d]\n            # Also a + (n-1)*d <= max_term, but since a <= k and j >= 0:\n            # if a >= 1, we need a <= max_term - (n-1)*d\n            # i.e., k - j*d <= max_term - (n-1)*d\n            # j*d >= k - max_term + (n-1)*d = k - max_term + n*d - d\n            for j in range(n):\n                a = k - j * d\n                last_term = a + (n - 1) * d\n                if a >= 1 and last_term <= max_term:\n                    total += 1\n    return total"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Let $k$ be real numbers such that the system $|25+20i-z|=5$ and $|z-4-k|=|z-3i-k|$ has exactly one complex solution $z$.",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Perfect! Both solutions are valid.\n# Sum of k values = 23/8 + 123/8 = 73/4\n# In lowest terms: m = 73, n = 4\n# m + n = 77\n\nanswer = 77\nprint(f\"ANSWER: {answer}\")\nANSWER: 77",
+        "historical_agent_summary": "# Perfect! Both solutions are valid.\n# Sum of k values = 23/8 + 123/8 = 73/4\n# In lowest terms: m = 73, n = 4\n# m + n = 77\n\nanswer = 77\nprint(f\"ANSWER: {answer}\")\nANSWER: 77",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Let me analyze this problem step by step.\n\n**Understanding the equations:**\n1. $|25+20i-z|=5$ represents a circle with center $25+20i$ and radius $5$\n2. $|z-4-k|=|z-3i-k|$ represents the perpendicular bisector of the segment from $4+k$ to $k+3i$\n\nLet me work through this:",
+          "import sympy as sp\n\n# The circle has center at (25, 20) with radius 5\n# The perpendicular bisector of segment from (4+k, 0) to (k, 3)\n\nk = sp.Symbol('k', real=True)\n\n# Midpoint of the segment\nmid_x = (4 + k + k) / 2  # = (4 + 2k)/2 = 2 + k\nmid_y = (0 + 3) / 2  # = 3/2\n\n# Slope of the segment from (4+k, 0) to (k, 3)\n# slope = (3 - 0) / (k - (4+k)) = 3 / (-4) = -3/4\n# Perpendicular bisector slope = 4/3\n\n# Equation of perpendicular bisector:\n# y - 3/2 = (4/3)(x - (2+k))\n# y = (4/3)(x - 2 - k) + 3/2\n# y = (4/3)x - (8/3) - (4/3)k + 3/2\n# y = (4/3)x - (4/3)k - (16-9)/6\n# y = (4/3)x - (4/3)k - 7/6\n\n# Circle: (x-25)^2 + (y-20)^2 = 25\n# Substituting y from the line equation\n\nx = sp.Symbol('x', real=True)\n\ny_expr = (4/sp.Integer(3))*x - (4/sp.Integer(3))*k - sp.Rational(7, 6)\n\n# Substitute into circle equation\ncircle_eq = (x - 25)**2 + (y_expr - 20)**2 - 25\n\nprint(\"Circle equation after substitution:\")\nprint(sp.expand(circle_eq))",
+          "Circle equation after substitution:\n16*k**2/9 - 32*k*x/9 + 508*k/9 + 25*x**2/9 - 958*x/9 + 37729/36"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 4,
+        "problem_id": "Problem_8",
+        "question": "From an unlimited supply of $1$-cent coins, $10$-cent coins, and $25$-cent coins, Silas wants to find a collection of co",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 1.0,
+        "baseline_avg_tokens": 40433.2,
+        "evolve_avg_tokens": 65940.0,
+        "baseline_avg_steps": 20.25,
+        "evolve_avg_steps": 20.5,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "alternating_product_sign_range",
+          "arithmetic_sequence_bounds",
+          "gcd_equation_solver",
+          "max_subset_forbidden_differences",
+          "count_arithmetic_sequences"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::9::Problem_1",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_1",
+      "query": "Find the sum of all integer bases $b>9$ for which $17_{b}$ is a divisor of $97_{b}$.",
+      "retrieved_skills": [
+        {
+          "name": "triangle_inequality_check",
+          "description": "Check if three lengths can form a non-degenerate triangle.",
+          "code": "def triangle_inequality_check(a, b, c):\n    \"\"\"Check if three lengths satisfy the triangle inequality.\n    \n    Three lengths can form a triangle with positive area iff the sum of any two\n    exceeds the third: a + b > c, a + c > b, b + c > a.\n    \n    This is equivalent to: sorted_lengths[0] + sorted_lengths[1] > sorted_lengths[2].\n    \n    Args:\n        a, b, c: three lengths (numeric values)\n    \n    Returns:\n        True if the lengths can form a triangle with positive area, False otherwise\n    \"\"\"\n    lengths = sorted([a, b, c])\n    return lengths[0] + lengths[1] > lengths[2]"
+        },
+        {
+          "name": "regular_polygon_segment_lengths",
+          "description": "Compute the segment (chord) counts and lengths for a regular n-gon.",
+          "code": "import math\nfrom math import comb\n\ndef regular_polygon_segment_lengths(n):\n    \"\"\"Compute segment counts and chord lengths for a regular n-gon.\n    \n    For a regular n-gon with vertices on a unit circle, segments are classified\n    by their \"distance\" d = min(|i-j|, n-|i-j|) where i,j are vertex indices.\n    Distance d corresponds to chord length 2*sin(d*π/n).\n    \n    Key insight: Distance d has n segments for d < n/2, and n/2 segments (diameters)\n    for d = n/2 (only when n is even).\n    \n    Args:\n        n: number of vertices in the regular polygon\n    \n    Returns:\n        dict mapping distance d to {'count': number of segments, 'length': chord length}\n    \"\"\"\n    result = {}\n    for d in range(1, n // 2 + 1):\n        # Chord length formula for unit circumradius\n        length = 2 * math.sin(d * math.pi / n)\n        # Count: n segments for d < n/2, n/2 for d = n/2 (diameters)\n        count = n // 2 if d == n / 2 else n\n        result[d] = {'count': count, 'length': length}\n    return result"
+        },
+        {
+          "name": "line_intersection",
+          "description": "Find the intersection point of two line segments using parametric form and Cramer's rule.",
+          "code": "def line_intersection(p1, p2, p3, p4):\n    \"\"\"Find intersection point of line through p1-p2 with line through p3-p4.\n    \n    Key insight: Using parametric form p1 + t*(p2-p1) = p3 + s*(p4-p3),\n    solve for t using Cramer's rule. The denominator is the 2D cross product\n    of the direction vectors.\n    \n    Args:\n        p1, p2: Two points defining the first line (x, y) tuples\n        p3, p4: Two points defining the second line (x, y) tuples\n    \n    Returns:\n        (x, y) tuple of intersection point, or None if lines are parallel\n    \"\"\"\n    x1, y1 = p1\n    x2, y2 = p2\n    x3, y3 = p3\n    x4, y4 = p4\n    \n    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)\n    if abs(denom) < 1e-10:\n        return None\n    \n    t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom\n    x = x1 + t * (x2 - x1)\n    y = y1 + t * (y2 - y1)\n    return (x, y)"
+        },
+        {
+          "name": "triangle_area_max_on_conic_with_perpendicular_bisector",
+          "description": "Find maximum triangle area with vertices at origin and two points on a conic, where the perpendicular bisector passes through a fixed point.",
+          "code": "import sympy as sp\nfrom sympy import cos, sin, sqrt, Abs, simplify, pi, Rational\n\ndef triangle_area_max_on_conic_with_perpendicular_bisector(conic_params, fixed_point):\n    \"\"\"Find max area of triangle OAB where A, B are on conic and perpendicular bisector of AB passes through fixed point.\n    \n    Key insight: Parameterize points on ellipse x²/a² + y²/b² = 1 using trigonometric form:\n    A = (a*cos(α), b*sin(α)), B = (a*cos(β), b*sin(β))\n    \n    For perpendicular bisector to pass through D(dx, dy):\n    (D - M) · (B - A) = 0, where M is midpoint of AB\n    \n    Using u = (α+β)/2, v = (β-α)/2, the constraint simplifies to:\n    cos(u)*sin(v)*[b*sin(u)*cos(v) + b*dy*cos(v) - ...] = 0\n    \n    Area = |OA × OB|/2 = (a*b/2)|sin(β-α)| = (a*b/2)|sin(2v)|\n    \n    Args:\n        conic_params: tuple (a, b) for ellipse x²/a² + y²/b² = 1\n        fixed_point: tuple (dx, dy) for the point on perpendicular bisector\n    \n    Returns:\n        Maximum area achievable under the constraint\n    \"\"\"\n    a_semi, b_semi = conic_params\n    dx, dy = fixed_point\n    \n    # For ellipse x²/a² + y²/b² = 1, parameterize with angle θ:\n    # Point = (a*cos(θ), b*sin(θ))\n    \n    # Using symmetry analysis:\n    # Area = (a*b/2) * |sin(β-α)|\n    # The perpendicular bisector constraint can be satisfied when\n    # the points are symmetric (e.g., same y-coordinate for horizontal AB)\n    \n    # For maximum area, we need |sin(β-α)| = 1, i.e., β-α = ±π/2\n    \n    # Check if configuration with horizontal AB (same y-coord) works:\n    # A = (a*cos(θ), b*sin(θ)), B = (-a*cos(θ), b*sin(θ))\n    # Midpoint M = (0, b*sin(θ))\n    # Perpendicular bisector is x = 0 (vertical line)\n    # If dx = 0, D lies on this line ✓\n    \n    if dx == 0:\n        # Maximum area achievable with horizontal chord\n        max_area = a_semi * b_semi / 2\n        return max_area\n    \n    # For general case, use optimization over parameters\n    # (This is a simplified return for the common case)\n    return a_semi * b_semi / 2"
+        },
+        {
+          "name": "convex_quadrilateral_area",
+          "description": "Compute the area of a convex quadrilateral given its four vertices using the shoelace formula with automatic vertex ordering.",
+          "code": "def convex_quadrilateral_area(v1, v2, v3, v4):\n    \"\"\"Compute area of convex quadrilateral given four vertices in any order.\n    \n    Key insight: For a convex quadrilateral, we need to order vertices cyclically.\n    Find the center (centroid), then sort vertices by angle around center.\n    Once ordered, apply shoelace formula: Area = |Σ(xᵢ·yᵢ₊₁ - xᵢ₊₁·yᵢ)| / 2\n    \n    Args:\n        v1, v2, v3, v4: Four vertices as (x, y) tuples\n    \n    Returns:\n        The area of the convex quadrilateral\n    \"\"\"\n    import math\n    \n    vertices = [v1, v2, v3, v4]\n    \n    # Find centroid\n    cx = sum(v[0] for v in vertices) / 4\n    cy = sum(v[1] for v in vertices) / 4\n    \n    # Sort by angle around centroid\n    def angle(v):\n        return math.atan2(v[1] - cy, v[0] - cx)\n    \n    sorted_vertices = sorted(vertices, key=angle)\n    \n    # Apply shoelace formula\n    n = 4\n    area = 0\n    for i in range(n):\n        j = (i + 1) % n\n        area += sorted_vertices[i][0] * sorted_vertices[j][1]\n        area -= sorted_vertices[j][0] * sorted_vertices[i][1]\n    \n    return abs(area) / 2"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Find the sum of all integer bases $b>9$ for which $17_{b}$ is a divisor of $97_{b}$.",
+        "previous_workflow_plan": null,
+        "workflow_summary": "<string>:43: SyntaxWarning: invalid escape sequence '\\o'\nb = 21: 196 / 28 = 7, divisible: True\nb = 49: 448 / 56 = 8, divisible: True\n\nChecking b+7 divides 56:\nb = 21: b+7 = 28 divides 56\nb = 49: b+7 = 56 divides 56\nThe modular arithmetic approach confirms the answer. The key insight is:\n\nUsing $b \\equiv -7 \\pmod{b+7}$:\n$$9b + 7 \\equiv 9(-7) + 7 = -56 \\pmod{b+7}$$\n\nSo we need $b+7 \\mid 56$. The positive divisors of $56$ are: $1, 2, 4, 7, 8, 14, 28, 56$.\n\nThis gives $b + 7 \\in \\{28, 56\\}$, so $b \\in \\{21, 49\\}$.",
+        "historical_agent_summary": "<string>:43: SyntaxWarning: invalid escape sequence '\\o'\nb = 21: 196 / 28 = 7, divisible: True\nb = 49: 448 / 56 = 8, divisible: True\n\nChecking b+7 divides 56:\nb = 21: b+7 = 28 divides 56\nb = 49: b+7 = 56 divides 56\nThe modular arithmetic approach confirms the answer. The key insight is:\n\nUsing $b \\equiv -7 \\pmod{b+7}$:\n$$9b + 7 \\equiv 9(-7) + 7 = -56 \\pmod{b+7}$$\n\nSo we need $b+7 \\mid 56$. The positive divisors of $56$ are: $1, 2, 4, 7, 8, 14, 28, 56$.\n\nThis gives $b + 7 \\in \\{28, 56\\}$, so $b \\in \\{21, 49\\}$.",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Let me analyze this problem step by step.\n\nFor a base $b > 9$:\n- $17_b = b + 7$\n- $97_b = 9b + 7$\n\nWe need $(b+7) \\mid (9b+7)$.\n\nThis means there exists integer $k$ such that $9b + 7 = k(b + 7)$.\n\nLet me solve this equation:",
+          "import sympy as sp\n\nb, k = sp.symbols('b k', integer=True, positive=True)\n# Equation: 9b + 7 = k(b + 7)\n# Rearranging: 9b + 7 = kb + 7k\n#              9b - kb = 7k - 7\n#              b(9-k) = 7(k-1)\n#              b = 7(k-1)/(9-k)\n\nsolutions = []\nfor k_val in range(1, 100):  # Try various values of k\n    numerator = 7 * (k_val - 1)\n    denominator = 9 - k_val\n    if denominator != 0 and numerator % denominator == 0:\n        b_val = numerator // denominator\n        if b_val > 9:\n            solutions.append((k_val, b_val))\n\nprint(\"Solutions (k, b):\", solutions)\nprint(\"Bases b > 9:\", [s[1] for s in solutions])\nprint(\"Sum:\", sum(s[1] for s in solutions))",
+          "<string>:43: SyntaxWarning: invalid escape sequence '\\o'\nSolutions (k, b): [(7, 21), (8, 49)]\nBases b > 9: [21, 49]\nSum: 70"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 9,
+        "problem_id": "Problem_1",
+        "question": "Six points $A, B, C, D, E$ and $F$ lie in a straight line in that order. Suppose that $G$ is a point not on the line and",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 1.0,
+        "baseline_avg_tokens": 16199.2,
+        "evolve_avg_tokens": 35346.0,
+        "baseline_avg_steps": 12.0,
+        "evolve_avg_steps": 12.0,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "triangle_inequality_check",
+          "regular_polygon_segment_lengths",
+          "line_intersection",
+          "triangle_area_max_on_conic_with_perpendicular_bisector",
+          "convex_quadrilateral_area"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::10::Problem_10",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_10",
+      "query": "Sixteen chairs are arranged in a row. Eight people each select a chair in which to sit so that no person sits next to tw",
+      "retrieved_skills": [
+        {
+          "name": "max_color_cells_grid",
+          "description": "Compute the maximum number of cells with a specific color in a grid under row/column color constraints.",
+          "code": "def max_color_cells_grid(size, n_colors, target_color_index=None):\n    \"\"\"Compute maximum cells of one color when each row/column must have all n colors.\n    \n    Key insight: For an n-color coloring of a size×size grid where each row and \n    each column must contain at least one cell of each color, the maximum number \n    of cells of a particular color (say color n) is achieved by minimizing cells \n    of other colors. Each row needs (n-1) cells of other colors, each column needs \n    (n-1) cells of other colors. With proper arrangement, total non-target cells \n    = size * (n-1), achievable when size >= (n-1).\n    \n    Args:\n        size: dimension of the square grid (integer)\n        n_colors: number of colors that must appear in each row/column\n        target_color_index: which color to maximize (default: last color, index n_colors-1)\n    \n    Returns:\n        Maximum possible number of cells with the target color\n    \"\"\"\n    if target_color_index is None:\n        target_color_index = n_colors - 1\n    \n    # Each row needs at least (n_colors - 1) cells of non-target colors\n    # Each column needs at least (n_colors - 1) cells of non-target colors\n    # With proper arrangement: total non-target cells = size * (n_colors - 1)\n    \n    min_non_target = size * (n_colors - 1)\n    max_target = size * size - min_non_target\n    \n    return max_target"
+        },
+        {
+          "name": "grid_coloring_validator",
+          "description": "Validate that a grid coloring satisfies row/column color coverage constraints.",
+          "code": "def grid_coloring_validator(grid, n_colors):\n    \"\"\"Validate that each row and column contains all n colors.\n    \n    Key insight: The constraint \"union of row and column contains all colors\" for \n    any cell (i,j) means that row i and column j together must span all n colors.\n    This is equivalent to requiring each row AND each column to have all n colors.\n    \n    Args:\n        grid: 2D list of integers representing colors (0-indexed or 1-indexed)\n        n_colors: number of colors that must appear in each row/column\n    \n    Returns:\n        Tuple (is_valid, details) where details is a dict with:\n        - 'rows_with_missing': list of row indices missing some colors\n        - 'cols_with_missing': list of column indices missing some colors\n        - 'color_counts': dict mapping each color to its total count\n    \"\"\"\n    rows = len(grid)\n    cols = len(grid[0]) if rows > 0 else 0\n    \n    rows_with_missing = []\n    cols_with_missing = []\n    color_counts = {}\n    \n    # Check rows\n    for i in range(rows):\n        colors_in_row = set(grid[i])\n        if len(colors_in_row) < n_colors:\n            rows_with_missing.append(i)\n        for c in colors_in_row:\n            color_counts[c] = color_counts.get(c, 0) + 1\n    \n    # Check columns\n    for j in range(cols):\n        colors_in_col = set(grid[i][j] for i in range(rows))\n        if len(colors_in_col) < n_colors:\n            cols_with_missing.append(j)\n    \n    is_valid = len(rows_with_missing) == 0 and len(cols_with_missing) == 0\n    \n    return is_valid, {\n        'rows_with_missing': rows_with_missing,\n        'cols_with_missing': cols_with_missing,\n        'color_counts': color_counts\n    }"
+        },
+        {
+          "name": "max_subset_forbidden_differences",
+          "description": "Find maximum subset of {1,...,n} with no two elements differing by values in a forbidden set.",
+          "code": "def max_subset_forbidden_differences(n, forbidden_diffs):\n    \"\"\"Find maximum subset of {1,...,n} with no pairs having forbidden differences.\n    \n    Key insight: Uses iterative DP with state encoding which of the last k positions\n    are included, where k = max(forbidden_diffs). State is a bitmask where bit j\n    indicates whether position (current - j) was included. For each position, we can\n    either skip it (always valid) or include it (if no forbidden neighbor was included).\n    \n    Time complexity: O(n * 2^k) where k = max(forbidden_diffs).\n    \n    Args:\n        n: upper bound of the set {1, 2, ..., n}\n        forbidden_diffs: set of positive integers representing forbidden pairwise differences\n    \n    Returns:\n        Maximum size of a subset with no two elements differing by a forbidden value.\n    \"\"\"\n    if n <= 0:\n        return 0\n    \n    forbidden = set(forbidden_diffs)\n    max_diff = max(forbidden) if forbidden else 0\n    state_bits = max_diff + 1\n    mask = (1 << state_bits) - 1\n    \n    # dp[state] = max achievable size with current state\n    # state bit j = 1 means position (current_pos - j - 1) was included\n    dp = {0: 0}\n    \n    for pos in range(1, n + 1):\n        new_dp = {}\n        for state, size in dp.items():\n            # Option 1: don't include pos\n            new_state = (state << 1) & mask\n            if new_state not in new_dp or new_dp[new_state] < size:\n                new_dp[new_state] = size\n            \n            # Option 2: include pos (if allowed)\n            can_include = True\n            for diff in forbidden:\n                if diff < pos:\n                    # Check if pos - diff was included\n                    # Position pos - diff corresponds to bit (diff - 1) after shift\n                    bit_idx = diff - 1\n                    if (state >> bit_idx) & 1:\n                        can_include = False\n                        break\n            \n            if can_include:\n                new_state = ((state << 1) | 1) & mask\n                if new_state not in new_dp or new_dp[new_state] < size + 1:\n                    new_dp[new_state] = size + 1\n        \n        dp = new_dp\n    \n    return max(dp.values())"
+        },
+        {
+          "name": "rectangle_grid_symmetry_points",
+          "description": "Count grid points on lines of symmetry for a rectangular grid.",
+          "code": "def rectangle_grid_symmetry_points(width_units, height_units):\n    \"\"\"Count grid points on symmetry lines of a rectangular grid.\n    \n    Key insight: A rectangle with integer unit dimensions has a grid of\n    (width_units + 1) × (height_units + 1) points. Lines of symmetry pass\n    through the center. For a grid point to be at center, both dimensions\n    must be even (so center is at integer coordinates).\n    \n    The two lines of symmetry are:\n    - Vertical: x = width_units / 2\n    - Horizontal: y = height_units / 2\n    \n    Args:\n        width_units: width of rectangle in unit lengths (integer)\n        height_units: height of rectangle in unit lengths (integer)\n    \n    Returns:\n        dict with keys:\n        - 'total_points': total grid points\n        - 'center': (x, y) tuple of center coordinates (may be half-integer)\n        - 'center_on_grid': bool, whether center is a grid point\n        - 'vertical_sym_count': points on vertical symmetry line\n        - 'horizontal_sym_count': points on horizontal symmetry line\n        - 'on_symmetry_lines': total points on either symmetry line\n    \"\"\"\n    total_points = (width_units + 1) * (height_units + 1)\n    \n    center_x = width_units / 2\n    center_y = height_units / 2\n    center = (center_x, center_y)\n    center_on_grid = (width_units % 2 == 0) and (height_units % 2 == 0)\n    \n    # Points on vertical symmetry line (if center_x is on grid)\n    if width_units % 2 == 0:\n        vertical_sym_count = height_units + 1\n    else:\n        vertical_sym_count = 0  # No vertical symmetry line through grid points\n    \n    # Points on horizontal symmetry line (if center_y is on grid)\n    if height_units % 2 == 0:\n        horizontal_sym_count = width_units + 1\n    else:\n        horizontal_sym_count = 0  # No horizontal symmetry line through grid points\n    \n    # Total on symmetry lines (subtract center if counted twice)\n    if center_on_grid:\n        on_symmetry_lines = vertical_sym_count + horizontal_sym_count - 1\n    else:\n        on_symmetry_lines = 0  # No grid points on symmetry lines\n    \n    return {\n        'total_points': total_points,\n        'center': center,\n        'center_on_grid': center_on_grid,\n        'vertical_sym_count': vertical_sym_count,\n        'horizontal_sym_count': horizontal_sym_count,\n        'on_symmetry_lines': on_symmetry_lines\n    }"
+        },
+        {
+          "name": "has_three_pairwise_coprime",
+          "description": "Check if a set contains three elements that are pairwise coprime.",
+          "code": "import math\n\ndef has_three_pairwise_coprime(elements):\n    \"\"\"Check if there exist three elements in the set that are pairwise coprime.\n    \n    Key insight: Uses optimized triple-nested loop that skips unnecessary checks.\n    For each pair (i, j), only check third element k if gcd(i, j) = 1, since\n    a pairwise coprime triple requires all three pairs to have gcd 1.\n    \n    Args:\n        elements: iterable of positive integers\n    \n    Returns:\n        True if there exist three elements with all pairwise gcds equal to 1,\n        False otherwise.\n    \"\"\"\n    elements = list(elements)\n    n = len(elements)\n    for i in range(n):\n        for j in range(i + 1, n):\n            if math.gcd(elements[i], elements[j]) != 1:\n                continue\n            for k in range(j + 1, n):\n                if (math.gcd(elements[i], elements[k]) == 1 and \n                    math.gcd(elements[j], elements[k]) == 1):\n                    return True\n    return False"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Sixteen chairs are arranged in a row. Eight people each select a chair in which to sit so that no person sits next to tw",
+        "previous_workflow_plan": null,
+        "workflow_summary": "Final count N = 19513\nN mod 1000 = 513\nANSWER: 513",
+        "historical_agent_summary": "Final count N = 19513\nN mod 1000 = 513\nANSWER: 513",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "I need to count how many subsets of 16 chairs can be selected such that no person sits next to two other people.\n\nLet me rephrase: I need to count subsets S of {1,...,16} where no element has both neighbors also in S. Equivalently, there's no run of 3 or more consecutive chairs.\n\nThis means:\n- We can have isolated chairs (not adjacent to anyone)\n- We can have pairs of adjacent chairs\n- But we cannot have triples or longer runs\n\nLet me use the helper function `max_subset_forbidden_differences`. If I find the maximum subset with no pairs differing by 1, 2, or 3, that should help me understand the structure.\n\nActually, let me think differently. I'll count by number of chairs selected and by \"block\" structure.",
+          "from math import comb\n\n# Count subsets of {1,...,n} with no run of 3+ consecutive elements\n# Strategy: Count by number of elements selected\n\ndef count_subsets_no_triplets(n):\n    total = 0\n    \n    # k = number of elements selected\n    for k in range(n + 1):\n        # Count subsets of size k with no triplet\n        # Method: use inclusion-exclusion or DP\n        # Let's use a different approach - count ways to place k items in n positions\n        # with at most 2 consecutive\n        \n        # This is equivalent to counting compositions of (n+1-k) into k+1 parts\n        # where each of the k middle parts is at least 1\n        # But we need to track which gaps have 0-1-2 elements\n        \n        # Better: DP approach\n        # dp[i][j][last] = number of ways to consider first i positions,\n        # select j of them, with 'last' consecutive selected at end (0, 1, or 2)\n        \n        dp = {}\n        dp[(0, 0, 0)] = 1  # 0 positions considered, 0 selected, 0 consecutive at end\n        \n        for pos in range(1, n + 1):\n            new_dp = {}\n            for (p, j, last), count in dp.items():\n                if p != pos - 1:\n                    continue\n                    \n     ",
+          "Total subsets with no triplet: 19513\nRemainder mod 1000: 513"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 10,
+        "problem_id": "Problem_10",
+        "question": "The 27 cells of a $3\\times9$ grid are filled in using the numbers 1 through 9 so that each row contains 9 different numb",
+        "baseline_accuracy": 0.5,
+        "evolve_accuracy": 0.5,
+        "baseline_avg_tokens": 156929.0,
+        "evolve_avg_tokens": 244364.2,
+        "baseline_avg_steps": 37.25,
+        "evolve_avg_steps": 37.75,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "max_color_cells_grid",
+          "grid_coloring_validator",
+          "max_subset_forbidden_differences",
+          "rectangle_grid_symmetry_points",
+          "has_three_pairwise_coprime"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::12::Problem_15",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_15",
+      "query": "There are exactly three positive real numbers $k$ such that the function\n$$f(x) = \\frac{(x - 18)(x - 72)(x - 98)(x - k)}",
+      "retrieved_skills": [
+        {
+          "name": "alternating_product_sign_range",
+          "description": "Find all integer values where a product of linear terms with alternating signs is negative.",
+          "code": "def alternating_product_sign_range(start, end, step, target_sign):\n    \"\"\"Find values where product of terms (n-start), (n-(start+step)), ..., (n-end) has target sign.\n    \n    For a product P(n) = (n-a1)(n-a2)...(n-ak) where a1 < a2 < ... < ak, \n    the sign of P(n) alternates based on how many factors are negative.\n    \n    Key insight: For consecutive arithmetic progression a_i = start + (i-1)*step,\n    between each pair (a_i, a_{i+1}), exactly one factor changes sign.\n    With k terms, the sign pattern repeats every k+1 intervals:\n    - If k is odd: negative for n in (a1, a2) ∪ (a3, a4) ∪ ... ∪ (a_{k-2}, a_{k-1})\n    - If k is even: negative for n in (a1, a2) ∪ (a3, a4) ∪ ...\n    \n    For positive integers n with product < 0 and k odd factors:\n    Valid n = a1+1, a1+1+2*step, ..., up to but not including a_k.\n    \n    Args:\n        start: first term in the arithmetic progression of constants\n        end: last term in the arithmetic progression (inclusive)\n        step: common difference of the arithmetic progression\n        target_sign: 1 for positive product, -1 for negative product, 0 for zero\n    \n    Returns:\n        List of integer n values where the product has the target sign.\n        For target_sign=0, returns the constants themselves (n = a_i makes factor zero).\n    \"\"\"\n    # Generate the arithmetic progression of constants\n    constants = list(range(start, end + 1, step))\n    k = len(constants)\n    \n    if target_sign == 0:\n        return constants\n    \n    # For non-zero sign, find ranges where the product has the desired sign\n    # Product is zero at each constant, sign changes between consecutive constants\n    result = []\n    \n    if k % 2 == 1:  # odd number of factors\n        # Product is negative between constants[0] and constants[1],\n        # positive between constants[1] and constants[2], etc.\n        # Starting sign for n < constants[0]: (-1)^k = negative (k odd)\n        # So intervals alternate: (−∞, a1): neg, (a1, a2): pos, (a2, a3): neg, ...\n        \n        if target_sign == -1:\n            # Negative intervals: (-∞, a1), (a2, a3), (a4, a5), ...\n            for i in range(0, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n        else:  # target_sign == 1\n            # Positive intervals: (a1, a2), (a3, a4), ...\n            for i in range(1, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n    else:  # even number of factors\n        # Starting sign for n < constants[0]: positive (k even)\n        # Intervals: (−∞, a1): pos, (a1, a2): neg, (a2, a3): pos, ...\n        \n        if target_sign == -1:\n            for i in range(0, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n        else:  # target_sign == 1\n            for i in range(1, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n    \n    return result"
+        },
+        {
+          "name": "reciprocal_sum_bounds",
+          "description": "Find the minimum positive value of expressions of the form x + 1/x where x is constrained.",
+          "code": "def reciprocal_sum_bounds(x_min=None, x_max=None):\n    \"\"\"Analyze the range of x + 1/x for x in a given interval.\n    \n    Key insight: For the expression f(x) = x + 1/x:\n    - f(x) >= 2 for x > 0 (by AM-GM inequality), with minimum at x = 1\n    - f(x) <= -2 for x < 0 (by AM-GM), with maximum at x = -1\n    - As x → 0+ or x → ∞, f(x) → ∞\n    - As x → 0- or x → -∞, f(x) → -∞\n    \n    This is useful for optimization problems involving expressions like\n    (a+b)/(a-b) + (a-b)/(a+b) which can be written as x + 1/x.\n    \n    Args:\n        x_min: minimum allowed value of x (None for -infinity)\n        x_max: maximum allowed value of x (None for +infinity)\n    \n    Returns:\n        dict with keys:\n        - 'min_positive': minimum positive value achievable (2 if 0 < x < ∞)\n        - 'max_negative': maximum negative value achievable (-2 if -∞ < x < 0)\n        - 'range': tuple (overall_min, overall_max) of f(x)\n    \"\"\"\n    def f(x):\n        return x + 1/x\n    \n    results = {}\n    \n    # Critical points: x = 1 gives minimum 2 for x > 0\n    # x = -1 gives maximum -2 for x < 0\n    \n    # Handle positive region\n    pos_domain_min = max(0, x_min) if x_min is not None else 0\n    pos_domain_max = x_max if x_max is not None and x_max > 0 else float('inf')\n    \n    if pos_domain_max > pos_domain_min:\n        if pos_domain_min <= 1 <= pos_domain_max:\n            results['min_positive'] = 2.0\n        elif pos_domain_max <= 1:\n            results['min_positive'] = f(pos_domain_max)\n        else:  # pos_domain_min >= 1\n            results['min_positive'] = f(pos_domain_min)\n    else:\n        results['min_positive'] = None\n    \n    # Handle negative region\n    neg_domain_min = x_min if x_min is not None and x_min < 0 else float('-inf')\n    neg_domain_max = min(0, x_max) if x_max is not None else 0\n    \n    if neg_domain_min < neg_domain_max:\n        if neg_domain_min <= -1 <= neg_domain_max:\n            results['max_negative'] = -2.0\n        elif neg_domain_max <= -1:\n            results['max_negative'] = f(neg_domain_min)\n        else:  # neg_domain_min >= -1\n            results['max_negative'] = f(neg_domain_max)\n    else:\n        results['max_negative'] = None\n    \n    # Overall range\n    candidates = []\n    if results['min_positive'] is not None:\n        candidates.extend([results['min_positive'], float('inf')])\n    if results['max_negative'] is not None:\n        candidates.extend([float('-inf'), results['max_negative']])\n    \n    if candidates:\n        results['range'] = (min(candidates), max(candidates))\n    else:\n        results['range'] = None\n    \n    return results"
+        },
+        {
+          "name": "min_with_exact_divisors",
+          "description": "Find the smallest positive integer with exactly k positive divisors.",
+          "code": "import itertools\n\ndef min_with_exact_divisors(k):\n    \"\"\"Find the smallest positive integer with exactly k positive divisors.\n    \n    Key insight: To minimize n with d(n) = k, factorize k and use the divisor\n    count formula in reverse. For k = (e1+1)*(e2+1)*...*(em+1), the candidates\n    are of the form n = p1^e1 * p2^e2 * ... * pm^em. To minimize n, assign\n    larger exponents to smaller primes. Check all partitions of k into factors.\n    \n    Args:\n        k: the exact number of divisors required\n    \n    Returns:\n        The smallest positive integer with exactly k divisors.\n    \"\"\"\n    def get_factorizations(k):\n        \"\"\"Get all ways to write k as product of integers > 1.\"\"\"\n        if k == 1:\n            return [[]]\n        results = []\n        for d in range(2, k + 1):\n            if k % d == 0:\n                for rest in get_factorizations(k // d):\n                    results.append([d] + rest)\n        # Remove duplicates by sorting each factorization\n        unique = []\n        seen = set()\n        for f in results:\n            sorted_f = tuple(sorted(f, reverse=True))\n            if sorted_f not in seen:\n                seen.add(sorted_f)\n                unique.append(list(sorted_f))\n        return unique\n    \n    primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]\n    \n    factorizations = get_factorizations(k)\n    min_n = float('inf')\n    \n    for factors in factorizations:\n        # factors are (ei + 1) values, so exponents are (f - 1)\n        exponents = [f - 1 for f in factors]\n        exponents.sort(reverse=True)  # largest exponent with smallest prime\n        \n        n = 1\n        for i, exp in enumerate(exponents):\n            n *= primes[i] ** exp\n        \n        min_n = min(min_n, n)\n    \n    return min_n"
+        },
+        {
+          "name": "max_independent_set_graph",
+          "description": "Find a maximum independent set in a small graph using exhaustive search.",
+          "code": "def max_independent_set_graph(nodes, edges):\n    \"\"\"Find a maximum independent set in a graph using exhaustive search.\n    \n    Key insight: An independent set is a set of vertices with no edges between them.\n    For small graphs, we can enumerate all subsets in decreasing order of size\n    and return the first valid one found.\n    \n    Args:\n        nodes: iterable of node identifiers\n        edges: iterable of (node1, node2) pairs representing undirected edges\n    \n    Returns:\n        Tuple (size, independent_set) where independent_set is a tuple of nodes.\n    \"\"\"\n    from itertools import combinations\n    \n    nodes = list(nodes)\n    edges = list(edges)\n    edge_set = set()\n    for u, v in edges:\n        edge_set.add((min(u, v), max(u, v)))\n    \n    def is_independent(subset):\n        subset_set = set(subset)\n        for u, v in edge_set:\n            if u in subset_set and v in subset_set:\n                return False\n        return True\n    \n    for size in range(len(nodes), 0, -1):\n        for subset in combinations(nodes, size):\n            if is_independent(subset):\n                return size, subset\n    \n    return 0, ()"
+        },
+        {
+          "name": "titu_lemma_minimum",
+          "description": "Find the minimum of expressions of the form a²/x + b²/y given x + y = constant.",
+          "code": "def titu_lemma_minimum(a, b, sum_xy):\n    \"\"\"Find minimum of a²/x + b²/y subject to x + y = sum_xy and x, y > 0.\n    \n    Key insight: By Titu's Lemma (a special case of Cauchy-Schwarz):\n    (a²/x) + (b²/y) ≥ (a + b)²/(x + y) for x, y > 0.\n    \n    Equality occurs when x/a = y/b, i.e., when x and y are proportional to a and b.\n    Specifically: x = sum_xy * a/(a+b), y = sum_xy * b/(a+b).\n    \n    Args:\n        a: coefficient for first term (positive number)\n        b: coefficient for second term (positive number)\n        sum_xy: the constraint x + y (positive number)\n    \n    Returns:\n        dict with keys:\n        - 'minimum': the minimum value of a²/x + b²/y\n        - 'optimal_x': x value at which minimum occurs\n        - 'optimal_y': y value at which minimum occurs\n    \"\"\"\n    minimum = (a + b) ** 2 / sum_xy\n    optimal_x = sum_xy * a / (a + b)\n    optimal_y = sum_xy * b / (a + b)\n    return {\n        'minimum': minimum,\n        'optimal_x': optimal_x,\n        'optimal_y': optimal_y\n    }"
+        }
+      ],
+      "history_context": {
+        "previous_query": "There are exactly three positive real numbers $k$ such that the function\n$$f(x) = \\frac{(x - 18)(x - 72)(x - 98)(x - k)}",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Interesting! sqrt(18*98) = 42\n# So we have 18, 72, 98 as three numbers with the middle one not being the geometric mean\n# But 18, 42, 98 would have 42 = sqrt(18*98)\n\n# Let me check if the answer involves geometric means\n# Geometric means of pairs: sqrt(18*72), sqrt(18*98), sqrt(72*98)\n\nimport math\nsqrt(18*72) = 36.0\nsqrt(18*98) = 42.0\nsqrt(72*98) = 84.0\nHarmonic mean of 18 and 72: 28.8\nHarmonic mean of 18 and 98: 30.413793103448278\nHarmonic mean of 72 and 98: 83.01176470588236",
+        "historical_agent_summary": "# Interesting! sqrt(18*98) = 42\n# So we have 18, 72, 98 as three numbers with the middle one not being the geometric mean\n# But 18, 42, 98 would have 42 = sqrt(18*98)\n\n# Let me check if the answer involves geometric means\n# Geometric means of pairs: sqrt(18*72), sqrt(18*98), sqrt(72*98)\n\nimport math\nsqrt(18*72) = 36.0\nsqrt(18*98) = 42.0\nsqrt(72*98) = 84.0\nHarmonic mean of 18 and 72: 28.8\nHarmonic mean of 18 and 98: 30.413793103448278\nHarmonic mean of 72 and 98: 83.01176470588236",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "I need to find values of $k$ such that $f(x) = \\frac{(x-18)(x-72)(x-98)(x-k)}{x}$ achieves its minimum at exactly two positive $x$ values.\n\nLet me rewrite this as $f(x) = (x-18)(x-72)(x-98)(x-k) \\cdot \\frac{1}{x}$.\n\nLet $y = x - 72$. Then the first three factors become $(y-54)(y)(y+26)$ and the expression becomes:\n$$(y-54) \\cdot y \\cdot (y+26) \\cdot (y + 72 - k) \\cdot \\frac{1}{y+72}$$\n\nUsing the identity $\\frac{ab}{a+b} = \\frac{1}{\\frac{1}{a}+\\frac{1}{b}}$ in a clever way, let me set $a = y + 72$ and rearrange. Actually, let me work with: $(y-54)(y+26) \\cdot y(y+72-k) \\cdot \\frac{1}{y+72}$.\n\nThe term $(y-54)(y+26)$ is a quadratic. The term $\\frac{y(y+72-k)}{y+72}$ can be rewritten.\n\nLet me compute this more carefully with Python to find the relationship.",
+          "import sympy as sp\n\n# Define symbols\ny, k = sp.symbols('y k', real=True)\n\n# The expression f(x) rewritten in terms of y = x - 72\n# f(x) = (x-18)(x-72)(x-98)(x-k)/x\n# With y = x - 72, so x = y + 72\n# (x-18) = y + 72 - 18 = y + 54\n# (x-72) = y\n# (x-98) = y + 72 - 98 = y - 26\n# (x-k) = y + 72 - k\n# x = y + 72\n\nexpr = (y + 54) * y * (y - 26) * (y + 72 - k) / (y + 72)\nprint(sp.expand(expr))",
+          "-k*y**3/(y + 72) - 28*k*y**2/(y + 72) + 1404*k*y/(y + 72) + y**4/(y + 72) + 100*y**3/(y + 72) + 612*y**2/(y + 72) - 101088*y/(y + 72)"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 12,
+        "problem_id": "Problem_15",
+        "question": "There are exactly three positive real numbers $k$ such that the function\n$$f(x) = \\frac{(x - 18)(x - 72)(x - 98)(x - k)}",
+        "baseline_accuracy": 0.0,
+        "evolve_accuracy": 0.0,
+        "baseline_avg_tokens": 124976.0,
+        "evolve_avg_tokens": 178049.0,
+        "baseline_avg_steps": 48.0,
+        "evolve_avg_steps": 48.0,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "alternating_product_sign_range",
+          "reciprocal_sum_bounds",
+          "min_with_exact_divisors",
+          "max_independent_set_graph",
+          "titu_lemma_minimum"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::14::Problem_2",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_2",
+      "query": "On $\\triangle ABC$ points $A,D,E$, and $B$ lie that order on side $\\overline{AB}$ with $AD=4, DE=16$, and $EB=8$. Points",
+      "retrieved_skills": [
+        {
+          "name": "alternating_product_sign_range",
+          "description": "Find all integer values where a product of linear terms with alternating signs is negative.",
+          "code": "def alternating_product_sign_range(start, end, step, target_sign):\n    \"\"\"Find values where product of terms (n-start), (n-(start+step)), ..., (n-end) has target sign.\n    \n    For a product P(n) = (n-a1)(n-a2)...(n-ak) where a1 < a2 < ... < ak, \n    the sign of P(n) alternates based on how many factors are negative.\n    \n    Key insight: For consecutive arithmetic progression a_i = start + (i-1)*step,\n    between each pair (a_i, a_{i+1}), exactly one factor changes sign.\n    With k terms, the sign pattern repeats every k+1 intervals:\n    - If k is odd: negative for n in (a1, a2) ∪ (a3, a4) ∪ ... ∪ (a_{k-2}, a_{k-1})\n    - If k is even: negative for n in (a1, a2) ∪ (a3, a4) ∪ ...\n    \n    For positive integers n with product < 0 and k odd factors:\n    Valid n = a1+1, a1+1+2*step, ..., up to but not including a_k.\n    \n    Args:\n        start: first term in the arithmetic progression of constants\n        end: last term in the arithmetic progression (inclusive)\n        step: common difference of the arithmetic progression\n        target_sign: 1 for positive product, -1 for negative product, 0 for zero\n    \n    Returns:\n        List of integer n values where the product has the target sign.\n        For target_sign=0, returns the constants themselves (n = a_i makes factor zero).\n    \"\"\"\n    # Generate the arithmetic progression of constants\n    constants = list(range(start, end + 1, step))\n    k = len(constants)\n    \n    if target_sign == 0:\n        return constants\n    \n    # For non-zero sign, find ranges where the product has the desired sign\n    # Product is zero at each constant, sign changes between consecutive constants\n    result = []\n    \n    if k % 2 == 1:  # odd number of factors\n        # Product is negative between constants[0] and constants[1],\n        # positive between constants[1] and constants[2], etc.\n        # Starting sign for n < constants[0]: (-1)^k = negative (k odd)\n        # So intervals alternate: (−∞, a1): neg, (a1, a2): pos, (a2, a3): neg, ...\n        \n        if target_sign == -1:\n            # Negative intervals: (-∞, a1), (a2, a3), (a4, a5), ...\n            for i in range(0, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n        else:  # target_sign == 1\n            # Positive intervals: (a1, a2), (a3, a4), ...\n            for i in range(1, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n    else:  # even number of factors\n        # Starting sign for n < constants[0]: positive (k even)\n        # Intervals: (−∞, a1): pos, (a1, a2): neg, (a2, a3): pos, ...\n        \n        if target_sign == -1:\n            for i in range(0, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n        else:  # target_sign == 1\n            for i in range(1, k - 1, 2):\n                for n in range(constants[i] + 1, constants[i + 1]):\n                    result.append(n)\n    \n    return result"
+        },
+        {
+          "name": "ordered_pairs_with_product",
+          "description": "Count ordered pairs of positive integers with a given product.",
+          "code": "def ordered_pairs_with_product(n):\n    \"\"\"Count ordered pairs (x, y) of positive integers such that x * y = n.\n    \n    Key insight: For each divisor d of n, (d, n//d) is a valid ordered pair.\n    The number of ordered pairs equals the number of positive divisors of n,\n    since each divisor d gives a unique pair (d, n//d).\n    \n    For n = 12, divisors are 1,2,3,4,6,12, giving pairs:\n    (1,12), (2,6), (3,4), (4,3), (6,2), (12,1) - total 6 pairs.\n    \n    Args:\n        n: the target product (positive integer)\n    \n    Returns:\n        Number of ordered pairs (x, y) with x, y positive integers and x * y = n.\n    \"\"\"\n    if n <= 0:\n        return 0\n    \n    count = 0\n    d = 1\n    while d * d <= n:\n        if n % d == 0:\n            count += 1 if d * d == n else 2\n        d += 1\n    return count"
+        },
+        {
+          "name": "sum_of_squares_solutions",
+          "description": "Find all pairs (a, b) from given ranges where a² + b² equals a target value.",
+          "code": "def sum_of_squares_solutions(target, range_a, range_b=None):\n    \"\"\"Find all pairs (a, b) where a² + b² equals target, with a, b in given ranges.\n    \n    Key insight: Enumerate all possible pairs and check if their squares sum to target.\n    For symmetric ranges, solutions come in pairs (a, b) and (b, a) unless a = b.\n    \n    Args:\n        target: the desired sum of squares (non-negative integer)\n        range_a: tuple (start, end) or single integer n meaning range(1, n+1)\n        range_b: tuple (start, end) or single integer; defaults to range_a if None\n    \n    Returns:\n        List of tuples (a, b) where a² + b² = target\n    \"\"\"\n    if isinstance(range_a, int):\n        range_a = (1, range_a + 1)\n    if range_b is None:\n        range_b = range_a\n    elif isinstance(range_b, int):\n        range_b = (1, range_b + 1)\n    \n    solutions = []\n    for a in range(range_a[0], range_a[1]):\n        for b in range(range_b[0], range_b[1]):\n            if a * a + b * b == target:\n                solutions.append((a, b))\n    return solutions"
+        },
+        {
+          "name": "count_divisors",
+          "description": "Count the number of positive divisors of an integer using prime factorization.",
+          "code": "def count_divisors(n):\n    \"\"\"Count positive divisors using prime factorization.\n    \n    Key insight: If n = p1^e1 * p2^e2 * ... * pk^ek, then the number of\n    positive divisors is (e1 + 1) * (e2 + 1) * ... * (ek + 1).\n    This follows because each divisor is uniquely determined by choosing\n    an exponent from 0 to ei for each prime factor pi.\n    \n    Args:\n        n: positive integer\n    \n    Returns:\n        Number of positive divisors of n.\n    \"\"\"\n    if n == 1:\n        return 1\n    count = 1\n    p = 2\n    while p * p <= n:\n        exp = 0\n        while n % p == 0:\n            n //= p\n            exp += 1\n        count *= (exp + 1)\n        p += 1\n    if n > 1:\n        count *= 2\n    return count"
+        },
+        {
+          "name": "solve_three_variable_sum_system",
+          "description": "Solve for three variables given their pairwise sums.",
+          "code": "def solve_three_variable_sum_system(sum_bc, sum_ca, sum_ab):\n    \"\"\"Solve for three variables given their pairwise sums: b+c, c+a, a+b.\n    \n    Key insight: If b+c = S_a, c+a = S_b, a+b = S_c (using cyclic notation where\n    S_a is the sum that excludes a), then adding all three equations:\n    2(a+b+c) = S_a + S_b + S_c, so (a+b+c) = (S_a + S_b + S_c)/2.\n    \n    Therefore: a = (a+b+c) - (b+c) = (S_a + S_b + S_c)/2 - S_a = (S_b + S_c - S_a)/2\n    And cyclically: b = (S_c + S_a - S_b)/2, c = (S_a + S_b - S_c)/2.\n    \n    Args:\n        sum_bc: value of b + c (sum excluding first variable)\n        sum_ca: value of c + a (sum excluding second variable)\n        sum_ab: value of a + b (sum excluding third variable)\n    \n    Returns:\n        Tuple (a, b, c) of the three variables\n    \"\"\"\n    a = (sum_ab + sum_ca - sum_bc) / 2\n    b = (sum_bc + sum_ab - sum_ca) / 2\n    c = (sum_ca + sum_bc - sum_ab) / 2\n    return (a, b, c)"
+        }
+      ],
+      "history_context": {
+        "previous_query": "On $\\triangle ABC$ points $A,D,E$, and $B$ lie that order on side $\\overline{AB}$ with $AD=4, DE=16$, and $EB=8$. Points",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Sum of contributions = 0 - 240 + 840 + 1176 - 840 + 240 + 0 = 1176\n# Area = |1176| / 2 = 588\n\n# Wait, I need to reconsider. Let me verify my understanding.\n# The area calculation gives 588, same as Area(ABC).\n\n# But this is a heptagon that extends outside of triangle ABC (due to point N).\n# How ca\nArea(heptagon AFNBCEM) = 588.000000000000\nArea(ABC) = 588\nDifference = 0\n\nArea(DEGF) = 288.000000000000\nArea(ABC) / 2 = 294\nArea(DEGF) + Area(something) = Area(ABC)/2 ?",
+        "historical_agent_summary": "# Sum of contributions = 0 - 240 + 840 + 1176 - 840 + 240 + 0 = 1176\n# Area = |1176| / 2 = 588\n\n# Wait, I need to reconsider. Let me verify my understanding.\n# The area calculation gives 588, same as Area(ABC).\n\n# But this is a heptagon that extends outside of triangle ABC (due to point N).\n# How ca\nArea(heptagon AFNBCEM) = 588.000000000000\nArea(ABC) = 588\nDifference = 0\n\nArea(DEGF) = 288.000000000000\nArea(ABC) / 2 = 294\nArea(DEGF) + Area(something) = Area(ABC)/2 ?",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Let me analyze this problem step by step.\n\n**Understanding the setup:**\n- On side AB: A, D, E, B with AD=4, DE=16, EB=8\n- On side AC: A, F, G, C with AF=13, FG=52, GC=26\n- M is reflection of D through F, N is reflection of G through E\n- Area(DEGF) = 288\n- Need: Area of heptagon AFNBCEM\n\nLet me set up coordinates and compute the areas.",
+          "import sympy as sp\nfrom sympy import symbols, solve, sqrt, simplify, Abs\n\n# Define variables\n# Place A at origin for simplicity\nA = (0, 0)\n\n# B on x-axis at distance AB = 4 + 16 + 8 = 28\nB = (28, 0)\n\n# C at some point (cx, cy) where AC = 13 + 52 + 26 = 91\n# Let's parameterize: C = (cx, cy) where sqrt(cx^2 + cy^2) = 91\n\n# Points on AB (y=0):\nD = (4, 0)\nE = (4 + 16, 0)  # E = (20, 0)\n\n# Points on AC (parameterized by angle theta):\n# Let C = (91*cos(theta), 91*sin(theta))\ntheta = symbols('theta', real=True)\n\n# We need to find the ratio along AC\n# AF/AC = 13/91, FG/AC = 52/91, GC/AC = 26/91\n# AF/AC = 1/7, FG/AC = 4/7, GC/AC = 2/7\n\n# Parameter t for position along AC from A to C\n# t = 0 at A, t = 1 at C\n# F is at t = 13/91 = 1/7\n# G is at t = (13+52)/91 = 65/91 = 5/7\n\n# If C = (cx, cy), then:\n# F = (cx * 1/7, cy * 1/7) = (cx/7, cy/7)\n# G = (cx * 5/7, cy * 5/7) = (5*cx/7, 5*cy/7)\n\nprint(\"Setting up the problem with symbolic variables\")\nprint(f\"AB = 28, AC = 91\")\nprint(f\"D = {D}, E = {E}\")\nprint(f\"F and G are on AC with AF = 13, FG = 52\")",
+          "Setting up the problem with symbolic variables\nAB = 28, AC = 91\nD = (4, 0), E = (20, 0)\nF and G are on AC with AF = 13, FG = 52"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 14,
+        "problem_id": "Problem_2",
+        "question": "Find the sum of all positive integers $n$ such that $n+2$ divides the product $3(n+3)(n^2+9)$.",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 1.0,
+        "baseline_avg_tokens": 4734.8,
+        "evolve_avg_tokens": 14999.5,
+        "baseline_avg_steps": 5.0,
+        "evolve_avg_steps": 8.25,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "alternating_product_sign_range",
+          "ordered_pairs_with_product",
+          "sum_of_squares_solutions",
+          "count_divisors",
+          "solve_three_variable_sum_system"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::15::Problem_13",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_13",
+      "query": "Let $x_1, x_2, x_3, \\ldots$ be a sequence of rational numbers defined by $x_1 = \\frac{25}{11}$ and\n$$x_{k+1} = \\frac{1}{",
+      "retrieved_skills": [
+        {
+          "name": "arithmetic_sequence_bounds",
+          "description": "Given constraints on arithmetic sequence terms, find the range of valid common differences and resulting extreme term values.",
+          "code": "from fractions import Fraction\n\ndef arithmetic_sequence_bounds(n, total_sum, term_min, term_max, target_index):\n    \"\"\"Find min and max possible values of a specific term in a constrained arithmetic sequence.\n    \n    For an arithmetic sequence with n terms, fixed sum, and bounds on all terms,\n    computes the extreme possible values of the target_index-th term.\n    \n    Key insight: For arithmetic sequence with sum S and n terms, the average is S/n.\n    Let mean = S/n. Then a_k = mean + (k - (n+1)/2) * d.\n    \n    The common difference d is constrained by:\n    - For increasing sequences (d > 0): a_1 >= term_min and a_n <= term_max\n    - For decreasing sequences (d < 0): a_1 <= term_max and a_n >= term_min\n    \n    Args:\n        n: number of terms in sequence\n        total_sum: sum of all terms\n        term_min: minimum allowed value for any term\n        term_max: maximum allowed value for any term\n        target_index: 1-indexed position of term to analyze (1 <= target_index <= n)\n    \n    Returns:\n        tuple (min_value, max_value) of the target term, as Fractions\n    \"\"\"\n    mean = Fraction(total_sum, n)\n    k = target_index\n    \n    # Position relative to center: a_k = mean + (k - (n+1)/2) * d\n    # Let offset_k = k - (n+1)/2\n    offset_k = Fraction(2*k - n - 1, 2)\n    \n    # For a_1: offset_1 = 1 - (n+1)/2 = (1-n)/2\n    # For a_n: offset_n = n - (n+1)/2 = (n-1)/2\n    offset_1 = Fraction(1 - n, 2)\n    offset_n = Fraction(n - 1, 2)\n    \n    # Find max d (increasing sequence, a_1 min, a_n max):\n    # a_1 >= term_min: mean + offset_1 * d >= term_min\n    #   => d <= (term_min - mean) / offset_1  (offset_1 < 0, so this flips)\n    #   => d >= (mean - term_min) / |offset_1|  ... wait, let me redo\n    # offset_1 = (1-n)/2 < 0, so:\n    #   mean + offset_1 * d >= term_min\n    #   offset_1 * d >= term_min - mean  \n    #   d <= (term_min - mean) / offset_1  (dividing by negative)\n    \n    # Actually: d <= (term_min - mean) / offset_1, and since offset_1 < 0,\n    # this is d <= negative / negative = positive\n    \n    # a_n <= term_max: mean + offset_n * d <= term_max\n    #   offset_n * d <= term_max - mean\n    #   d <= (term_max - mean) / offset_n  (offset_n > 0)\n    \n    # Max d is min of these constraints\n    d_max_1 = Fraction(term_min - mean, offset_1)  # from a_1 >= term_min\n    d_max_n = Fraction(term_max - mean, offset_n)  # from a_n <= term_max\n    d_max = min(d_max_1, d_max_n)\n    \n    # Find min d (decreasing sequence, a_1 max, a_n min):\n    # a_1 <= term_max: mean + offset_1 * d <= term_max\n    #   d >= (term_max - mean) / offset_1  (offset_1 < 0, so this is neg/ neg)\n    \n    # a_n >= term_min: mean + offset_n * d >= term_min\n    #   d >= (term_min - mean) / offset_n  (offset_n > 0)\n    \n    d_min_1 = Fraction(term_max - mean, offset_1)  # from a_1 <= term_max\n    d_min_n = Fraction(term_min - mean, offset_n)  # from a_n >= term_min\n    d_min = max(d_min_1, d_min_n)\n    \n    # Compute target term at extreme d values\n    # a_k = mean + offset_k * d\n    # When d is max (increasing), a_k is min if offset_k < 0, max if offset_k > 0\n    # When d is min (decreasing), a_k is max if offset_k < 0, min if offset_k > 0\n    \n    a_k_at_dmax = mean + offset_k * d_max\n    a_k_at_dmin = mean + offset_k * d_min\n    \n    min_value = min(a_k_at_dmax, a_k_at_dmin)\n    max_value = max(a_k_at_dmax, a_k_at_dmin)\n    \n    return (min_value, max_value)"
+        },
+        {
+          "name": "function_machine_trajectory",
+          "description": "Simulate an iterative function machine until a cycle is detected or target is reached.",
+          "code": "def function_machine_trajectory(start, rules, stop_condition='cycle', max_steps=10000):\n    \"\"\"Simulate a function machine trajectory under transformation rules until termination.\n    \n    Key insight: Many problems involve iterative transformations where:\n    - Each state maps to exactly one next state based on rules (parity, mod, etc.)\n    - The process terminates on cycle detection (when a state repeats)\n    - The trajectory length or composition determines the answer\n    \n    This captures patterns like: n → n/2 if even, n → n+3 if odd, Collatz-like sequences,\n    or any deterministic state machine with a stopping condition.\n    \n    Args:\n        start: initial value/input to the machine\n        rules: dict mapping condition names to (predicate_fn, transform_fn) tuples,\n               where predicate_fn(current) returns True if that rule applies,\n               and transform_fn(current) returns the next value\n               OR a simple dict {value: next_value} for lookup tables\n        stop_condition: 'cycle' (stop before repeating), 'target' (stop when reaching\n                       a specific value), or a custom predicate function\n        max_steps: safety limit to prevent infinite loops\n    \n    Returns:\n        List representing the trajectory (sequence of visited states)\n    \"\"\"\n    trajectory = []\n    current = start\n    seen = set()\n    \n    for _ in range(max_steps):\n        # Check termination conditions\n        if stop_condition == 'cycle' and current in seen:\n            break\n        elif callable(stop_condition) and stop_condition(current):\n            trajectory.append(current)\n            break\n        elif stop_condition != 'cycle' and current == stop_condition:\n            trajectory.append(current)\n            break\n        \n        seen.add(current)\n        trajectory.append(current)\n        \n        # Apply transformation rules\n        if callable(rules):\n            # rules is itself a transformation function\n            current = rules(current)\n        elif isinstance(rules, dict):\n            # Check if it's a lookup table or rule-based dict\n            first_key = next(iter(rules.keys()))\n            if callable(first_key):\n                # Rule-based: {predicate: transform}\n                for predicate, transform in rules.items():\n                    if predicate(current):\n                        current = transform(current)\n                        break\n            else:\n                # Lookup table: {value: next_value}\n                if current in rules:\n                    current = rules[current]\n                else:\n                    break  # No rule applies, stop\n    \n    return trajectory"
+        },
+        {
+          "name": "repeating_base_k_value",
+          "description": "Compute the value of a repeating base-k representation.",
+          "code": "from fractions import Fraction\n\ndef repeating_base_k_value(digits, base):\n    \"\"\"Compute the value of a repeating base-k representation.\n    \n    Key mathematical insight: A repeating base-k representation 0.\\overline{d_1 d_2 ... d_n}_k\n    equals (d_1 * k^(n-1) + d_2 * k^(n-2) + ... + d_n) / (k^n - 1).\n    \n    For example, 0.\\overline{23}_k = (2k + 3) / (k^2 - 1).\n    \n    Args:\n        digits: list of digit values in the repeating block (e.g., [2, 3] for \"23\")\n        base: the base k (must be greater than all digit values)\n    \n    Returns:\n        Fraction representing the exact value of the repeating representation.\n    \n    Raises:\n        ValueError: if any digit is >= base (invalid for that base)\n    \"\"\"\n    if any(d >= base for d in digits):\n        raise ValueError(f\"Digits {digits} invalid for base {base}\")\n    \n    n = len(digits)\n    \n    # Numerator: d_1 * k^(n-1) + d_2 * k^(n-2) + ... + d_n\n    numerator = 0\n    for i, d in enumerate(digits):\n        numerator += d * (base ** (n - 1 - i))\n    \n    # Denominator: k^n - 1\n    denominator = base ** n - 1\n    \n    return Fraction(numerator, denominator)"
+        },
+        {
+          "name": "exponential_fraction_pairing_sum",
+          "description": "Compute sum of f(x) = a^x / (a^x + a^c) over a range using pairing identity f(x) + f(c*ln(2)/ln(a) - x) = 1.",
+          "code": "def exponential_fraction_pairing_sum(a, c, start, end):\n    \"\"\"Sum f(x) = a^x / (a^x + a^c) from x=start to x=end using pairing identity.\n    \n    Key insight: For f(x) = a^x / (a^x + a^c), we have the identity:\n    f(x) + f(c*log_a(2)/ln(a) - x) = 1\n    \n    Special case: When a = 2 and c = 1/2:\n    f(x) = 2^x / (2^x + sqrt(2))\n    f(x) + f(1-x) = 1\n    \n    Proof for a=2, c=1/2:\n    f(1-x) = 2^(1-x) / (2^(1-x) + sqrt(2))\n           = 2^(1-x) / (2^(1-x) + 2^(1/2))\n           = 2^(1-x) / 2^(1/2) / (2^(1-x)/2^(1/2) + 1)\n           = 2^(1/2-x) / (2^(1/2-x) + 1)\n    \n    f(x) + f(1-x) = 2^x/(2^x+2^(1/2)) + 2^(1/2-x)/(2^(1/2-x)+1)\n    \n    Let u = 2^(x-1/2). Then 2^x = u*2^(1/2) and 2^(1/2-x) = 1/u.\n    \n    f(x) = u*sqrt(2)/(u*sqrt(2)+sqrt(2)) = u/(u+1)\n    f(1-x) = (1/u)/(1/u+1) = 1/(1+u)\n    \n    So f(x) + f(1-x) = u/(u+1) + 1/(u+1) = (u+1)/(u+1) = 1.\n    \n    For the sum from x=start to x=end, pair x with (1-x) when a=2, c=1/2.\n    If the pairing point (1-x) falls within [start, end], the pair sums to 1.\n    \n    Args:\n        a: base of the exponential (e.g., 2)\n        c: exponent in the added term (e.g., 0.5 for sqrt(2))\n        start: start of summation range\n        end: end of summation range (inclusive)\n    \n    Returns:\n        The sum of f(x) over all integers x from start to end (inclusive).\n    \"\"\"\n    import math\n    \n    # For a=2, c=1/2: pairing is f(x) + f(1-x) = 1\n    # The pairing partner of x is (1-x)\n    \n    if a == 2 and c == 0.5:\n        # Sum from start to end inclusive\n        # Pair x with 1-x\n        # x pairs with 1-x when both are in [start, end]\n        \n        total = 0\n        used = set()\n        \n        for x in range(start, end + 1):\n            if x in used:\n                continue\n            partner = 1 - x\n            if start <= partner <= end and partner not in used:\n                # Pair sums to 1\n                total += 1\n                used.add(x)\n                used.add(partner)\n            else:\n                # Unpaired term - compute directly\n                total += (a ** x) / (a ** x + a ** c)\n                used.add(x)\n        \n        return total\n    else:\n        # General case - compute directly\n        # For general a and c, find the pairing offset\n        # f(x) + f(k - x) = 1 where k = c * ln(2) / ln(a)\n        k = c * math.log(2) / math.log(a)\n        \n        total = 0\n        used = set()\n        \n        for x in range(start, end + 1):\n            if x in used:\n                continue\n            partner = k - x\n            # Check if partner is an integer in range\n            if abs(partner - round(partner)) < 1e-9:\n                partner_int = round(partner)\n                if start <= partner_int <= end and partner_int not in used:\n                    total += 1\n                    used.add(x)\n                    used.add(partner_int)\n                else:\n                    total += (a ** x) / (a ** x + a ** c)\n                    used.add(x)\n            else:\n                total += (a ** x) / (a ** x + a ** c)\n                used.add(x)\n        \n        return total"
+        },
+        {
+          "name": "count_arithmetic_sequences",
+          "description": "Count arithmetic sequences of given length within a range, optionally requiring a specific term.",
+          "code": "def count_arithmetic_sequences(max_term, seq_length, required_term=None):\n    \"\"\"Count arithmetic sequences of exact length within [1, max_term].\n    \n    For an arithmetic sequence with first term a and common difference d:\n    - Sequence: a, a+d, a+2d, ..., a+(seq_length-1)*d\n    - Last term must be <= max_term: a + (seq_length-1)*d <= max_term\n    - So a <= max_term - (seq_length-1)*d\n    \n    Key insight: For each valid difference d, count valid starting terms a.\n    The constraint a >= 1 and a + (seq_length-1)*d <= max_term gives:\n    - Number of choices for a = max_term - (seq_length-1)*d\n    - Valid d ranges from 1 to floor((max_term - 1) / (seq_length - 1))\n    \n    For sequences containing a specific term:\n    - If required term = k, then k = a + j*d for some 0 <= j < seq_length\n    - For each valid (d, j), a = k - j*d must satisfy a >= 1\n    \n    Args:\n        max_term: maximum value in range (minimum is always 1)\n        seq_length: exact length of arithmetic sequence (number of terms)\n        required_term: if specified, only count sequences containing this term\n    \n    Returns:\n        Total count of valid arithmetic sequences\n    \"\"\"\n    n = seq_length\n    total = 0\n    \n    if required_term is None:\n        # Count all sequences: for each d, sum (max_term - (n-1)*d)\n        # Max d such that max_term - (n-1)*d >= 1\n        max_d = (max_term - 1) // (n - 1)\n        for d in range(1, max_d + 1):\n            total += max_term - (n - 1) * d\n    else:\n        k = required_term\n        # For each valid d, check if k can appear in sequence\n        max_d = (max_term - 1) // (n - 1)\n        for d in range(1, max_d + 1):\n            # k = a + j*d for some j in [0, n-1]\n            # a = k - j*d must be in [1, max_term - (n-1)*d]\n            # Also a + (n-1)*d <= max_term, but since a <= k and j >= 0:\n            # if a >= 1, we need a <= max_term - (n-1)*d\n            # i.e., k - j*d <= max_term - (n-1)*d\n            # j*d >= k - max_term + (n-1)*d = k - max_term + n*d - d\n            for j in range(n):\n                a = k - j * d\n                last_term = a + (n - 1) * d\n                if a >= 1 and last_term <= max_term:\n                    total += 1\n    return total"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Let $x_1, x_2, x_3, \\ldots$ be a sequence of rational numbers defined by $x_1 = \\frac{25}{11}$ and\n$$x_{k+1} = \\frac{1}{",
+        "previous_workflow_plan": null,
+        "workflow_summary": "# Let me verify by computing the actual values for small k and comparing mod 1000\nfrom fractions import Fraction\nfrom math import gcd\n\nMOD = 1000\n\n# Method 1: Direct computation with exact fractions\nx = Fraction(25, 11)\nprint(\"Direct computation:\")\nfor k in range(1, 11):\n    num_mod = x.numerator % \n[ERROR]\n<string>:159: SyntaxWarning: invalid escape sequence '\\o'\nTraceback (most recent call last):\n  File \"<string>\", line 945, in <module>\nTypeError: unsupported operand type(s) for *: 'int' and 'NoneType'\nDirect computation:\nk=1: num % 1000 = 25, den % 1000 = 11, sum % 1000 = 36\nk=2: num % 1000 ",
+        "historical_agent_summary": "# Let me verify by computing the actual values for small k and comparing mod 1000\nfrom fractions import Fraction\nfrom math import gcd\n\nMOD = 1000\n\n# Method 1: Direct computation with exact fractions\nx = Fraction(25, 11)\nprint(\"Direct computation:\")\nfor k in range(1, 11):\n    num_mod = x.numerator % \n[ERROR]\n<string>:159: SyntaxWarning: invalid escape sequence '\\o'\nTraceback (most recent call last):\n  File \"<string>\", line 945, in <module>\nTypeError: unsupported operand type(s) for *: 'int' and 'NoneType'\nDirect computation:\nk=1: num % 1000 = 25, den % 1000 = 11, sum % 1000 = 36\nk=2: num % 1000 ",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Let me analyze this recursive sequence carefully.\n\nGiven: $x_1 = \\frac{25}{11}$ and $x_{k+1} = \\frac{1}{3}\\left(x_k + \\frac{1}{x_k} - 1\\right)$\n\nLet me first compute several terms to find a pattern.",
+          "from fractions import Fraction\n\ndef compute_sequence(n):\n    \"\"\"Compute the first n terms of the sequence.\"\"\"\n    x = Fraction(25, 11)\n    sequence = [x]\n    for i in range(1, n):\n        x = Fraction(1, 3) * (x + Fraction(1, x) - 1)\n        sequence.append(x)\n    return sequence\n\n# Compute first several terms\nseq = compute_sequence(10)\nfor i, x in enumerate(seq, 1):\n    print(f\"x_{i} = {x} = {x.numerator}/{x.denominator}\")",
+          "<string>:159: SyntaxWarning: invalid escape sequence '\\o'\nx_1 = 25/11 = 25/11\nx_2 = 157/275 = 157/275\nx_3 = 19033/43175 = 19033/43175\nx_4 = 468195313/821749775 = 468195313/821749775\nx_5 = 169913383571304673/384739393113804575 = 169913383571304673/384739393113804575\nx_6 = 37174195484363703821878726392096193/65372372077136852512227799506278975 = 37174195484363703821878726392096193/65372372077136852512227799506278975\nx_7 = 1075100834009754721649678888778058599607738529594060178108331799567233/2430165338872044663879765527842296378677526572095424108765115693442175 = 1075100834009754721649678888778058599607738529594060178108331799567233/2430165338872044663879765527842296378677526572095424108765115693442175\nx_8 = 1482957531646872142117908639120372024393838990775597938415411588358115510684425472334749863591589083954355230814502683581895755315015251713/2612672782602933423865779962008733139354696222879841026596684318379937423875566877127109612972608061290473293537327268208036190361110251775 = 1482957531646872142117908639120372024393838990775597938415411588358115510684425472334749863591589083954355230814502683581895755315015251713/26126727826029334238657799620087331393546962228798410265966843"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 15,
+        "problem_id": "Problem_13",
+        "question": "Let $x_1, x_2, x_3, \\ldots$ be a sequence of rational numbers defined by $x_1 = \\frac{25}{11}$ and\n$$x_{k+1} = \\frac{1}{",
+        "baseline_accuracy": 0.0,
+        "evolve_accuracy": 0.0,
+        "baseline_avg_tokens": 174945.8,
+        "evolve_avg_tokens": 263935.2,
+        "baseline_avg_steps": 48.0,
+        "evolve_avg_steps": 48.0,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "arithmetic_sequence_bounds",
+          "function_machine_trajectory",
+          "repeating_base_k_value",
+          "exponential_fraction_pairing_sum",
+          "count_arithmetic_sequences"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::27::Problem_1",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_1",
+      "query": "Find the sum of all integer bases $b>9$ for which $17_{b}$ is a divisor of $97_{b}$.",
+      "retrieved_skills": [
+        {
+          "name": "inverse_power_mod",
+          "description": "Compute the modular inverse of a power using the inverse of the base.",
+          "code": "def inverse_power_mod(base, exponent, modulus, base_inverse=None):\n    \"\"\"Compute the modular inverse of base^exponent given (or computing) the inverse of base.\n    \n    Key mathematical insight: (a^n)^(-1) ≡ (a^(-1))^n (mod m).\n    This follows from the property that (a^n)(a^(-n)) = a^0 = 1,\n    and a^(-n) = (a^(-1))^n since a^(-1) * a ≡ 1 implies (a^(-1))^n * a^n ≡ 1.\n    \n    Args:\n        base: the base being raised to a power\n        exponent: the positive integer exponent\n        modulus: the modulus m\n        base_inverse: optional pre-computed inverse of base mod m; if None, computed via extended GCD\n    \n    Returns:\n        The modular inverse of base^exponent mod modulus, or None if it doesn't exist.\n    \"\"\"\n    def extended_gcd(a, b):\n        if b == 0:\n            return a, 1, 0\n        gcd, x1, y1 = extended_gcd(b, a % b)\n        return gcd, y1, x1 - (a // b) * y1\n    \n    if base_inverse is None:\n        gcd, x, _ = extended_gcd(base % modulus, modulus)\n        if gcd != 1:\n            return None\n        base_inverse = (x % modulus + modulus) % modulus\n    \n    # (base^exponent)^(-1) = (base^(-1))^exponent\n    return pow(base_inverse, exponent, modulus)"
+        },
+        {
+          "name": "repeating_base_k_value",
+          "description": "Compute the value of a repeating base-k representation.",
+          "code": "from fractions import Fraction\n\ndef repeating_base_k_value(digits, base):\n    \"\"\"Compute the value of a repeating base-k representation.\n    \n    Key mathematical insight: A repeating base-k representation 0.\\overline{d_1 d_2 ... d_n}_k\n    equals (d_1 * k^(n-1) + d_2 * k^(n-2) + ... + d_n) / (k^n - 1).\n    \n    For example, 0.\\overline{23}_k = (2k + 3) / (k^2 - 1).\n    \n    Args:\n        digits: list of digit values in the repeating block (e.g., [2, 3] for \"23\")\n        base: the base k (must be greater than all digit values)\n    \n    Returns:\n        Fraction representing the exact value of the repeating representation.\n    \n    Raises:\n        ValueError: if any digit is >= base (invalid for that base)\n    \"\"\"\n    if any(d >= base for d in digits):\n        raise ValueError(f\"Digits {digits} invalid for base {base}\")\n    \n    n = len(digits)\n    \n    # Numerator: d_1 * k^(n-1) + d_2 * k^(n-2) + ... + d_n\n    numerator = 0\n    for i, d in enumerate(digits):\n        numerator += d * (base ** (n - 1 - i))\n    \n    # Denominator: k^n - 1\n    denominator = base ** n - 1\n    \n    return Fraction(numerator, denominator)"
+        },
+        {
+          "name": "modular_inverse",
+          "description": "Compute the modular multiplicative inverse of a number modulo m.",
+          "code": "def modular_inverse(a, m):\n    \"\"\"Compute the modular multiplicative inverse of a mod m.\n    \n    Key insight: The inverse exists iff gcd(a, m) = 1. Uses extended Euclidean\n    algorithm to find integers x, y such that ax + my = gcd(a, m), then\n    a^(-1) ≡ x (mod m).\n    \n    Args:\n        a: the number whose inverse is sought\n        m: the modulus\n    \n    Returns:\n        The modular inverse of a mod m, or None if it doesn't exist.\n    \"\"\"\n    def extended_gcd(a, b):\n        if b == 0:\n            return a, 1, 0\n        gcd, x1, y1 = extended_gcd(b, a % b)\n        return gcd, y1, x1 - (a // b) * y1\n    \n    gcd, x, _ = extended_gcd(a % m, m)\n    if gcd != 1:\n        return None\n    return (x % m + m) % m"
+        },
+        {
+          "name": "chinese_remainder_theorem",
+          "description": "Solve systems of linear congruences using the Chinese Remainder Theorem.",
+          "code": "def chinese_remainder_theorem(remainders, moduli):\n    \"\"\"Solve a system of linear congruences x ≡ r_i (mod m_i) for coprime moduli.\n    \n    Key mathematical insight: For pairwise coprime moduli m_1, m_2, ..., m_k,\n    the solution is unique modulo M = m_1 * m_2 * ... * m_k.\n    \n    Using the constructive formula: x = Σ(r_i * M_i * y_i) mod M,\n    where M_i = M / m_i and y_i = modular inverse of M_i mod m_i.\n    \n    Args:\n        remainders: list of remainders [r_1, r_2, ...]\n        moduli: list of coprime moduli [m_1, m_2, ...]\n    \n    Returns:\n        The unique solution x in range [0, M) where M is product of moduli,\n        or None if no solution exists (moduli not coprime).\n    \"\"\"\n    def extended_gcd(a, b):\n        \"\"\"Extended Euclidean algorithm: returns (gcd, x, y) where ax + by = gcd.\"\"\"\n        if b == 0:\n            return a, 1, 0\n        gcd, x1, y1 = extended_gcd(b, a % b)\n        return gcd, y1, x1 - (a // b) * y1\n    \n    def mod_inverse(a, m):\n        \"\"\"Compute modular multiplicative inverse of a mod m.\"\"\"\n        gcd, x, _ = extended_gcd(a, m)\n        if gcd != 1:\n            return None\n        return (x % m + m) % m\n    \n    M = 1\n    for m in moduli:\n        M *= m\n    \n    result = 0\n    for r_i, m_i in zip(remainders, moduli):\n        M_i = M // m_i\n        y_i = mod_inverse(M_i, m_i)\n        if y_i is None:\n            return None\n        result += r_i * M_i * y_i\n    \n    return result % M"
+        },
+        {
+          "name": "p_adic_valuation",
+          "description": "Compute the p-adic valuation (the exponent of the largest power of prime p dividing n).",
+          "code": "def p_adic_valuation(n, p):\n    \"\"\"Compute the p-adic valuation v_p(n), the largest power of p dividing n.\n    \n    Key insight: The p-adic valuation v_p(n) is the exponent of the highest\n    power of prime p that divides n. For n = 0, returns infinity by convention.\n    Used extensively in number theory for LTE (Lifting the Exponent) applications.\n    \n    Args:\n        n: a non-negative integer\n        p: a prime number\n    \n    Returns:\n        The p-adic valuation v_p(n), or float('inf') if n = 0.\n    \"\"\"\n    if n == 0:\n        return float('inf')\n    count = 0\n    while n % p == 0:\n        n //= p\n        count += 1\n    return count"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Find the sum of all integer bases $b>9$ for which $17_{b}$ is a divisor of $97_{b}$.",
+        "previous_workflow_plan": null,
+        "workflow_summary": "<string>:43: SyntaxWarning: invalid escape sequence '\\o'\nb = 21: 196 / 28 = 7, divisible: True\nb = 49: 448 / 56 = 8, divisible: True\n\nChecking b+7 divides 56:\nb = 21: b+7 = 28 divides 56\nb = 49: b+7 = 56 divides 56\nThe modular arithmetic approach confirms the answer. The key insight is:\n\nUsing $b \\equiv -7 \\pmod{b+7}$:\n$$9b + 7 \\equiv 9(-7) + 7 = -56 \\pmod{b+7}$$\n\nSo we need $b+7 \\mid 56$. The positive divisors of $56$ are: $1, 2, 4, 7, 8, 14, 28, 56$.\n\nThis gives $b + 7 \\in \\{28, 56\\}$, so $b \\in \\{21, 49\\}$.",
+        "historical_agent_summary": "<string>:43: SyntaxWarning: invalid escape sequence '\\o'\nb = 21: 196 / 28 = 7, divisible: True\nb = 49: 448 / 56 = 8, divisible: True\n\nChecking b+7 divides 56:\nb = 21: b+7 = 28 divides 56\nb = 49: b+7 = 56 divides 56\nThe modular arithmetic approach confirms the answer. The key insight is:\n\nUsing $b \\equiv -7 \\pmod{b+7}$:\n$$9b + 7 \\equiv 9(-7) + 7 = -56 \\pmod{b+7}$$\n\nSo we need $b+7 \\mid 56$. The positive divisors of $56$ are: $1, 2, 4, 7, 8, 14, 28, 56$.\n\nThis gives $b + 7 \\in \\{28, 56\\}$, so $b \\in \\{21, 49\\}$.",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Let me analyze this problem step by step.\n\nFor a base $b > 9$:\n- $17_b = b + 7$\n- $97_b = 9b + 7$\n\nWe need $(b+7) \\mid (9b+7)$.\n\nThis means there exists integer $k$ such that $9b + 7 = k(b + 7)$.\n\nLet me solve this equation:",
+          "import sympy as sp\n\nb, k = sp.symbols('b k', integer=True, positive=True)\n# Equation: 9b + 7 = k(b + 7)\n# Rearranging: 9b + 7 = kb + 7k\n#              9b - kb = 7k - 7\n#              b(9-k) = 7(k-1)\n#              b = 7(k-1)/(9-k)\n\nsolutions = []\nfor k_val in range(1, 100):  # Try various values of k\n    numerator = 7 * (k_val - 1)\n    denominator = 9 - k_val\n    if denominator != 0 and numerator % denominator == 0:\n        b_val = numerator // denominator\n        if b_val > 9:\n            solutions.append((k_val, b_val))\n\nprint(\"Solutions (k, b):\", solutions)\nprint(\"Bases b > 9:\", [s[1] for s in solutions])\nprint(\"Sum:\", sum(s[1] for s in solutions))",
+          "<string>:43: SyntaxWarning: invalid escape sequence '\\o'\nSolutions (k, b): [(7, 21), (8, 49)]\nBases b > 9: [21, 49]\nSum: 70"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 27,
+        "problem_id": "Problem_1",
+        "question": "Find the sum of all integer bases $b>9$ for which $17_{b}$ is a divisor of $97_{b}$.",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 1.0,
+        "baseline_avg_tokens": 7870.5,
+        "evolve_avg_tokens": 12335.0,
+        "baseline_avg_steps": 5.75,
+        "evolve_avg_steps": 5.5,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "inverse_power_mod",
+          "repeating_base_k_value",
+          "modular_inverse",
+          "chinese_remainder_theorem",
+          "p_adic_valuation"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    },
+    {
+      "case_id": "draft::29::Problem_6",
+      "source_experiment": "ds100_aime_v1_exp1",
+      "problem_id": "Problem_6",
+      "query": "Circle $\\omega_1$ with radius $6$ centered at point $A$ is internally tangent at point $B$ to circle $\\omega_2$ with rad",
+      "retrieved_skills": [
+        {
+          "name": "triangle_area_max_on_conic_with_perpendicular_bisector",
+          "description": "Find maximum triangle area with vertices at origin and two points on a conic, where the perpendicular bisector passes through a fixed point.",
+          "code": "import sympy as sp\nfrom sympy import cos, sin, sqrt, Abs, simplify, pi, Rational\n\ndef triangle_area_max_on_conic_with_perpendicular_bisector(conic_params, fixed_point):\n    \"\"\"Find max area of triangle OAB where A, B are on conic and perpendicular bisector of AB passes through fixed point.\n    \n    Key insight: Parameterize points on ellipse x²/a² + y²/b² = 1 using trigonometric form:\n    A = (a*cos(α), b*sin(α)), B = (a*cos(β), b*sin(β))\n    \n    For perpendicular bisector to pass through D(dx, dy):\n    (D - M) · (B - A) = 0, where M is midpoint of AB\n    \n    Using u = (α+β)/2, v = (β-α)/2, the constraint simplifies to:\n    cos(u)*sin(v)*[b*sin(u)*cos(v) + b*dy*cos(v) - ...] = 0\n    \n    Area = |OA × OB|/2 = (a*b/2)|sin(β-α)| = (a*b/2)|sin(2v)|\n    \n    Args:\n        conic_params: tuple (a, b) for ellipse x²/a² + y²/b² = 1\n        fixed_point: tuple (dx, dy) for the point on perpendicular bisector\n    \n    Returns:\n        Maximum area achievable under the constraint\n    \"\"\"\n    a_semi, b_semi = conic_params\n    dx, dy = fixed_point\n    \n    # For ellipse x²/a² + y²/b² = 1, parameterize with angle θ:\n    # Point = (a*cos(θ), b*sin(θ))\n    \n    # Using symmetry analysis:\n    # Area = (a*b/2) * |sin(β-α)|\n    # The perpendicular bisector constraint can be satisfied when\n    # the points are symmetric (e.g., same y-coordinate for horizontal AB)\n    \n    # For maximum area, we need |sin(β-α)| = 1, i.e., β-α = ±π/2\n    \n    # Check if configuration with horizontal AB (same y-coord) works:\n    # A = (a*cos(θ), b*sin(θ)), B = (-a*cos(θ), b*sin(θ))\n    # Midpoint M = (0, b*sin(θ))\n    # Perpendicular bisector is x = 0 (vertical line)\n    # If dx = 0, D lies on this line ✓\n    \n    if dx == 0:\n        # Maximum area achievable with horizontal chord\n        max_area = a_semi * b_semi / 2\n        return max_area\n    \n    # For general case, use optimization over parameters\n    # (This is a simplified return for the common case)\n    return a_semi * b_semi / 2"
+        },
+        {
+          "name": "polygon_shoelace_area",
+          "description": "Compute the area of any simple polygon using the shoelace formula.",
+          "code": "def polygon_shoelace_area(vertices):\n    \"\"\"Compute the area of a simple polygon using the shoelace formula.\n    \n    Key insight: For a polygon with vertices (x₁,y₁), (x₂,y₂), ..., (xₙ,yₙ), the area is:\n    Area = |Σᵢ(xᵢ·yᵢ₊₁ - xᵢ₊₁·yᵢ)| / 2\n    where indices wrap around (yₙ₊₁ = y₁, xₙ₊₁ = x₁).\n    \n    This works for any simple (non-self-intersecting) polygon, regardless of\n    whether vertices are given in clockwise or counterclockwise order.\n    \n    Args:\n        vertices: List of (x, y) coordinate tuples representing polygon vertices\n                  in order around the boundary\n    \n    Returns:\n        The area of the polygon (non-negative)\n    \"\"\"\n    n = len(vertices)\n    area = 0\n    for i in range(n):\n        j = (i + 1) % n\n        area += vertices[i][0] * vertices[j][1]\n        area -= vertices[j][0] * vertices[i][1]\n    return abs(area) / 2"
+        },
+        {
+          "name": "square_vertices_from_side_and_center",
+          "description": "Generate vertices of a square given one side's midpoint coordinates and the center.",
+          "code": "def square_vertices_from_side_and_center(side_midpoint, center, side_length):\n    \"\"\"Compute all four vertices of a square given a side's midpoint and the center.\n    \n    Key insight: If M is the midpoint of one side and O is the center of the square,\n    then the vertex on that side in one direction is M + (M - O) rotated 90° (scaled).\n    The opposite vertex on that same side is M - (M - O) rotated 90°.\n    The remaining two vertices are on the opposite side, symmetric about O.\n    \n    Alternatively: the vector from center to midpoint is perpendicular to the side,\n    and the vertices are at distance side_length/2 along the side direction.\n    \n    Args:\n        side_midpoint: (x, y) tuple - midpoint of one side of the square\n        center: (x, y) tuple - center of the square\n        side_length: length of each side of the square\n    \n    Returns:\n        List of 4 vertices [(x1,y1), (x2,y2), (x3,y3), (x4,y4)] in counterclockwise order,\n        where the first two vertices are the ones adjacent to the given midpoint.\n    \"\"\"\n    mx, my = side_midpoint\n    cx, cy = center\n    h = side_length / 2  # half the side length\n    \n    # Vector from center to midpoint (perpendicular to side)\n    dx, dy = mx - cx, my - cy\n    \n    # Normalize to get perpendicular direction\n    import math\n    perp_len = math.sqrt(dx**2 + dy**2)\n    if perp_len == 0:\n        raise ValueError(\"Midpoint cannot be at center\")\n    dx_norm, dy_norm = dx / perp_len, dy / perp_len\n    \n    # Tangent direction (along the side)\n    tx, ty = -dy_norm, dx_norm\n    \n    # Two vertices on the side with given midpoint\n    v1 = (mx - h * tx, my - h * ty)\n    v2 = (mx + h * tx, my + h * ty)\n    \n    # Opposite side vertices (reflected through center)\n    v3 = (2*cx - v1[0], 2*cy - v1[1])\n    v4 = (2*cx - v2[0], 2*cy - v2[1])\n    \n    return [v1, v2, v3, v4]"
+        },
+        {
+          "name": "convex_quadrilateral_area",
+          "description": "Compute the area of a convex quadrilateral given its four vertices using the shoelace formula with automatic vertex ordering.",
+          "code": "def convex_quadrilateral_area(v1, v2, v3, v4):\n    \"\"\"Compute area of convex quadrilateral given four vertices in any order.\n    \n    Key insight: For a convex quadrilateral, we need to order vertices cyclically.\n    Find the center (centroid), then sort vertices by angle around center.\n    Once ordered, apply shoelace formula: Area = |Σ(xᵢ·yᵢ₊₁ - xᵢ₊₁·yᵢ)| / 2\n    \n    Args:\n        v1, v2, v3, v4: Four vertices as (x, y) tuples\n    \n    Returns:\n        The area of the convex quadrilateral\n    \"\"\"\n    import math\n    \n    vertices = [v1, v2, v3, v4]\n    \n    # Find centroid\n    cx = sum(v[0] for v in vertices) / 4\n    cy = sum(v[1] for v in vertices) / 4\n    \n    # Sort by angle around centroid\n    def angle(v):\n        return math.atan2(v[1] - cy, v[0] - cx)\n    \n    sorted_vertices = sorted(vertices, key=angle)\n    \n    # Apply shoelace formula\n    n = 4\n    area = 0\n    for i in range(n):\n        j = (i + 1) % n\n        area += sorted_vertices[i][0] * sorted_vertices[j][1]\n        area -= sorted_vertices[j][0] * sorted_vertices[i][1]\n    \n    return abs(area) / 2"
+        },
+        {
+          "name": "absolute_value_curve_area",
+          "description": "Compute the area enclosed by equations of the form x² + y² = a|x| + b|y| by exploiting symmetry.",
+          "code": "import math\n\ndef absolute_value_curve_area(a, b):\n    \"\"\"Compute the area enclosed by x² + y² = a|x| + b|y| using quadrant symmetry.\n    \n    Key insight: Due to the absolute values, the curve is symmetric about both axes.\n    In each quadrant, the equation becomes a circle:\n    - Q1 (x≥0, y≥0): x² + y² = ax + by → circle centered at (a/2, b/2)\n    - Q2 (x≤0, y≥0): x² + y² = -ax + by → circle centered at (-a/2, b/2)\n    - Q3 (x≤0, y≤0): x² + y² = -ax - by → circle centered at (-a/2, -b/2)\n    - Q4 (x≥0, y≤0): x² + y² = ax - by → circle centered at (a/2, -b/2)\n    \n    All four circles have the same radius r = sqrt(a² + b²)/2.\n    The total area is 4 times the area in one quadrant.\n    \n    Args:\n        a: coefficient of |x| in the equation\n        b: coefficient of |y| in the equation\n    \n    Returns:\n        Total area enclosed by the curve\n    \"\"\"\n    # In Q1, the circle is: x² + y² = ax + by\n    # Rearranging: (x - a/2)² + (y - b/2)² = (a² + b²)/4\n    # Center: (a/2, b/2), Radius: sqrt(a² + b²)/2\n    \n    cx = a / 2\n    cy = b / 2\n    r = math.sqrt(a**2 + b**2) / 2\n    \n    # Compute area in Q1\n    area_q1 = circle_quadrant_intersection_area(cx, cy, r)\n    \n    # Total area is 4 times Q1 area (by symmetry)\n    return 4 * area_q1"
+        }
+      ],
+      "history_context": {
+        "previous_query": "Circle $\\omega_1$ with radius $6$ centered at point $A$ is internally tangent at point $B$ to circle $\\omega_2$ with rad",
+        "previous_workflow_plan": null,
+        "workflow_summary": "x = 5.366563, y = 2.683282\nArea of DGF = 49.998758\nArea of CHG = 49.998758\nAreas equal: True\nRectangle area = 57.600000\nRectangle area = 288/5 = 57.6\nm + n = 288 + 5 = 293\nThe solution is verified. The area of rectangle EFGH is $\\frac{288}{5}$, so $m = 288$ and $n = 5$.\n\nANSWER: 293",
+        "historical_agent_summary": "x = 5.366563, y = 2.683282\nArea of DGF = 49.998758\nArea of CHG = 49.998758\nAreas equal: True\nRectangle area = 57.600000\nRectangle area = 288/5 = 57.6\nm + n = 288 + 5 = 293\nThe solution is verified. The area of rectangle EFGH is $\\frac{288}{5}$, so $m = 288$ and $n = 5$.\n\nANSWER: 293",
+        "workflow_fragments": [],
+        "trace_snippets": [
+          "Let me analyze this geometry problem step by step.\n\n**Setting up the coordinate system:**\n- Circle ω₁ has center A at origin (0, 0) with radius 6\n- Circle ω₂ has center O at (-9, 0) with radius 15\n- Tangency at B = (6, 0) (since B is at distance 6 from A and 15 from O)\n- C = (-24, 0) (diametrically opposite to B on ω₂)\n- D = (0, 12) (since BC ⊥ AD and D is on ω₂)\n\n**Rectangle EFGH:**\n- EF ⊥ BC means the sides are horizontal/vertical\n- EF and GH are horizontal sides, FG and EH are vertical sides\n- EF is on the right (closer to B), GH on the left\n- Let rectangle have width 2x (horizontal) and height 2y (vertical)\n- Vertices: E = (x, -y), F = (x, y), G = (-x, y), H = (-x, -y)\n- Constraint: E is on ω₁, so x² + y² = 36\n\n**Area condition:**\n- Area(△DGF) = Area(△CHG)\n- △DGF has vertices D(0,12), G(-x,y), F(x,y): Area = x(12-y)\n- △CHG has vertices C(-24,0), H(-x,-y), G(-x,y): Area = y(24-x)\n\nEquating: x(12-y) = y(24-x)\nSimplifying: 12x - xy = 24y - xy → x = 2y",
+          "import sympy as sp\n\n# Set up the problem\nx, y = sp.symbols('x y', positive=True)\n\n# Equations\neq1 = x**2 + y**2 - 36  # E is on circle omega_1\neq2 = x - 2*y           # Area equality condition\n\n# Solve\nsolutions = sp.solve([eq1, eq2], [x, y])\nprint(\"Solutions:\", solutions)\n\n# Take the positive solution\nsol = solutions[0]\nx_val = sol[0]\ny_val = sol[1]\nprint(f\"x = {x_val}, y = {y_val}\")\nprint(f\"x = {sp.nsimplify(x_val)}, y = {sp.nsimplify(y_val)}\")\n\n# Calculate area of rectangle EFGH\n# Width = 2x, Height = 2y, Area = 4xy\narea = 4 * x_val * y_val\nprint(f\"Area = {area}\")\nprint(f\"Area simplified = {sp.nsimplify(area)}\")\nprint(f\"Area = {area.evalf()}\")\n\n# Express as fraction\narea_frac = sp.nsimplify(area)\nprint(f\"As fraction: {area_frac}\")",
+          "Solutions: [(12*sqrt(5)/5, 6*sqrt(5)/5)]\nx = 12*sqrt(5)/5, y = 6*sqrt(5)/5\nx = 12*sqrt(5)/5, y = 6*sqrt(5)/5\nArea = 288/5\nArea simplified = 288/5\nArea = 57.6000000000000\nAs fraction: 288/5"
+        ],
+        "proposed_skills": []
+      },
+      "references": {
+        "preferred_actions": [],
+        "useful_plan_calls": [],
+        "relevant_fragment_ids": [],
+        "possible_shared_skill_names": [],
+        "discouraged_shared_skill_names": [],
+        "desirable_keywords": [],
+        "discouraged_keywords": [],
+        "rubric_notes": ""
+      },
+      "status": "draft",
+      "failure_type": "token_blow_up",
+      "annotation_notes": "Auto-generated from ds100_aime candidate mining. Workflow-summary/history-reuse labels still require annotation.",
+      "candidate_metadata": {
+        "problem_idx": 29,
+        "problem_id": "Problem_6",
+        "question": "Circle $\\omega_1$ with radius $6$ centered at point $A$ is internally tangent at point $B$ to circle $\\omega_2$ with rad",
+        "baseline_accuracy": 1.0,
+        "evolve_accuracy": 1.0,
+        "baseline_avg_tokens": 18249.0,
+        "evolve_avg_tokens": 78994.2,
+        "baseline_avg_steps": 15.0,
+        "evolve_avg_steps": 14.5,
+        "baseline_has_timeout": false,
+        "evolve_has_timeout": false,
+        "candidate_reason_tags": [
+          "token_blow_up"
+        ],
+        "priority_score": 3.0,
+        "baseline_skills_seen": [],
+        "evolve_skills_seen": [
+          "triangle_area_max_on_conic_with_perpendicular_bisector",
+          "polygon_shoelace_area",
+          "square_vertices_from_side_and_center",
+          "convex_quadrilateral_area",
+          "absolute_value_curve_area"
+        ]
+      },
+      "mock_joint_alignments": [],
+      "mock_joint_response": "",
+      "mock_legacy_response": ""
+    }
+  ]
+}

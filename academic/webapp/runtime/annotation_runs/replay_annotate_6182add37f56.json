@@ -1,0 +1,92 @@
+{
+  "job_id": "replay_annotate_6182add37f56",
+  "cases_path": "/home/lixujun/skill_evolving/academic/refactoring_lab/experiments/planning_replay_cases.json",
+  "llm_config": "tool_maker",
+  "save_results": false,
+  "cases": [
+    {
+      "case_id": "reuse_previous_plan_exact",
+      "annotation": {
+        "prompt": "Annotate the following replay case.\n\nCase payload:\n{\n  \"case_id\": \"reuse_previous_plan_exact\",\n  \"problem_id\": \"reuse_previous_plan_exact\",\n  \"query\": \"Given a list of scores, compute the mean and variance, then return a summary dictionary.\",\n  \"failure_type\": \"synthetic_seed\",\n  \"historical_query\": \"Given a list of exam scores, compute the mean and variance, then return a summary dictionary.\",\n  \"workflow_summary\": \"Previous run directly called sample_mean and sample_variance, then returned the dictionary.\",\n  \"previous_workflow_plan\": \"mu = sample_mean(SCORES)\\nvariance = sample_variance(SCORES)\\nreturn_({'mean': mu, 'variance': variance})\\n\",\n  \"workflow_fragments\": [\n    {\n      \"fragment_id\": \"frag_stats_summary\",\n      \"description\": \"Compute both summary statistics and return the dictionary.\",\n      \"content\": \"mu = sample_mean(SCORES)\\nvariance = sample_variance(SCORES)\\nreturn_({'mean': mu, 'variance': variance})\"\n    }\n  ],\n  \"trace_snippets\": [\n    \"mu = sample_mean(scores)\\nvariance = sample_variance(scores)\\nprint({'mean': mu, 'variance': variance})\"\n  ],\n  \"retrieved_skills\": [\n    {\n      \"name\": \"sample_mean\",\n      \"description\": \"Compute the arithmetic mean of a numeric list.\"\n    },\n    {\n      \"name\": \"sample_variance\",\n      \"description\": \"Compute population variance of a numeric list.\"\n    }\n  ],\n  \"existing_references\": {\n    \"preferred_actions\": [\n      \"reuse_plan\"\n    ],\n    \"useful_plan_calls\": [\n      \"sample_mean\",\n      \"sample_variance\"\n    ],\n    \"relevant_fragment_ids\": [\n      \"frag_stats_summary\"\n    ],\n    \"possible_shared_skill_names\": [],\n    \"discouraged_shared_skill_names\": [\n      \"_shared_sum_stats\"\n    ],\n    \"desirable_keywords\": [\n      \"sample_mean\"\n    ],\n    \"discouraged_keywords\": [\n      \"_shared_sum_stats\"\n    ],\n    \"rubric_notes\": \"The correct behavior is to reuse the previous plan directly; extracting a new helper would be unnecessary.\"\n  },\n  \"existing_notes\": \"The correct behavior is to reuse the previous plan directly; extracting a new helper would be unnecessary.\"\n}\n\nReturn JSON with this schema:\n{\n  \"status\": \"validated|draft|rejected\",\n  \"annotation_notes\": \"brief free-text justification\",\n  \"references\": {\n    \"preferred_actions\": [\n      \"reuse_plan|adapt_plan|reuse_workflow_fragment|fresh|propose_shared_skill\"\n    ],\n    \"useful_plan_calls\": [\n      \"soft hints of calls or helper names that may appear\"\n    ],\n    \"relevant_fragment_ids\": [\n      \"historical fragment ids worth reusing, if any\"\n    ],\n    \"possible_shared_skill_names\": [\n      \"optional\"\n    ],\n    \"discouraged_shared_skill_names\": [\n      \"optional\"\n    ],\n    \"desirable_keywords\": [\n      \"optional\"\n    ],\n    \"discouraged_keywords\": [\n      \"optional\"\n    ],\n    \"rubric_notes\": \"judge-facing notes\"\n  },\n  \"judge_summary\": {\n    \"recommended_primary_mode\": \"short text\",\n    \"why_history_is_or_is_not_relevant\": \"short text\",\n    \"must_not_overconstrain\": [\n      \"list of caveats\"\n    ]\n  }\n}",
+        "output": "{\n  \"status\": \"validated\",\n  \"annotation_notes\": \"The current query is nearly identical to the historical query (scores → summary dict). The previous workflow plan is a direct, minimal solution using sample_mean and sample_variance. Reusing it verbatim is the correct behavior. No new helper or shared skill is needed.\",\n  \"references\": {\n    \"preferred_actions\": [\n      \"reuse_plan\"\n    ],\n    \"useful_plan_calls\": [\n      \"sample_mean\",\n      \"sample_variance\"\n    ],\n    \"relevant_fragment_ids\": [\n      \"frag_stats_summary\"\n    ],\n    \"possible_shared_skill_names\": [],\n    \"discouraged_shared_skill_names\": [\n      \"_shared_sum_stats\"\n    ],\n    \"desirable_keywords\": [\n      \"sample_mean\",\n      \"sample_variance\"\n    ],\n    \"discouraged_keywords\": [\n      \"_shared_sum_stats\"\n    ],\n    \"rubric_notes\": \"A good plan directly reuses the previous workflow: call sample_mean, call sample_variance, return the summary dictionary. Introducing a new helper or shared skill would be unnecessary overhead and should be penalized. The plan need not be word-for-word identical but should reflect the same two-call structure and dictionary return.\"\n  },\n  \"judge_summary\": {\n    \"recommended_primary_mode\": \"reuse_plan — the historical workflow is essentially identical in intent and structure\",\n    \"why_history_is_or_is_not_relevant\": \"The historical query and current query differ only in the word 'exam'; the task, inputs, and expected output are the same. The previous plan is already minimal and correct, so direct reuse is appropriate.\",\n    \"must_not_overconstrain\": [\n      \"Variable names (mu, variance) may differ slightly\",\n      \"Return mechanism (return_ vs return vs print) may vary by runtime convention\",\n      \"Score variable name (SCORES vs scores) may differ in casing\"\n    ]\n  }\n}",
+        "parsed": {
+          "status": "validated",
+          "annotation_notes": "The current query is nearly identical to the historical query (scores → summary dict). The previous workflow plan is a direct, minimal solution using sample_mean and sample_variance. Reusing it verbatim is the correct behavior. No new helper or shared skill is needed.",
+          "references": {
+            "preferred_actions": [
+              "reuse_plan"
+            ],
+            "useful_plan_calls": [
+              "sample_mean",
+              "sample_variance"
+            ],
+            "relevant_fragment_ids": [
+              "frag_stats_summary"
+            ],
+            "possible_shared_skill_names": [],
+            "discouraged_shared_skill_names": [
+              "_shared_sum_stats"
+            ],
+            "desirable_keywords": [
+              "sample_mean",
+              "sample_variance"
+            ],
+            "discouraged_keywords": [
+              "_shared_sum_stats"
+            ],
+            "rubric_notes": "A good plan directly reuses the previous workflow: call sample_mean, call sample_variance, return the summary dictionary. Introducing a new helper or shared skill would be unnecessary overhead and should be penalized. The plan need not be word-for-word identical but should reflect the same two-call structure and dictionary return."
+          },
+          "judge_summary": {
+            "recommended_primary_mode": "reuse_plan — the historical workflow is essentially identical in intent and structure",
+            "why_history_is_or_is_not_relevant": "The historical query and current query differ only in the word 'exam'; the task, inputs, and expected output are the same. The previous plan is already minimal and correct, so direct reuse is appropriate.",
+            "must_not_overconstrain": [
+              "Variable names (mu, variance) may differ slightly",
+              "Return mechanism (return_ vs return vs print) may vary by runtime convention",
+              "Score variable name (SCORES vs scores) may differ in casing"
+            ]
+          }
+        },
+        "structured": {
+          "status": "validated",
+          "annotation_notes": "The current query is nearly identical to the historical query (scores → summary dict). The previous workflow plan is a direct, minimal solution using sample_mean and sample_variance. Reusing it verbatim is the correct behavior. No new helper or shared skill is needed.",
+          "references": {
+            "preferred_actions": [
+              "reuse_plan"
+            ],
+            "useful_plan_calls": [
+              "sample_mean",
+              "sample_variance"
+            ],
+            "relevant_fragment_ids": [
+              "frag_stats_summary"
+            ],
+            "possible_shared_skill_names": [],
+            "discouraged_shared_skill_names": [
+              "_shared_sum_stats"
+            ],
+            "desirable_keywords": [
+              "sample_mean",
+              "sample_variance"
+            ],
+            "discouraged_keywords": [
+              "_shared_sum_stats"
+            ],
+            "rubric_notes": "A good plan directly reuses the previous workflow: call sample_mean, call sample_variance, return the summary dictionary. Introducing a new helper or shared skill would be unnecessary overhead and should be penalized. The plan need not be word-for-word identical but should reflect the same two-call structure and dictionary return."
+          },
+          "judge_summary": {
+            "recommended_primary_mode": "reuse_plan — the historical workflow is essentially identical in intent and structure",
+            "why_history_is_or_is_not_relevant": "The historical query and current query differ only in the word 'exam'; the task, inputs, and expected output are the same. The previous plan is already minimal and correct, so direct reuse is appropriate.",
+            "must_not_overconstrain": [
+              "Variable names (mu, variance) may differ slightly",
+              "Return mechanism (return_ vs return vs print) may vary by runtime convention",
+              "Score variable name (SCORES vs scores) may differ in casing"
+            ]
+          }
+        }
+      },
+      "saved_to_case_file": false
+    }
+  ],
+  "started_at": "2026-04-26 20:47:12",
+  "finished_at": "2026-04-26 20:47:39"
+}

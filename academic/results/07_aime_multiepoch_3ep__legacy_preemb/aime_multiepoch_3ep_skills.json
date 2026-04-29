@@ -1,0 +1,747 @@
+[
+  {
+    "name": "count_hypergeometric_ways",
+    "description": "Calculates the number of ways to draw a sample with a specific range of successes from a population.",
+    "code": "import math\n\ndef count_hypergeometric_ways(total_items, success_items, draw_size, min_matches, max_matches=None):\n    \"\"\"Calculates the number of ways to draw items such that the number of successes is between min_matches and max_matches.\"\"\"\n    if max_matches is None:\n        max_matches = min(success_items, draw_size)\n    \n    total_ways = 0\n    for k in range(min_matches, max_matches + 1):\n        # Ways to choose k successes from success_items\n        # Ways to choose (draw_size - k) failures from (total_items - success_items)\n        total_ways += math.comb(success_items, k) * math.comb(total_items - success_items, draw_size - k)\n    return total_ways",
+    "source_problems": [
+      "Jen enters a lottery by picking $4$ distinct numbers from $S=\\{1,2,3,\\cdots,9,10\\}.$ $4$ numbers are randomly chosen from $S.$ She wins a prize if at least two of her numbers were $2$ of the randomly chosen numbers, and wins the grand prize if all four of her numbers were the randomly chosen numbers. The probability of her winning the grand prize given that she won a prize is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 30,
+    "success_count": 15,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert count_hypergeometric_ways(10, 4, 4, 4) == 1\nassert count_hypergeometric_ways(10, 4, 4, 2) == 115"
+  },
+  {
+    "name": "is_prime",
+    "description": "Checks if a number is prime using trial division.",
+    "code": "def is_prime(n):\n    \"\"\"Checks if n is a prime number.\"\"\"\n    if n < 2:\n        return False\n    if n % 2 == 0:\n        return n == 2\n    i = 3\n    while i * i <= n:\n        if n % i == 0:\n            return False\n        i += 2\n    return True",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 10,
+    "success_count": 8,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert is_prime(2) is True\nassert is_prime(15) is False\nassert is_prime(17) is True"
+  },
+  {
+    "name": "mod_inverse",
+    "description": "Computes the modular inverse of a modulo m.",
+    "code": "def mod_inverse(a, m):\n    \"\"\"Returns the modular inverse of a modulo m.\"\"\"\n    return pow(a, -1, m)",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 21,
+    "success_count": 15,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert mod_inverse(3, 11) == 4\nassert mod_inverse(10, 17) == 12"
+  },
+  {
+    "name": "find_roots_mod_p",
+    "description": "Finds all roots of a polynomial function modulo a prime p.",
+    "code": "def find_roots_mod_p(f, p):\n    \"\"\"Finds all integers x in [0, p-1] such that f(x) % p == 0.\"\"\"\n    roots = []\n    for x in range(p):\n        if f(x) % p == 0:\n            roots.append(x)\n    return roots",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 11,
+    "success_count": 8,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert find_roots_mod_p(lambda x: x**2 - 1, 5) == [1, 4]\nassert find_roots_mod_p(lambda x: x**2 + 1, 5) == [2, 3]"
+  },
+  {
+    "name": "lift_root_to_p2",
+    "description": "Lifts a root of a polynomial from modulo p to modulo p^2 using Hensel's lemma.",
+    "code": "def lift_root_to_p2(n0, f, f_prime, p):\n    \"\"\"Lifts a root n0 of f(x) modulo p to a root modulo p^2.\"\"\"\n    # f(n0) must be divisible by p\n    f_n0 = f(n0)\n    C = f_n0 // p\n    \n    # f'(n0) must be invertible modulo p\n    f_prime_n0 = f_prime(n0)\n    inv = mod_inverse(f_prime_n0, p)\n    \n    # Calculate k such that m = n0 + p*k is a root modulo p^2\n    k = (-C * inv) % p\n    return n0 + p * k",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 2,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [
+      "mod_inverse"
+    ],
+    "stale": false,
+    "test_code": "# Lifting root of x^2 - 2 = 0 mod 7 (root is 3) to mod 49\n# 3^2 - 2 = 7. Lifted root should be 10 (10^2 - 2 = 98 = 2 * 49)\nassert lift_root_to_p2(3, lambda x: x**2 - 2, lambda x: 2*x, 7) == 10"
+  },
+  {
+    "name": "extract_square_factors",
+    "description": "Decomposes an integer n into s^2 * t where t is square-free, returning (s, t).",
+    "code": "def extract_square_factors(n):\n    \"\"\"Decomposes n into s^2 * t where t is square-free, returning (s, t).\"\"\"\n    s = 1\n    t = n\n    i = 2\n    while i * i <= t:\n        while t % (i * i) == 0:\n            s *= i\n            t //= (i * i)\n        i += 1\n    return s, t",
+    "source_problems": [
+      "Let $ABCD$ be a tetrahedron such that $AB=CD= \\sqrt{41}$, $AC=BD= \\sqrt{80}$, and $BC=AD= \\sqrt{89}$. There exists a point $I$ inside the tetrahedron such that the distances from $I$ to each of the faces of the tetrahedron are all equal. This distance can be written in the form $\\frac{m \\sqrt n}{p}$, where $m$, $n$, and $p$ are positive integers, $m$ and $p$ are relatively prime, and $n$ is not divisible by the square of any prime. Find $m+n+p$."
+    ],
+    "version": 1,
+    "usage_count": 37,
+    "success_count": 19,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert extract_square_factors(72) == (6, 2)\nassert extract_square_factors(12) == (2, 3)\nassert extract_square_factors(13) == (1, 13)"
+  },
+  {
+    "name": "simplify_radical_fraction",
+    "description": "Simplifies sqrt(num/den) into the form (m * sqrt(n)) / p, returning (m, n, p).",
+    "code": "import math\n\ndef simplify_radical_fraction(num, den):\n    \"\"\"\n    Simplifies sqrt(num/den) into the form (m * sqrt(n)) / p.\n    Returns (m, n, p) where n is square-free and gcd(m, p) = 1.\n    \"\"\"\n    # Reduce the fraction num/den\n    g = math.gcd(num, den)\n    num //= g\n    den //= g\n    \n    # Combine under the radical: sqrt(num/den) = sqrt(num * den) / den\n    # We need to simplify sqrt(num * den)\n    T = num * den\n    s = 1\n    t = T\n    i = 2\n    while i * i <= t:\n        while t % (i * i) == 0:\n            s *= i\n            t //= (i * i)\n        i += 1\n        \n    # Now we have (s * sqrt(t)) / den\n    # Reduce the fraction s/den\n    g2 = math.gcd(s, den)\n    m = s // g2\n    p = den // g2\n    n = t\n    \n    return m, n, p",
+    "source_problems": [
+      "Let $ABCD$ be a tetrahedron such that $AB=CD= \\sqrt{41}$, $AC=BD= \\sqrt{80}$, and $BC=AD= \\sqrt{89}$. There exists a point $I$ inside the tetrahedron such that the distances from $I$ to each of the faces of the tetrahedron are all equal. This distance can be written in the form $\\frac{m \\sqrt n}{p}$, where $m$, $n$, and $p$ are positive integers, $m$ and $p$ are relatively prime, and $n$ is not divisible by the square of any prime. Find $m+n+p$."
+    ],
+    "version": 1,
+    "usage_count": 29,
+    "success_count": 16,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert simplify_radical_fraction(18, 8) == (3, 1, 2)\nassert simplify_radical_fraction(2, 3) == (1, 6, 3)"
+  },
+  {
+    "name": "replace_digit_at_index",
+    "description": "Replaces the digit at a specific index (from the left) of an integer with a new digit.",
+    "code": "def replace_digit_at_index(n, index, new_digit):\n    \"\"\"Replaces the digit at a specific index (from the left) of an integer with a new digit.\"\"\"\n    s = str(n)\n    if index < 0 or index >= len(s):\n        return n\n    new_s = s[:index] + str(new_digit) + s[index+1:]\n    return int(new_s)",
+    "source_problems": [
+      "Let $N$ be the greatest four-digit positive integer with the property that whenever one of its digits is changed to $1$, the resulting number is divisible by $7$. Let $Q$ and $R$ be the quotient and remainder, respectively, when $N$ is divided by $1000$. Find $Q+R$."
+    ],
+    "version": 1,
+    "usage_count": 29,
+    "success_count": 18,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert replace_digit_at_index(12345, 0, 9) == 92345\nassert replace_digit_at_index(12345, 2, 0) == 12045"
+  },
+  {
+    "name": "check_divisibility_after_digit_replacement",
+    "description": "Checks if replacing any digit of a number with a target digit results in a number divisible by a divisor.",
+    "code": "def check_divisibility_after_digit_replacement(n, target_digit, divisor):\n    \"\"\"Checks if replacing any digit of n with target_digit results in a number divisible by divisor.\"\"\"\n    s = str(n)\n    for i in range(len(s)):\n        if replace_digit_at_index(n, i, target_digit) % divisor != 0:\n            return False\n    return True",
+    "source_problems": [
+      "Let $N$ be the greatest four-digit positive integer with the property that whenever one of its digits is changed to $1$, the resulting number is divisible by $7$. Let $Q$ and $R$ be the quotient and remainder, respectively, when $N$ is divided by $1000$. Find $Q+R$."
+    ],
+    "version": 1,
+    "usage_count": 18,
+    "success_count": 13,
+    "history": [],
+    "dependencies": [
+      "replace_digit_at_index"
+    ],
+    "stale": false,
+    "test_code": "assert check_divisibility_after_digit_replacement(7777, 7, 7) == True\nassert check_divisibility_after_digit_replacement(1234, 1, 7) == False"
+  },
+  {
+    "name": "calculate_all_intersection_from_exact_counts",
+    "description": "Calculates the number of elements belonging to all sets, given the sum of set sizes and the counts of elements belonging to exactly k sets.",
+    "code": "def calculate_all_intersection_from_exact_counts(sum_of_sizes, exact_counts, num_sets):\n    \"\"\"\n    Calculates the number of elements belonging to all sets, given the sum of set sizes\n    and the counts of elements belonging to exactly k sets.\n    exact_counts: A list where exact_counts[k] is the number of elements in exactly k sets.\n    num_sets: The total number of sets (m).\n    \"\"\"\n    weighted_sum = 0\n    for k in range(1, num_sets):\n        weighted_sum += k * exact_counts[k]\n    return (sum_of_sizes - weighted_sum) // num_sets",
+    "source_problems": [
+      "Among the 900 residents of Aimeville, there are 195 who own a diamond ring, 367 who own a set of golf clubs, and 562 who own a garden spade. In addition, each of the 900 residents owns a bag of candy hearts. There are 437 residents who own exactly two of these things, and 234 residents who own exactly three of these things. Find the number of residents of Aimeville who own all four of these things.",
+      "Among the 900 residents of Aimeville, there are 195 who own a diamond ring, 367 who own a set of golf clubs, and 562 who own a garden spade. In addition, each of the 900 residents owns a bag of candy hearts. There are 437 residents who own exactly two of these things, and 234 residents who own exactly three of these things. Find the number of residents of Aimeville who own all four of these things."
+    ],
+    "version": 2,
+    "usage_count": 9,
+    "success_count": 3,
+    "history": [
+      {
+        "version": 1,
+        "code": "def calculate_all_intersection_from_exact_counts(sum_of_sizes, exact_counts):\n    \"\"\"\n    Calculates the number of elements belonging to all sets, given the sum of set sizes\n    and the counts of elements belonging to exactly k sets.\n    exact_counts: A list where exact_counts[k] is the number of elements in exactly k sets.\n    \"\"\"\n    m = len(exact_counts)\n    weighted_sum = 0\n    for k in range(1, m):\n        weighted_sum += k * exact_counts[k]\n    return (sum_of_sizes - weighted_sum) // m",
+        "description": "Calculates the number of elements belonging to all sets, given the sum of set sizes and the counts of elements belonging to exactly k sets.",
+        "timestamp": 1776016149.9789162
+      }
+    ],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# Example from problem: 3 sets (D, G, S), sum=1124, exactly 1 set=437, exactly 2 sets=234\n# exact_counts list: [0, 437, 234] (index 0 unused)\nassert calculate_all_intersection_from_exact_counts(1124, [0, 437, 234], 3) == 73"
+  },
+  {
+    "name": "count_losing_positions_subtraction_game",
+    "description": "Counts the number of losing positions (P-positions) in a subtraction game up to a limit.",
+    "code": "def count_losing_positions_subtraction_game(limit, moves):\n    \"\"\"\n    Counts the number of losing positions (P-positions) for a subtraction game\n    with allowed moves 'moves' for n in [1, limit].\n    \"\"\"\n    # dp[i] stores True if position i is winning (N-position), False if losing (P-position)\n    # Base case: 0 tokens is a losing position (no moves available)\n    dp = [False] * (limit + 1)\n    \n    for i in range(1, limit + 1):\n        # A position is winning if there exists a move to a losing position\n        is_winning = False\n        for move in moves:\n            if i >= move and not dp[i - move]:\n                is_winning = True\n                break\n        dp[i] = is_winning\n        \n    # Count losing positions (where dp[i] is False)\n    return sum(1 for i in range(1, limit + 1) if not dp[i])",
+    "source_problems": [
+      "Alice and Bob play the following game. A stack of $n$ tokens lies before them. The players take turns with Alice going first. On each turn, the player removes either $1$ token or $4$ tokens from the stack. Whoever removes the last token wins. Find the number of positive integers $n$ less than or equal to $2024$ for which there exists a strategy for Bob that guarantees that Bob will win the game regardless of Alice's play."
+    ],
+    "version": 1,
+    "usage_count": 14,
+    "success_count": 10,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert count_losing_positions_subtraction_game(10, [1, 4]) == 4\nassert count_losing_positions_subtraction_game(2024, [1, 4]) == 809"
+  },
+  {
+    "name": "count_consecutive_product_divisible",
+    "description": "Counts integers x in [L, R] such that m divides x*(x-1).",
+    "code": "def count_consecutive_product_divisible(m, L, R):\n    \"\"\"Counts integers x in [L, R] such that m divides x*(x-1).\"\"\"\n    # Find all roots r in [0, m-1] such that r(r-1) % m == 0\n    roots = [r for r in range(m) if (r * (r - 1)) % m == 0]\n    \n    count = 0\n    for r in roots:\n        # Count numbers in [L, R] congruent to r mod m\n        # Formula: floor((R - r) / m) - floor((L - 1 - r) / m)\n        count += (R - r) // m - (L - 1 - r) // m\n        \n    return count",
+    "source_problems": [
+      "Let \\(b\\ge 2\\) be an integer. Call a positive integer \\(n\\) \\(b\\text-\\textit{eautiful}\\) if it has exactly two digits when expressed in base \\(b\\)  and these two digits sum to \\(\\sqrt n\\). For example, \\(81\\) is \\(13\\text-\\textit{eautiful}\\) because \\(81  = \\underline{6} \\ \\underline{3}_{13} \\) and \\(6 + 3 =  \\sqrt{81}\\). Find the least integer \\(b\\ge 2\\) for which there are more than ten \\(b\\text-\\textit{eautiful}\\) integers."
+    ],
+    "version": 1,
+    "usage_count": 7,
+    "success_count": 5,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# Example from problem: b=13, m=12. Range s in [2, 12].\n# s(s-1) divisible by 12 for s=4, 9, 12. Count is 3.\nassert count_consecutive_product_divisible(12, 2, 12) == 3\n\n# Example from problem: b=211, m=210. Range s in [2, 210].\n# There are 15 solutions.\nassert count_consecutive_product_divisible(210, 2, 210) == 15"
+  },
+  {
+    "name": "calculate_trip_time_minutes",
+    "description": "Calculates total trip time in minutes given distance, speed, and stop time.",
+    "code": "def calculate_trip_time_minutes(distance, speed, stop_minutes):\n    \"\"\"Calculates total trip time in minutes given distance (km), speed (km/h), and stop time (min).\"\"\"\n    travel_time_minutes = (distance / speed) * 60\n    return travel_time_minutes + stop_minutes",
+    "source_problems": [
+      "Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop.",
+      "Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop."
+    ],
+    "version": 2,
+    "usage_count": 2,
+    "success_count": 2,
+    "history": [
+      {
+        "version": 1,
+        "code": "def calculate_trip_time_minutes(distance, speed, stop_minutes):\n    \"\"\"Calculates total trip time in minutes given distance (km), speed (km/h), and stop time (min).\"\"\"\n    travel_time_minutes = (distance / speed) * 60\n    return travel_time_minutes + stop_minutes",
+        "description": "Calculates total trip time in minutes given distance, speed, and stop time.",
+        "timestamp": 1776010585.1382322
+      }
+    ],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert calculate_trip_time_minutes(10, 5, 0) == 120.0\nassert calculate_trip_time_minutes(9, 4.5, 30) == 150.0"
+  },
+  {
+    "name": "generate_integer_partitions",
+    "description": "Generates all integer partitions of n in non-increasing order.",
+    "code": "def generate_integer_partitions(n, max_val=None):\n    \"\"\"Generates all integer partitions of n in non-increasing order.\"\"\"\n    if max_val is None or max_val > n:\n        max_val = n\n    if n == 0:\n        yield []\n    else:\n        for first in range(min(max_val, n), 0, -1):\n            for rest in generate_integer_partitions(n - first, first):\n                yield [first] + rest",
+    "source_problems": [
+      "A list of positive integers has the following properties:\n$\\bullet$ The sum of the items in the list is $30$.\n$\\bullet$ The unique mode of the list is $9$.\n$\\bullet$ The median of the list is a positive integer that does not appear in the list itself.\nFind the sum of the squares of all the items in the list."
+    ],
+    "version": 1,
+    "usage_count": 17,
+    "success_count": 12,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "# Partitions of 4 are [4], [3, 1], [2, 2], [2, 1, 1], [1, 1, 1, 1]\nassert list(generate_integer_partitions(4)) == [[4], [3, 1], [2, 2], [2, 1, 1], [1, 1, 1, 1]]"
+  },
+  {
+    "name": "get_unique_mode",
+    "description": "Returns the unique mode of a sequence if it exists, otherwise None.",
+    "code": "from collections import Counter\n\ndef get_unique_mode(sequence):\n    \"\"\"Returns the unique mode of a sequence if it exists, otherwise None.\"\"\"\n    if not sequence:\n        return None\n    counts = Counter(sequence)\n    max_freq = max(counts.values())\n    modes = [k for k, v in counts.items() if v == max_freq]\n    return modes[0] if len(modes) == 1 else None",
+    "source_problems": [
+      "A list of positive integers has the following properties:\n$\\bullet$ The sum of the items in the list is $30$.\n$\\bullet$ The unique mode of the list is $9$.\n$\\bullet$ The median of the list is a positive integer that does not appear in the list itself.\nFind the sum of the squares of all the items in the list."
+    ],
+    "version": 1,
+    "usage_count": 24,
+    "success_count": 18,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert get_unique_mode([1, 2, 2, 3]) == 2\nassert get_unique_mode([1, 1, 2, 2]) is None"
+  },
+  {
+    "name": "sum_of_squares",
+    "description": "Returns the sum of the squares of the elements in the iterable.",
+    "code": "def sum_of_squares(iterable):\n    \"\"\"Returns the sum of the squares of the elements in the iterable.\"\"\"\n    return sum(x * x for x in iterable)",
+    "source_problems": [
+      "A list of positive integers has the following properties:\n$\\bullet$ The sum of the items in the list is $30$.\n$\\bullet$ The unique mode of the list is $9$.\n$\\bullet$ The median of the list is a positive integer that does not appear in the list itself.\nFind the sum of the squares of all the items in the list."
+    ],
+    "version": 1,
+    "usage_count": 22,
+    "success_count": 15,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert sum_of_squares([1, 2, 3]) == 14\nassert sum_of_squares([-1, 2]) == 5"
+  },
+  {
+    "name": "max_trig_linear_combo",
+    "description": "Calculates the maximum value of the expression a*cos(theta) + b*sin(theta).",
+    "code": "import math\n\ndef max_trig_linear_combo(a, b):\n    \"\"\"Calculates the maximum value of a*cos(theta) + b*sin(theta).\"\"\"\n    return math.hypot(a, b)",
+    "source_problems": [
+      "Find the largest possible real part of \\[(75+117i)z+\\frac{96+144i}{z}\\]where $z$ is a complex number with $|z|=4$."
+    ],
+    "version": 1,
+    "usage_count": 5,
+    "success_count": 3,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert max_trig_linear_combo(324, -432) == 540.0\nassert max_trig_linear_combo(1, 0) == 1.0"
+  },
+  {
+    "name": "max_real_part_complex_expr",
+    "description": "Calculates the maximum real part of c1*z + c2/z given |z| = r.",
+    "code": "import math\n\ndef max_real_part_complex_expr(c1, c2, r):\n    \"\"\"\n    Calculates the maximum real part of c1*z + c2/z given |z| = r.\n    \"\"\"\n    # Real part = (r*Re(c1) + Re(c2)/r)cos(theta) + (-r*Im(c1) + Im(c2)/r)sin(theta)\n    coeff_cos = r * c1.real + c2.real / r\n    coeff_sin = -r * c1.imag + c2.imag / r\n    return math.hypot(coeff_cos, coeff_sin)",
+    "source_problems": [
+      "Find the largest possible real part of \\[(75+117i)z+\\frac{96+144i}{z}\\]where $z$ is a complex number with $|z|=4$."
+    ],
+    "version": 1,
+    "usage_count": 4,
+    "success_count": 4,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert max_real_part_complex_expr(75+117j, 96+144j, 4) == 540.0"
+  },
+  {
+    "name": "count_compositions",
+    "description": "Calculates the number of ways to write n as a sum of k positive integers.",
+    "code": "import math\n\ndef count_compositions(n, k):\n    \"\"\"Calculates the number of ways to write n as a sum of k positive integers.\"\"\"\n    if k == 0:\n        return 1 if n == 0 else 0\n    if n < k:\n        return 0\n    return math.comb(n - 1, k - 1)",
+    "source_problems": [
+      "Consider the paths of length $16$ that follow the lines from the lower left corner to the upper right corner on an $8\\times 8$ grid. Find the number of such paths that change direction exactly four times, as in the examples shown below."
+    ],
+    "version": 1,
+    "usage_count": 10,
+    "success_count": 6,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert count_compositions(8, 3) == 21\nassert count_compositions(8, 2) == 7\nassert count_compositions(5, 1) == 1"
+  },
+  {
+    "name": "count_grid_paths_with_direction_changes",
+    "description": "Counts monotonic paths on an n x n grid with exactly c direction changes.",
+    "code": "def count_grid_paths_with_direction_changes(n, changes):\n    \"\"\"Counts monotonic paths on an n x n grid with exactly c direction changes.\"\"\"\n    runs = changes + 1\n    \n    # Case 1: Start with Right\n    # Pattern: R, U, R, U, ...\n    # Number of R runs is ceil(runs/2), U runs is floor(runs/2)\n    r_runs_start_r = (runs + 1) // 2\n    u_runs_start_r = runs // 2\n    \n    ways_start_r = count_compositions(n, r_runs_start_r) * count_compositions(n, u_runs_start_r)\n    \n    # Case 2: Start with Up\n    # Pattern: U, R, U, R, ...\n    # Number of U runs is ceil(runs/2), R runs is floor(runs/2)\n    u_runs_start_u = (runs + 1) // 2\n    r_runs_start_u = runs // 2\n    \n    ways_start_u = count_compositions(n, u_runs_start_u) * count_compositions(n, r_runs_start_u)\n    \n    return ways_start_r + ways_start_u",
+    "source_problems": [
+      "Consider the paths of length $16$ that follow the lines from the lower left corner to the upper right corner on an $8\\times 8$ grid. Find the number of such paths that change direction exactly four times, as in the examples shown below."
+    ],
+    "version": 1,
+    "usage_count": 2,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [
+      "count_compositions"
+    ],
+    "stale": false,
+    "test_code": "assert count_grid_paths_with_direction_changes(8, 4) == 294\nassert count_grid_paths_with_direction_changes(8, 1) == 2"
+  },
+  {
+    "name": "gaussian_pow",
+    "description": "Computes (a + b*i)^n using binary exponentiation and returns the real and imaginary parts.",
+    "code": "def gaussian_pow(a, b, n):\n    \"\"\"Compute (a + b*i)^n using binary exponentiation.\"\"\"\n    res_r, res_i = 1, 0\n    base_r, base_i = a, b\n    while n:\n        if n & 1:\n            # multiply result by base\n            new_r = res_r * base_r - res_i * base_i\n            new_i = res_r * base_i + res_i * base_r\n            res_r, res_i = new_r, new_i\n        # square base\n        new_base_r = base_r * base_r - base_i * base_i\n        new_base_i = 2 * base_r * base_i\n        base_r, base_i = new_base_r, new_base_i\n        n >>= 1\n    return res_r, res_i",
+    "source_problems": [
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000."
+    ],
+    "version": 1,
+    "usage_count": 6,
+    "success_count": 4,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert gaussian_pow(1, 1, 2) == (0, 2)  # (1+i)^2 = 2i\nassert gaussian_pow(1, 1, 4) == (-4, 0) # (1+i)^4 = -4\nassert gaussian_pow(2, 0, 3) == (8, 0)  # 2^3 = 8"
+  },
+  {
+    "name": "get_set_bit_indices",
+    "description": "Returns a list of indices where the binary representation of n has a 1-bit.",
+    "code": "def get_set_bit_indices(n):\n    \"\"\"Returns a list of indices of 1-bits in the binary representation of n.\"\"\"\n    return [i for i in range(n.bit_length()) if (n >> i) & 1]",
+    "source_problems": [
+      "Alice chooses a set $A$ of positive integers. Then Bob lists all finite nonempty sets $B$ of positive integers with the property that the maximum element of $B$ belongs to $A$. Bob's list has 2024 sets. Find the sum of the elements of A."
+    ],
+    "version": 1,
+    "usage_count": 18,
+    "success_count": 11,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert get_set_bit_indices(0) == []\nassert get_set_bit_indices(5) == [0, 2]\nassert get_set_bit_indices(2024) == [3, 5, 6, 7, 8, 9, 10]"
+  },
+  {
+    "name": "solve_linear_system_diag_one_off_neg_one",
+    "description": "Solves the linear system x-y-z=k1, -x+y-z=k2, -x-y+z=k3.",
+    "code": "def solve_linear_system_diag_one_off_neg_one(k1, k2, k3):\n    \"\"\"\n    Solves the linear system:\n    x - y - z = k1\n    -x + y - z = k2\n    -x - y + z = k3\n    Returns the solution (x, y, z).\n    \"\"\"\n    # Eq 1 + Eq 2: -2z = k1 + k2  => z = -(k1 + k2) / 2\n    # Eq 1 + Eq 3: -2y = k1 + k3  => y = -(k1 + k3) / 2\n    # Eq 2 + Eq 3: -2x = k2 + k3  => x = -(k2 + k3) / 2\n    z = -(k1 + k2) / 2\n    y = -(k1 + k3) / 2\n    x = -(k2 + k3) / 2\n    return x, y, z",
+    "source_problems": [
+      "Let $x,y$ and $z$ be positive real numbers that satisfy the following system of equations:\n\\[\\log_2\\left({x \\over yz}\\right) = {1 \\over 2}\\]\\[\\log_2\\left({y \\over xz}\\right) = {1 \\over 3}\\]\\[\\log_2\\left({z \\over xy}\\right) = {1 \\over 4}\\]\nThen the value of $\\left|\\log_2(x^4y^3z^2)\\right|$ is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$.",
+      "Let $x,y$ and $z$ be positive real numbers that satisfy the following system of equations:\n\\[\\log_2\\left({x \\over yz}\\right) = {1 \\over 2}\\]\\[\\log_2\\left({y \\over xz}\\right) = {1 \\over 3}\\]\\[\\log_2\\left({z \\over xy}\\right) = {1 \\over 4}\\]\nThen the value of $\\left|\\log_2(x^4y^3z^2)\\right|$ is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 2,
+    "usage_count": 7,
+    "success_count": 5,
+    "history": [
+      {
+        "version": 1,
+        "code": "def solve_linear_system_diag_one_off_neg_one(k1, k2, k3):\n    \"\"\"\n    Solves the linear system:\n    x - y - z = k1\n    -x + y - z = k2\n    -x - y + z = k3\n    Returns the solution (x, y, z).\n    \"\"\"\n    # Eq 1 + Eq 2: -2z = k1 + k2  => z = -(k1 + k2) / 2\n    # Eq 1 + Eq 3: -2y = k1 + k3  => y = -(k1 + k3) / 2\n    # Eq 2 + Eq 3: -2x = k2 + k3  => x = -(k2 + k3) / 2\n    z = -(k1 + k2) / 2\n    y = -(k1 + k3) / 2\n    x = -(k2 + k3) / 2\n    return x, y, z",
+        "description": "Solves the linear system x-y-z=k1, -x+y-z=k2, -x-y+z=k3.",
+        "timestamp": 1776019478.7190526
+      }
+    ],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\nk1 = Fraction(1, 2)\nk2 = Fraction(1, 3)\nk3 = Fraction(1, 4)\nx, y, z = solve_linear_system_diag_one_off_neg_one(k1, k2, k3)\nassert x == Fraction(-7, 24)\nassert y == Fraction(-3, 8)\nassert z == Fraction(-5, 12)"
+  },
+  {
+    "name": "dot_product",
+    "description": "Computes the dot product of two vectors (iterables of numbers).",
+    "code": "def dot_product(v1, v2):\n    \"\"\"Computes the dot product of two vectors (iterables of numbers).\"\"\"\n    return sum(a * b for a, b in zip(v1, v2))",
+    "source_problems": [
+      "Let $x,y$ and $z$ be positive real numbers that satisfy the following system of equations:\n\\[\\log_2\\left({x \\over yz}\\right) = {1 \\over 2}\\]\\[\\log_2\\left({y \\over xz}\\right) = {1 \\over 3}\\]\\[\\log_2\\left({z \\over xy}\\right) = {1 \\over 4}\\]\nThen the value of $\\left|\\log_2(x^4y^3z^2)\\right|$ is $\\tfrac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m+n$."
+    ],
+    "version": 1,
+    "usage_count": 7,
+    "success_count": 5,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert dot_product([1, 2, 3], [4, 5, 6]) == 32\nassert dot_product([0, 1], [1, 0]) == 0"
+  },
+  {
+    "name": "solve_quadratic",
+    "description": "Solves the quadratic equation a*x^2 + b*x + c = 0 and returns real roots.",
+    "code": "import math\n\ndef solve_quadratic(a, b, c):\n    \"\"\"Solves the quadratic equation a*x^2 + b*x + c = 0 and returns real roots.\"\"\"\n    if a == 0:\n        if b == 0:\n            return []\n        return [-c / b]\n    \n    discriminant = b*b - 4*a*c\n    if discriminant < 0:\n        return []\n    \n    sqrt_d = math.sqrt(discriminant)\n    root1 = (-b + sqrt_d) / (2*a)\n    root2 = (-b - sqrt_d) / (2*a)\n    \n    if discriminant == 0:\n        return [root1]\n    return [root1, root2]",
+    "source_problems": [
+      "Every morning Aya goes for a $9$-kilometer-long walk and stops at a coffee shop afterwards. When she walks at a constant speed of $s$ kilometers per hour, the walk takes her 4 hours, including $t$ minutes spent in the coffee shop. When she walks $s+2$ kilometers per hour, the walk takes her 2 hours and 24 minutes, including $t$ minutes spent in the coffee shop. Suppose Aya walks at $s+\\frac{1}{2}$ kilometers per hour. Find the number of minutes the walk takes her, including the $t$ minutes spent in the coffee shop.",
+      "Rectangles $ABCD$ and $EFGH$ are drawn such that $D,E,C,F$ are collinear. Also, $A,D,H,G$ all lie on a circle. If $BC=16$,$AB=107$,$FG=17$, and $EF=184$, what is the length of $CE$?"
+    ],
+    "version": 2,
+    "usage_count": 6,
+    "success_count": 4,
+    "history": [
+      {
+        "version": 1,
+        "code": "import math\n\ndef solve_quadratic(a, b, c):\n    \"\"\"Solves the quadratic equation a*x^2 + b*x + c = 0 and returns real roots.\"\"\"\n    if a == 0:\n        if b == 0:\n            return []\n        return [-c / b]\n    \n    discriminant = b*b - 4*a*c\n    if discriminant < 0:\n        return []\n    \n    sqrt_d = math.sqrt(discriminant)\n    root1 = (-b + sqrt_d) / (2*a)\n    root2 = (-b - sqrt_d) / (2*a)\n    \n    if discriminant == 0:\n        return [root1]\n    return [root1, root2]",
+        "description": "Solves the quadratic equation a*x^2 + b*x + c = 0 and returns real roots.",
+        "timestamp": 1776011754.8528278
+      }
+    ],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert solve_quadratic(1, -3, 2) == [2.0, 1.0]\nassert solve_quadratic(1, 2, 1) == [-1.0]\nassert solve_quadratic(1, 0, -1) == [1.0, -1.0]"
+  },
+  {
+    "name": "astroid_tangency_sq_dist",
+    "description": "Computes the squared distance from origin to the point of tangency on the envelope of a segment of fixed length sliding on axes, given the squares of the intercepts.",
+    "code": "from fractions import Fraction\n\ndef astroid_tangency_sq_dist(a_sq, b_sq):\n    \"\"\"\n    Computes the squared distance from origin to the point of tangency on the envelope\n    of a segment of fixed length sliding on axes, given the squares of the intercepts.\n    The envelope is an astroid. If the segment has intercepts a and b, the point of\n    tangency is (a^3/L^2, b^3/L^2) where L^2 = a^2 + b^2.\n    The squared distance is (a^6 + b^6) / (a^2 + b^2)^2.\n    \"\"\"\n    numerator = a_sq**3 + b_sq**3\n    denominator = (a_sq + b_sq)**2\n    return numerator / denominator",
+    "source_problems": [
+      "Let \\(O=(0,0)\\), \\(A=\\left(\\tfrac{1}{2},0\\right)\\), and \\(B=\\left(0,\\tfrac{\\sqrt{3}}{2}\\right)\\) be points in the coordinate plane. Let \\(\\mathcal{F}\\) be the family of segments \\(\\overline{PQ}\\) of unit length lying in the first quadrant with \\(P\\) on the \\(x\\)-axis and \\(Q\\) on the \\(y\\)-axis. There is a unique point \\(C\\) on \\(\\overline{AB}\\), distinct from \\(A\\) and \\(B\\),  that does not belong to any segment from \\(\\mathcal{F}\\) other than \\(\\overline{AB}\\). Then \\(OC^2=\\tfrac{p}{q}\\), where \\(p\\) and \\(q\\) are relatively prime positive integers. Find \\(p+q\\)."
+    ],
+    "version": 1,
+    "usage_count": 17,
+    "success_count": 6,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\n# Test case from problem: a=1/2, b=sqrt(3)/2 -> a^2=1/4, b^2=3/4\n# Expected: (1/64 + 27/64) / 1 = 28/64 = 7/16\nassert astroid_tangency_sq_dist(Fraction(1, 4), Fraction(3, 4)) == Fraction(7, 16)\n# Test case: a=1, b=0 -> point is (1,0), dist=1\nassert astroid_tangency_sq_dist(1, 0) == 1"
+  },
+  {
+    "name": "numerator_plus_denominator",
+    "description": "Returns the sum of the numerator and denominator of a Fraction.",
+    "code": "from fractions import Fraction\n\ndef numerator_plus_denominator(frac):\n    \"\"\"Returns the sum of the numerator and denominator of a Fraction.\"\"\"\n    return frac.numerator + frac.denominator",
+    "source_problems": [
+      "Let \\(O=(0,0)\\), \\(A=\\left(\\tfrac{1}{2},0\\right)\\), and \\(B=\\left(0,\\tfrac{\\sqrt{3}}{2}\\right)\\) be points in the coordinate plane. Let \\(\\mathcal{F}\\) be the family of segments \\(\\overline{PQ}\\) of unit length lying in the first quadrant with \\(P\\) on the \\(x\\)-axis and \\(Q\\) on the \\(y\\)-axis. There is a unique point \\(C\\) on \\(\\overline{AB}\\), distinct from \\(A\\) and \\(B\\),  that does not belong to any segment from \\(\\mathcal{F}\\) other than \\(\\overline{AB}\\). Then \\(OC^2=\\tfrac{p}{q}\\), where \\(p\\) and \\(q\\) are relatively prime positive integers. Find \\(p+q\\)."
+    ],
+    "version": 1,
+    "usage_count": 16,
+    "success_count": 7,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\nassert numerator_plus_denominator(Fraction(7, 16)) == 23\nassert numerator_plus_denominator(Fraction(1, 1)) == 2"
+  },
+  {
+    "name": "find_concyclic_rects_offset",
+    "description": "Finds the x-offset for two axis-aligned rectangles such that (0,0), (0,h1), (x,h2), (x+w,h2) are concyclic.",
+    "code": "def find_concyclic_rects_offset(h1, h2, width):\n    \"\"\"\n    Finds the x-offset for two axis-aligned rectangles such that \n    (0,0), (0,h1), (x,h2), (x+width,h2) are concyclic.\n    Returns the positive x solution.\n    \"\"\"\n    # The condition leads to the quadratic: x^2 + width*x - h2*(h2 - h1) = 0\n    # We use solve_quadratic to find the roots.\n    roots = solve_quadratic(1, width, -h2 * (h2 - h1))\n    \n    # We expect one positive root and one negative root (or both negative).\n    # We return the positive one.\n    for r in roots:\n        if r > 0:\n            return r\n    return None",
+    "source_problems": [
+      "Rectangles $ABCD$ and $EFGH$ are drawn such that $D,E,C,F$ are collinear. Also, $A,D,H,G$ all lie on a circle. If $BC=16$,$AB=107$,$FG=17$, and $EF=184$, what is the length of $CE$?"
+    ],
+    "version": 1,
+    "usage_count": 7,
+    "success_count": 4,
+    "history": [],
+    "dependencies": [
+      "solve_quadratic"
+    ],
+    "stale": false,
+    "test_code": "# Example from the problem: h1=16, h2=33, width=184\nassert find_concyclic_rects_offset(16, 33, 184) == 3.0"
+  },
+  {
+    "name": "isosceles_tetrahedron_inradius",
+    "description": "Calculates the inradius of an isosceles tetrahedron given the squares of the lengths of the three pairs of opposite edges.",
+    "code": "def isosceles_tetrahedron_inradius(a2, b2, c2):\n    \"\"\"\n    Calculates the inradius of an isosceles tetrahedron given the squares of the \n    lengths of the three pairs of opposite edges.\n    Returns (m, n, p) such that r = m * sqrt(n) / p.\n    \"\"\"\n    # Product term from the volume formula: V = sqrt(2)/12 * sqrt(product)\n    product = (a2 + b2 - c2) * (a2 + c2 - b2) * (b2 + c2 - a2)\n    \n    # Term from the surface area formula: S = sqrt(term)\n    # term = 2(a^2 b^2 + b^2 c^2 + c^2 a^2) - (a^4 + b^4 + c^4)\n    term = 2 * (a2 * b2 + b2 * c2 + c2 * a2) - (a2**2 + b2**2 + c2**2)\n    \n    # r = 3V / S\n    # r = (sqrt(2)/4) * sqrt(product) / sqrt(term)\n    # r^2 = product / (8 * term)\n    den = 8 * term\n    \n    return simplify_radical_fraction(product, den)",
+    "source_problems": [
+      "Let $ABCD$ be a tetrahedron such that $AB=CD= \\sqrt{41}$, $AC=BD= \\sqrt{80}$, and $BC=AD= \\sqrt{89}$. There exists a point $I$ inside the tetrahedron such that the distances from $I$ to each of the faces of the tetrahedron are all equal. This distance can be written in the form $\\frac{m \\sqrt n}{p}$, where $m$, $n$, and $p$ are positive integers, $m$ and $p$ are relatively prime, and $n$ is not divisible by the square of any prime. Find $m+n+p$.",
+      "Let $ABCD$ be a tetrahedron such that $AB=CD= \\sqrt{41}$, $AC=BD= \\sqrt{80}$, and $BC=AD= \\sqrt{89}$. There exists a point $I$ inside the tetrahedron such that the distances from $I$ to each of the faces of the tetrahedron are all equal. This distance can be written in the form $\\frac{m \\sqrt n}{p}$, where $m$, $n$, and $p$ are positive integers, $m$ and $p$ are relatively prime, and $n$ is not divisible by the square of any prime. Find $m+n+p$."
+    ],
+    "version": 2,
+    "usage_count": 18,
+    "success_count": 6,
+    "history": [
+      {
+        "version": 1,
+        "code": "def isosceles_tetrahedron_inradius(a2, b2, c2):\n    \"\"\"\n    Calculates the inradius of an isosceles tetrahedron given the squares of the \n    lengths of the three pairs of opposite edges.\n    Returns (m, n, p) such that r = m * sqrt(n) / p.\n    \"\"\"\n    # Product term from the volume formula: V = sqrt(2)/12 * sqrt(product)\n    product = (a2 + b2 - c2) * (a2 + c2 - b2) * (b2 + c2 - a2)\n    \n    # Term from the surface area formula: S = sqrt(term)\n    # term = 2(a^2 b^2 + b^2 c^2 + c^2 a^2) - (a^4 + b^4 + c^4)\n    term = 2 * (a2 * b2 + b2 * c2 + c2 * a2) - (a2**2 + b2**2 + c2**2)\n    \n    # r = 3V / S\n    # r = (sqrt(2)/4) * sqrt(product) / sqrt(term)\n    # r^2 = product / (8 * term)\n    den = 8 * term\n    \n    return simplify_radical_fraction(product, den)",
+        "description": "Calculates the inradius of an isosceles tetrahedron given the squares of the lengths of the three pairs of opposite edges.",
+        "timestamp": 1776018735.622397
+      }
+    ],
+    "dependencies": [
+      "simplify_radical_fraction"
+    ],
+    "stale": false,
+    "test_code": "assert isosceles_tetrahedron_inradius(41, 80, 89) == (20, 21, 63)"
+  },
+  {
+    "name": "norm_of_gaussian_power_minus_one",
+    "description": "Computes the squared magnitude of (u+vi)^n - 1, i.e., |(u + v*i)^n - 1|^2.",
+    "code": "def norm_of_gaussian_power_minus_one(u, v, n):\n    \"\"\"Computes |(u + v*i)^n - 1|^2.\"\"\"\n    real, imag = gaussian_pow(u, v, n)\n    return (real - 1) ** 2 + imag ** 2",
+    "source_problems": [
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000.",
+      "Let $\\omega\\neq 1$ be a 13th root of unity. Find the remainder when\n\\[\\prod_{k=0}^{12}(2-2\\omega^k+\\omega^{2k})\\]\nis divided by 1000."
+    ],
+    "version": 2,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [
+      {
+        "version": 1,
+        "code": "def norm_of_gaussian_power_minus_one(u, v, n):\n    \"\"\"Computes |(u + v*i)^n - 1|^2.\"\"\"\n    real, imag = gaussian_pow(u, v, n)\n    return (real - 1) ** 2 + imag ** 2",
+        "description": "Computes the squared magnitude of (u+vi)^n - 1, i.e., |(u+vi)^n - 1|^2.",
+        "timestamp": 1776020214.1677346
+      }
+    ],
+    "dependencies": [
+      "gaussian_pow"
+    ],
+    "stale": false,
+    "test_code": "assert norm_of_gaussian_power_minus_one(1, 1, 1) == 1\nassert norm_of_gaussian_power_minus_one(1, 1, 2) == 5"
+  },
+  {
+    "name": "find_max_in_range_satisfying",
+    "description": "Finds the greatest integer in the range [low, high] that satisfies the given predicate.",
+    "code": "def find_max_in_range_satisfying(high, low, predicate):\n    \"\"\"Finds the greatest integer n in [low, high] such that predicate(n) is True.\"\"\"\n    for n in range(high, low - 1, -1):\n        if predicate(n):\n            return n\n    return None",
+    "source_problems": [
+      "Let $N$ be the greatest four-digit positive integer with the property that whenever one of its digits is changed to $1$, the resulting number is divisible by $7$. Let $Q$ and $R$ be the quotient and remainder, respectively, when $N$ is divided by $1000$. Find $Q+R$."
+    ],
+    "version": 1,
+    "usage_count": 4,
+    "success_count": 3,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert find_max_in_range_satisfying(10, 1, lambda x: x % 2 == 0) == 10\nassert find_max_in_range_satisfying(10, 1, lambda x: x > 10) is None"
+  },
+  {
+    "name": "sum_quotient_and_remainder",
+    "description": "Returns the sum of the quotient and remainder when n is divided by d.",
+    "code": "def sum_quotient_and_remainder(n, d):\n    \"\"\"Returns the sum of the quotient and remainder when n is divided by d.\"\"\"\n    return (n // d) + (n % d)",
+    "source_problems": [
+      "Let $N$ be the greatest four-digit positive integer with the property that whenever one of its digits is changed to $1$, the resulting number is divisible by $7$. Let $Q$ and $R$ be the quotient and remainder, respectively, when $N$ is divided by $1000$. Find $Q+R$."
+    ],
+    "version": 1,
+    "usage_count": 4,
+    "success_count": 3,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert sum_quotient_and_remainder(10, 3) == 4\nassert sum_quotient_and_remainder(6999, 1000) == 1005"
+  },
+  {
+    "name": "parallel_sum",
+    "description": "Calculates the parallel sum (1 / sum(1/x)) of a list of values.",
+    "code": "from fractions import Fraction\n\ndef parallel_sum(values):\n    \"\"\"Calculates the parallel sum (1 / sum(1/x)) of a list of values.\"\"\"\n    if not values:\n        return 0\n    sum_reciprocals = Fraction(0, 1)\n    for v in values:\n        if v == 0:\n            return 0\n        sum_reciprocals += Fraction(1, v)\n    return 1 / sum_reciprocals",
+    "source_problems": [
+      "Let ABCDEF be a convex equilateral hexagon in which all pairs of opposite sides are parallel. The triangle whose sides are extensions of segments AB, CD, and EF has side lengths 200, 240, and 300. Find the side length of the hexagon."
+    ],
+    "version": 1,
+    "usage_count": 5,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert parallel_sum([200, 240, 300]) == 80\nassert parallel_sum([2, 2]) == 1"
+  },
+  {
+    "name": "distance_OI_squared",
+    "description": "Calculates the squared distance between the circumcenter O and incenter I of a triangle.",
+    "code": "def distance_OI_squared(R, r):\n    \"\"\"Calculates the squared distance between circumcenter O and incenter I.\"\"\"\n    return R * (R - 2 * r)",
+    "source_problems": [
+      "Let $\\triangle ABC$ have circumcenter $O$ and incenter $I$ with $\\overline{IA}\\perp\\overline{OI}$, circumradius $13$, and inradius $6$. Find $AB\\cdot AC$."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\nassert distance_OI_squared(13, 6) == 13\nassert distance_OI_squared(5, 2) == 5 * (5 - 4) == 5"
+  },
+  {
+    "name": "cos_diff_from_sum_and_sin_half_sq",
+    "description": "Calculates cos(B-C) given cos(B)+cos(C) and sin^2(A/2) for a triangle.",
+    "code": "def cos_diff_from_sum_and_sin_half_sq(cos_sum, sin2_half):\n    \"\"\"\n    Calculates cos(B-C) given cos(B)+cos(C) and sin^2(A/2).\n    Assumes A+B+C = pi.\n    \"\"\"\n    # cos(B-C) = (cos(B)+cos(C))^2 / (2 * sin^2(A/2)) - 1\n    return (cos_sum * cos_sum) / (2 * sin2_half) - 1",
+    "source_problems": [
+      "Let $\\triangle ABC$ have circumcenter $O$ and incenter $I$ with $\\overline{IA}\\perp\\overline{OI}$, circumradius $13$, and inradius $6$. Find $AB\\cdot AC$."
+    ],
+    "version": 1,
+    "usage_count": 2,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\n# Example from problem: cos(B)+cos(C) = 12/13, sin^2(A/2) = 3/13\n# cos(B-C) = (144/169) / (6/13) - 1 = (144/169) * (13/6) - 1 = 24/13 - 1 = 11/13\nassert cos_diff_from_sum_and_sin_half_sq(Fraction(12, 13), Fraction(3, 13)) == Fraction(11, 13)"
+  },
+  {
+    "name": "product_adjacent_sides_from_cosines",
+    "description": "Calculates the product of two sides adjacent to angle A (e.g., AB * AC) given R, cos A, and cos(B-C).",
+    "code": "def product_adjacent_sides_from_cosines(R, cosA, cos_diff):\n    \"\"\"\n    Calculates the product of two sides adjacent to angle A (e.g., AB * AC)\n    given circumradius R, cos A, and cos(B-C).\n    Formula: 2 * R^2 * (cos(B-C) + cos A)\n    \"\"\"\n    return 2 * R * R * (cos_diff + cosA)",
+    "source_problems": [
+      "Let $\\triangle ABC$ have circumcenter $O$ and incenter $I$ with $\\overline{IA}\\perp\\overline{OI}$, circumradius $13$, and inradius $6$. Find $AB\\cdot AC$."
+    ],
+    "version": 1,
+    "usage_count": 2,
+    "success_count": 2,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "from fractions import Fraction\n# Example from problem: R=13, cosA=7/13, cos(B-C)=11/13\n# Product = 2 * 169 * (18/13) = 338 * (18/13) = 26 * 18 = 468\nassert product_adjacent_sides_from_cosines(13, Fraction(7, 13), Fraction(11, 13)) == 468"
+  },
+  {
+    "name": "find_least_prime_with_root_mod_p2",
+    "description": "Finds the least prime p such that f(x) has a root modulo p^2.",
+    "code": "def find_least_prime_with_root_mod_p2(f):\n    \"\"\"Finds the least prime p such that f(x) has a root modulo p^2.\"\"\"\n    p = 2\n    while True:\n        if is_prime(p):\n            if p == 2:\n                # Check for root modulo 4\n                found = False\n                for n in range(4):\n                    if f(n) % 4 == 0:\n                        found = True\n                        break\n                if found:\n                    return p\n            else:\n                # For odd p, existence of a root modulo p is necessary and sufficient.\n                roots = find_roots_mod_p(f, p)\n                if roots:\n                    return p\n        p += 1",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [
+      "find_roots_mod_p",
+      "is_prime"
+    ],
+    "stale": false,
+    "test_code": "# For f(x) = x^4 + 1, the least prime p is 17.\n# p=2 fails (no root mod 4).\n# p=3, 5, 7, 11, 13 fail (no root mod p).\n# p=17 works (2^4 + 1 = 17).\ndef f(x): return x**4 + 1\nassert find_least_prime_with_root_mod_p2(f) == 17"
+  },
+  {
+    "name": "find_min_root_mod_p2",
+    "description": "Finds the smallest positive integer m such that p^2 divides f(m).",
+    "code": "def find_min_root_mod_p2(f, f_prime, p):\n    \"\"\"Finds the smallest positive integer m such that p^2 divides f(m).\"\"\"\n    roots = find_roots_mod_p(f, p)\n    lifts = [lift_root_to_p2(r, f, f_prime, p) for r in roots]\n    return min(lifts)",
+    "source_problems": [
+      "Let $p$ be the least prime number for which there exists a positive integer $n$ such that $n^{4}+1$ is divisible by $p^{2}$. Find the least positive integer $m$ such that $m^{4}+1$ is divisible by $p^{2}$."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 1,
+    "history": [],
+    "dependencies": [
+      "find_roots_mod_p",
+      "lift_root_to_p2"
+    ],
+    "stale": false,
+    "test_code": "# For f(x) = x^4 + 1 and p = 17.\n# Roots mod 17 are 2, 8, 9, 15.\n# Lifts are 155, 110, 179, 134.\n# Minimum is 110.\ndef f(x): return x**4 + 1\ndef fp(x): return 4 * x**3\nassert find_min_root_mod_p2(f, fp, 17) == 110"
+  },
+  {
+    "name": "sin_sq_half_angle_from_inradius_dist_sq",
+    "description": "Calculates sin^2(A/2) given inradius r and the squared distance from incenter to vertex A (IA^2).",
+    "code": "from fractions import Fraction\n\ndef sin_sq_half_angle_from_inradius_dist_sq(r, IA_sq):\n    \"\"\"Calculates sin^2(A/2) given inradius r and the squared distance from incenter to vertex A (IA^2).\"\"\"\n    return Fraction(r * r, IA_sq)",
+    "source_problems": [
+      "Let $\\triangle ABC$ have circumcenter $O$ and incenter $I$ with $\\overline{IA}\\perp\\overline{OI}$, circumradius $13$, and inradius $6$. Find $AB\\cdot AC$."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert sin_sq_half_angle_from_inradius_dist_sq(6, 156) == Fraction(3, 13)"
+  },
+  {
+    "name": "sum_other_cosines",
+    "description": "Calculates cos(B) + cos(C) given circumradius R, inradius r, and cos(A).",
+    "code": "from fractions import Fraction\n\ndef sum_other_cosines(R, r, cosA):\n    \"\"\"Calculates cos(B) + cos(C) given circumradius R, inradius r, and cos(A).\"\"\"\n    return (1 + Fraction(r, R)) - cosA",
+    "source_problems": [
+      "Let $\\triangle ABC$ have circumcenter $O$ and incenter $I$ with $\\overline{IA}\\perp\\overline{OI}$, circumradius $13$, and inradius $6$. Find $AB\\cdot AC$."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert sum_other_cosines(13, 6, Fraction(7, 13)) == Fraction(12, 13)"
+  },
+  {
+    "name": "solve_log_power_system_product",
+    "description": "Calculates the product xy given log_x(y^{coeff1*x}) = val1 and log_y(x^{coeff2*y}) = val2.",
+    "code": "def solve_log_power_system_product(val1, val2, coeff1, coeff2):\n    \"\"\"\n    Calculates the product xy given log_x(y^{coeff1*x}) = val1 \n    and log_y(x^{coeff2*y}) = val2.\n    \"\"\"\n    return (val1 * val2) / (coeff1 * coeff2)",
+    "source_problems": [
+      "There exist real numbers $x$ and $y$, both greater than 1, such that $\\log_x\\left(y^x\\right)=\\log_y\\left(x^{4y}\\right)=10$. Find $xy$."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert solve_log_power_system_product(10, 10, 1, 4) == 25"
+  },
+  {
+    "name": "sum_symmetric_monomials_a2b",
+    "description": "Computes the sum of monomials of the form x^2*y for distinct variables x, y in (a, b, c).",
+    "code": "def sum_symmetric_monomials_a2b(a, b, c):\n    \"\"\"\n    Computes the sum of monomials of the form x^2*y for distinct variables x, y in (a, b, c).\n    Equivalent to (a+b+c)(ab+bc+ca) - 3abc.\n    \"\"\"\n    return (a + b + c) * (a * b + b * c + c * a) - 3 * a * b * c",
+    "source_problems": [
+      "Find the number of triples of nonnegative integers \\((a,b,c)\\) satisfying \\(a + b + c = 300\\) and\n\\begin{equation*}\na^2b + a^2c + b^2a + b^2c + c^2a + c^2b = 6,000,000.\n\\end{equation*}"
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert sum_symmetric_monomials_a2b(1, 1, 1) == 6\nassert sum_symmetric_monomials_a2b(1, 2, 3) == 48"
+  },
+  {
+    "name": "generate_weak_compositions",
+    "description": "Generates all k-tuples of non-negative integers that sum to n.",
+    "code": "def generate_weak_compositions(n, k):\n    \"\"\"Generates all k-tuples of non-negative integers that sum to n.\"\"\"\n    if k == 1:\n        yield (n,)\n    else:\n        for i in range(n + 1):\n            for tail in generate_weak_compositions(n - i, k - 1):\n                yield (i,) + tail",
+    "source_problems": [
+      "Find the number of triples of nonnegative integers \\((a,b,c)\\) satisfying \\(a + b + c = 300\\) and\n\\begin{equation*}\na^2b + a^2c + b^2a + b^2c + c^2a + c^2b = 6,000,000.\n\\end{equation*}"
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [],
+    "stale": false,
+    "test_code": "assert list(generate_weak_compositions(2, 2)) == [(0, 2), (1, 1), (2, 0)]\nassert list(generate_weak_compositions(3, 3)) == [(0, 0, 3), (0, 1, 2), (0, 2, 1), (0, 3, 0), (1, 0, 2), (1, 1, 1), (1, 2, 0), (2, 0, 1), (2, 1, 0), (3, 0, 0)]"
+  },
+  {
+    "name": "calculate_intersection_with_universal_set",
+    "description": "Calculates the number of elements belonging to all sets, given that one set is universal and exact counts for the total sets.",
+    "code": "def calculate_intersection_with_universal_set(sum_of_sizes_subset, exact_counts_total, num_sets_total):\n    \"\"\"\n    Calculates the number of elements belonging to all sets, given that one set is universal.\n    exact_counts_total[k] is the number of elements in exactly k of the total sets.\n    sum_of_sizes_subset is the sum of sizes of the non-universal sets.\n    \"\"\"\n    # Reduce the problem by removing the universal set.\n    # The count of exactly j of the remaining sets corresponds to exactly j+1 of the total sets.\n    # We shift the exact_counts list to the left by 1.\n    exact_counts_subset = exact_counts_total[1:]\n    num_sets_subset = num_sets_total - 1\n    \n    return calculate_all_intersection_from_exact_counts(sum_of_sizes_subset, exact_counts_subset, num_sets_subset)",
+    "source_problems": [
+      "Among the 900 residents of Aimeville, there are 195 who own a diamond ring, 367 who own a set of golf clubs, and 562 who own a garden spade. In addition, each of the 900 residents owns a bag of candy hearts. There are 437 residents who own exactly two of these things, and 234 residents who own exactly three of these things. Find the number of residents of Aimeville who own all four of these things."
+    ],
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [
+      "calculate_all_intersection_from_exact_counts"
+    ],
+    "stale": false,
+    "test_code": "# Problem data: 4 sets total (1 universal, 3 variable).\n# Sum of sizes of the 3 variable sets: 195 + 367 + 562 = 1124\n# Exact counts for 4 sets: [0, 0, 437, 234] (0 sets, 1 set, 2 sets, 3 sets)\n# We expect the intersection of all 4 sets to be 73.\nassert calculate_intersection_with_universal_set(1124, [0, 0, 437, 234], 4) == 73"
+  },
+  {
+    "name": "sum_of_set_A_from_subset_count",
+    "description": "Calculates the sum of elements of set A such that the number of subsets with max in A equals N.",
+    "code": "def sum_of_set_A_from_subset_count(N):\n    \"\"\"Calculates the sum of elements of set A such that sum(2**(a-1) for a in A) == N.\"\"\"\n    indices = get_set_bit_indices(N)\n    return sum(i + 1 for i in indices)",
+    "source_problems": [
+      "Alice chooses a set $A$ of positive integers. Then Bob lists all finite nonempty sets $B$ of positive integers with the property that the maximum element of $B$ belongs to $A$. Bob's list has 2024 sets. Find the sum of the elements of A."
+    ],
+    "version": 1,
+    "usage_count": 1,
+    "success_count": 0,
+    "history": [],
+    "dependencies": [
+      "get_set_bit_indices"
+    ],
+    "stale": false,
+    "test_code": "assert sum_of_set_A_from_subset_count(2024) == 55\nassert sum_of_set_A_from_subset_count(3) == 3"
+  }
+]

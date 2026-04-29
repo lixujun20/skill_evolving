@@ -1,0 +1,388 @@
+{
+  "engine": {
+    "engine": "naive",
+    "llm_config": null,
+    "corpus": "skillsbench_manual",
+    "elapsed_s": 0.0,
+    "shared_sub_functions": [],
+    "refactored_skills": [
+      {
+        "name": "detect_local_peaks",
+        "description": "Return indices of local peaks above a threshold.",
+        "code": "def detect_local_peaks(xs, threshold):\n    peaks = []\n    for i in range(1, len(xs) - 1):\n        left = xs[i - 1]\n        center = xs[i]\n        right = xs[i + 1]\n        if center > left and center >= right and center >= threshold:\n            peaks.append(i)\n    return peaks\n",
+        "test_queries": [
+          [
+            "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+            [
+              2,
+              5
+            ]
+          ],
+          [
+            "Peak indices in [0,2,1,2,0] with threshold 2?",
+            [
+              1,
+              3
+            ]
+          ]
+        ]
+      },
+      {
+        "name": "first_peak_after",
+        "description": "Find the first local peak after a given start index.",
+        "code": "def first_peak_after(xs, threshold, start_idx):\n    for i in range(max(1, start_idx + 1), len(xs) - 1):\n        prev_v = xs[i - 1]\n        cur_v = xs[i]\n        next_v = xs[i + 1]\n        if cur_v > prev_v and cur_v >= next_v and cur_v >= threshold:\n            return i\n    return -1\n",
+        "test_queries": [
+          [
+            "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+            2
+          ],
+          [
+            "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+            4
+          ]
+        ]
+      },
+      {
+        "name": "pair_nearby_peaks",
+        "description": "Pair peaks from two signals if their indices are within a max gap.",
+        "code": "def pair_nearby_peaks(xs, ys, threshold, max_gap):\n    x_peaks = []\n    for i in range(1, len(xs) - 1):\n        if xs[i] > xs[i - 1] and xs[i] >= xs[i + 1] and xs[i] >= threshold:\n            x_peaks.append(i)\n    y_peaks = []\n    for j in range(1, len(ys) - 1):\n        if ys[j] > ys[j - 1] and ys[j] >= ys[j + 1] and ys[j] >= threshold:\n            y_peaks.append(j)\n    pairs = []\n    for xp in x_peaks:\n        for yp in y_peaks:\n            if abs(xp - yp) <= max_gap:\n                pairs.append((xp, yp))\n                break\n    return pairs\n",
+        "test_queries": [
+          [
+            "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+            [
+              [
+                1,
+                2
+              ]
+            ]
+          ],
+          [
+            "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+            [
+              [
+                1,
+                2
+              ]
+            ]
+          ]
+        ]
+      },
+      {
+        "name": "global_argmax_index",
+        "description": "Return the index of the global maximum sample.",
+        "code": "def global_argmax_index(xs):\n    if not xs:\n        return -1\n    best_i = 0\n    best_v = xs[0]\n    for i, value in enumerate(xs[1:], start=1):\n        if value > best_v:\n            best_i = i\n            best_v = value\n    return best_i\n",
+        "test_queries": [
+          [
+            "Argmax index of [1,5,2,4]?",
+            1
+          ],
+          [
+            "Argmax index of [0,1,9,3]?",
+            2
+          ]
+        ]
+      },
+      {
+        "name": "normalize_reference_title",
+        "description": "Normalize a reference title to a canonical token string.",
+        "code": "def normalize_reference_title(text):\n    chars = []\n    for ch in text.lower():\n        chars.append(ch if ch.isalnum() else \" \")\n    return \" \".join(\"\".join(chars).split())\n",
+        "test_queries": [
+          [
+            "Normalize 'Graph-based, Search! Systems'?",
+            "graph based search systems"
+          ],
+          [
+            "Normalize 'Citation_Check 101'?",
+            "citation check 101"
+          ]
+        ]
+      },
+      {
+        "name": "dedupe_reference_titles",
+        "description": "Deduplicate titles after canonical normalization, preserving first occurrence.",
+        "code": "def dedupe_reference_titles(titles):\n    seen = set()\n    out = []\n    for title in titles:\n        cleaned = []\n        for ch in title.lower():\n            cleaned.append(ch if ch.isalnum() else \" \")\n        key = \" \".join(\"\".join(cleaned).split())\n        if key not in seen:\n            seen.add(key)\n            out.append(key)\n    return out\n",
+        "test_queries": [
+          [
+            "Dedupe ['A Study', 'a-study', 'Other Paper']?",
+            [
+              "a study",
+              "other paper"
+            ]
+          ],
+          [
+            "Dedupe ['X.Y', 'x y', 'Z']?",
+            [
+              "x y",
+              "z"
+            ]
+          ]
+        ]
+      },
+      {
+        "name": "titles_equivalent",
+        "description": "Check whether two titles are equivalent after canonical normalization.",
+        "code": "def titles_equivalent(left, right):\n    def _canon(text):\n        cleaned = []\n        for ch in text.lower():\n            cleaned.append(ch if ch.isalnum() else \" \")\n        return \" \".join(\"\".join(cleaned).split())\n    return _canon(left) == _canon(right)\n",
+        "test_queries": [
+          [
+            "Are 'Neural Search' and 'neural-search' equivalent?",
+            true
+          ],
+          [
+            "Are 'Graph Mining' and 'Graph Matching' equivalent?",
+            false
+          ]
+        ]
+      },
+      {
+        "name": "extract_year_tokens",
+        "description": "Extract 4-digit year-like tokens from text.",
+        "code": "def extract_year_tokens(text):\n    current = \"\"\n    out = []\n    for ch in text:\n        if ch.isdigit():\n            current += ch\n        else:\n            if len(current) == 4:\n                out.append(int(current))\n            current = \"\"\n    if len(current) == 4:\n        out.append(int(current))\n    return out\n",
+        "test_queries": [
+          [
+            "Year tokens in 'Published 2024, revised 2025.'?",
+            [
+              2024,
+              2025
+            ]
+          ],
+          [
+            "Year tokens in 'No year here 123.'?",
+            []
+          ]
+        ]
+      }
+    ],
+    "rejected_merges": [],
+    "standalone_after": [
+      {
+        "skill": "detect_local_peaks",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Peak indices in [0,1,3,1,0,2,2,1] with threshold 2?",
+            "expected": [
+              2,
+              5
+            ],
+            "got": [
+              2,
+              5
+            ],
+            "ok": true
+          },
+          {
+            "q": "Peak indices in [0,2,1,2,0] with threshold 2?",
+            "expected": [
+              1,
+              3
+            ],
+            "got": [
+              1,
+              3
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "first_peak_after",
+        "ok": true,
+        "tests": [
+          {
+            "q": "First peak after index 0 in [0,1,4,1,3,1] threshold 3?",
+            "expected": 2,
+            "got": 2,
+            "ok": true
+          },
+          {
+            "q": "First peak after index 2 in [0,1,4,1,3,1] threshold 3?",
+            "expected": 4,
+            "got": 4,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "pair_nearby_peaks",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Nearby peaks between [0,3,1,0,4,1] and [0,1,3,1,0,4] with threshold 3 gap 1?",
+            "expected": [
+              [
+                1,
+                2
+              ]
+            ],
+            "got": [
+              [
+                1,
+                2
+              ]
+            ],
+            "ok": true
+          },
+          {
+            "q": "Nearby peaks between [0,4,1,0] and [0,1,4,0] with threshold 4 gap 2?",
+            "expected": [
+              [
+                1,
+                2
+              ]
+            ],
+            "got": [
+              [
+                1,
+                2
+              ]
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "global_argmax_index",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Argmax index of [1,5,2,4]?",
+            "expected": 1,
+            "got": 1,
+            "ok": true
+          },
+          {
+            "q": "Argmax index of [0,1,9,3]?",
+            "expected": 2,
+            "got": 2,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "normalize_reference_title",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Normalize 'Graph-based, Search! Systems'?",
+            "expected": "graph based search systems",
+            "got": "graph based search systems",
+            "ok": true
+          },
+          {
+            "q": "Normalize 'Citation_Check 101'?",
+            "expected": "citation check 101",
+            "got": "citation check 101",
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "dedupe_reference_titles",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Dedupe ['A Study', 'a-study', 'Other Paper']?",
+            "expected": [
+              "a study",
+              "other paper"
+            ],
+            "got": [
+              "a study",
+              "other paper"
+            ],
+            "ok": true
+          },
+          {
+            "q": "Dedupe ['X.Y', 'x y', 'Z']?",
+            "expected": [
+              "x y",
+              "z"
+            ],
+            "got": [
+              "x y",
+              "z"
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "titles_equivalent",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Are 'Neural Search' and 'neural-search' equivalent?",
+            "expected": true,
+            "got": true,
+            "ok": true
+          },
+          {
+            "q": "Are 'Graph Mining' and 'Graph Matching' equivalent?",
+            "expected": false,
+            "got": false,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "extract_year_tokens",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Year tokens in 'Published 2024, revised 2025.'?",
+            "expected": [
+              2024,
+              2025
+            ],
+            "got": [
+              2024,
+              2025
+            ],
+            "ok": true
+          },
+          {
+            "q": "Year tokens in 'No year here 123.'?",
+            "expected": [],
+            "got": [],
+            "ok": true
+          }
+        ]
+      }
+    ],
+    "correctness_pass_rate": 1.0,
+    "token_report": {
+      "per_skill_before_tokens": {
+        "detect_local_peaks": 69,
+        "first_peak_after": 71,
+        "pair_nearby_peaks": 138,
+        "global_argmax_index": 59,
+        "normalize_reference_title": 43,
+        "dedupe_reference_titles": 87,
+        "titles_equivalent": 64,
+        "extract_year_tokens": 80
+      },
+      "per_skill_after_tokens": {
+        "detect_local_peaks": 69,
+        "first_peak_after": 71,
+        "pair_nearby_peaks": 138,
+        "global_argmax_index": 59,
+        "normalize_reference_title": 43,
+        "dedupe_reference_titles": 87,
+        "titles_equivalent": 64,
+        "extract_year_tokens": 80
+      },
+      "sub_functions_total_tokens": 0,
+      "total_before_tokens": 611,
+      "total_after_tokens": 611,
+      "delta_tokens": 0,
+      "delta_pct": 0.0
+    },
+    "cluster_eval": {
+      "predictions": [],
+      "missed_gt_clusters": [
+        "skillsbench_signal_peak_detection",
+        "skillsbench_citation_normalization"
+      ]
+    }
+  }
+}

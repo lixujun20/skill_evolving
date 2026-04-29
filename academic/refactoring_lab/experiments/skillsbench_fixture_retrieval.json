@@ -1,0 +1,644 @@
+{
+  "benchmark": "skillsbench_fixture_retrieval",
+  "source": "skillsbench_fixture",
+  "fixture_summary": {
+    "fixture_path": "/home/lixujun/skill_evolving/app/meta_agent/skills/tests/skillsbench_fixture.json",
+    "n_tasks": 24,
+    "category_counts": {
+      "Data Visualization": 1,
+      "Office Operation": 1,
+      "astronomy": 2,
+      "bgp-route": 1,
+      "control-systems": 2,
+      "document-processing": 1,
+      "economics": 1,
+      "energy": 2,
+      "engineering": 1,
+      "enterprise-search": 1,
+      "game": 1,
+      "games": 1,
+      "general": 1,
+      "geophysics": 1,
+      "materials_science": 1,
+      "research": 1,
+      "security": 2,
+      "seismology": 2,
+      "video-analysis": 1
+    },
+    "difficulty_counts": {
+      "easy": 2,
+      "hard": 7,
+      "medium": 15
+    },
+    "categories_with_multiple_tasks": {
+      "astronomy": 2,
+      "control-systems": 2,
+      "energy": 2,
+      "security": 2,
+      "seismology": 2
+    }
+  },
+  "top_k": 5,
+  "similarity_threshold": 0.2,
+  "skipped": false,
+  "skip_reason": "",
+  "metadata": {
+    "benchmark_group_prefix": "skillsbench_fixture::",
+    "run_namespace": "6841010a",
+    "run_group_prefix": "skillsbench_fixture::6841010a::",
+    "cleanup_before_run": true,
+    "cleanup_after_run": true,
+    "strict_isolation_note": "Benchmark-owned rows are isolated by run namespace and cleaned before and after each run. For strict isolation from unrelated skills, use a dedicated benchmark database."
+  },
+  "summary": {
+    "n_tasks": 24,
+    "recall_at_1": 0.9583,
+    "recall_at_5": 1.0,
+    "precision_at_5": 0.2,
+    "f1_at_5": 0.3333,
+    "avg_latency_ms": 160.608,
+    "avg_cost_usd": 1.1339999999999998e-05,
+    "missed_task_ids": [],
+    "rank1_missed_task_ids": [
+      "enterprise-information-search"
+    ]
+  },
+  "per_query": [
+    {
+      "task_id": "citation-check",
+      "category": "research",
+      "expected_skill_id": 57,
+      "expected_benchmark_task_id": "citation-check",
+      "retrieved_skill_ids": [
+        57,
+        72,
+        76,
+        59,
+        60
+      ],
+      "retrieved_benchmark_task_ids": [
+        "citation-check",
+        "dialogue-parser",
+        "seismic-phase-picking",
+        "edit-pdf",
+        "3d-scan-calc"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 148.261,
+      "estimated_cost_usd": 1.2109999999999998e-05
+    },
+    {
+      "task_id": "data-to-d3",
+      "category": "Data Visualization",
+      "expected_skill_id": 58,
+      "expected_benchmark_task_id": "data-to-d3",
+      "retrieved_skill_ids": [
+        58,
+        72,
+        60,
+        68,
+        59
+      ],
+      "retrieved_benchmark_task_ids": [
+        "data-to-d3",
+        "dialogue-parser",
+        "3d-scan-calc",
+        "exoplanet-detection-period",
+        "edit-pdf"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 192.799,
+      "estimated_cost_usd": 1.33e-05
+    },
+    {
+      "task_id": "edit-pdf",
+      "category": "general",
+      "expected_skill_id": 59,
+      "expected_benchmark_task_id": "edit-pdf",
+      "retrieved_skill_ids": [
+        59,
+        67,
+        69,
+        72,
+        60
+      ],
+      "retrieved_benchmark_task_ids": [
+        "edit-pdf",
+        "exceltable-in-ppt",
+        "court-form-filling",
+        "dialogue-parser",
+        "3d-scan-calc"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 152.141,
+      "estimated_cost_usd": 1.0009999999999999e-05
+    },
+    {
+      "task_id": "3d-scan-calc",
+      "category": "engineering",
+      "expected_skill_id": 60,
+      "expected_benchmark_task_id": "3d-scan-calc",
+      "retrieved_skill_ids": [
+        60,
+        70,
+        58,
+        80,
+        72
+      ],
+      "retrieved_benchmark_task_ids": [
+        "3d-scan-calc",
+        "crystallographic-wyckoff-position-analysis",
+        "data-to-d3",
+        "r2r-mpc-control",
+        "dialogue-parser"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 146.627,
+      "estimated_cost_usd": 1.197e-05
+    },
+    {
+      "task_id": "adaptive-cruise-control",
+      "category": "control-systems",
+      "expected_skill_id": 61,
+      "expected_benchmark_task_id": "adaptive-cruise-control",
+      "retrieved_skill_ids": [
+        61,
+        80,
+        73,
+        79,
+        60
+      ],
+      "retrieved_benchmark_task_ids": [
+        "adaptive-cruise-control",
+        "r2r-mpc-control",
+        "dynamic-object-aware-egomotion",
+        "setup-fuzzing-py",
+        "3d-scan-calc"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 152.508,
+      "estimated_cost_usd": 1.2599999999999998e-05
+    },
+    {
+      "task_id": "azure-bgp-oscillation-route-leak",
+      "category": "bgp-route",
+      "expected_skill_id": 62,
+      "expected_benchmark_task_id": "azure-bgp-oscillation-route-leak",
+      "retrieved_skill_ids": [
+        62,
+        72,
+        77,
+        79,
+        60
+      ],
+      "retrieved_benchmark_task_ids": [
+        "azure-bgp-oscillation-route-leak",
+        "dialogue-parser",
+        "gravitational-wave-detection",
+        "setup-fuzzing-py",
+        "3d-scan-calc"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 128.854,
+      "estimated_cost_usd": 1.0569999999999999e-05
+    },
+    {
+      "task_id": "civ6-adjacency-optimizer",
+      "category": "games",
+      "expected_skill_id": 63,
+      "expected_benchmark_task_id": "civ6-adjacency-optimizer",
+      "retrieved_skill_ids": [
+        63,
+        72,
+        80,
+        59,
+        65
+      ],
+      "retrieved_benchmark_task_ids": [
+        "civ6-adjacency-optimizer",
+        "dialogue-parser",
+        "r2r-mpc-control",
+        "edit-pdf",
+        "energy-ac-optimal-power-flow"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 137.384,
+      "estimated_cost_usd": 1.134e-05
+    },
+    {
+      "task_id": "earthquake-phase-association",
+      "category": "seismology",
+      "expected_skill_id": 64,
+      "expected_benchmark_task_id": "earthquake-phase-association",
+      "retrieved_skill_ids": [
+        64,
+        76,
+        77,
+        68,
+        74
+      ],
+      "retrieved_benchmark_task_ids": [
+        "earthquake-phase-association",
+        "seismic-phase-picking",
+        "gravitational-wave-detection",
+        "exoplanet-detection-period",
+        "earthquake-plate-calculation"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 142.591,
+      "estimated_cost_usd": 1.1059999999999999e-05
+    },
+    {
+      "task_id": "energy-ac-optimal-power-flow",
+      "category": "energy",
+      "expected_skill_id": 65,
+      "expected_benchmark_task_id": "energy-ac-optimal-power-flow",
+      "retrieved_skill_ids": [
+        65,
+        78,
+        80,
+        61,
+        72
+      ],
+      "retrieved_benchmark_task_ids": [
+        "energy-ac-optimal-power-flow",
+        "energy-market-pricing",
+        "r2r-mpc-control",
+        "adaptive-cruise-control",
+        "dialogue-parser"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 147.526,
+      "estimated_cost_usd": 1.183e-05
+    },
+    {
+      "task_id": "enterprise-information-search",
+      "category": "enterprise-search",
+      "expected_skill_id": 66,
+      "expected_benchmark_task_id": "enterprise-information-search",
+      "retrieved_skill_ids": [
+        72,
+        66,
+        59,
+        58,
+        76
+      ],
+      "retrieved_benchmark_task_ids": [
+        "dialogue-parser",
+        "enterprise-information-search",
+        "edit-pdf",
+        "data-to-d3",
+        "seismic-phase-picking"
+      ],
+      "hit_at_1": false,
+      "hit_at_5": true,
+      "elapsed_ms": 155.991,
+      "estimated_cost_usd": 1.05e-05
+    },
+    {
+      "task_id": "exceltable-in-ppt",
+      "category": "Office Operation",
+      "expected_skill_id": 67,
+      "expected_benchmark_task_id": "exceltable-in-ppt",
+      "retrieved_skill_ids": [
+        67,
+        59,
+        58,
+        60,
+        72
+      ],
+      "retrieved_benchmark_task_ids": [
+        "exceltable-in-ppt",
+        "edit-pdf",
+        "data-to-d3",
+        "3d-scan-calc",
+        "dialogue-parser"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 179.178,
+      "estimated_cost_usd": 9.38e-06
+    },
+    {
+      "task_id": "exoplanet-detection-period",
+      "category": "astronomy",
+      "expected_skill_id": 68,
+      "expected_benchmark_task_id": "exoplanet-detection-period",
+      "retrieved_skill_ids": [
+        68,
+        77,
+        60,
+        73,
+        58
+      ],
+      "retrieved_benchmark_task_ids": [
+        "exoplanet-detection-period",
+        "gravitational-wave-detection",
+        "3d-scan-calc",
+        "dynamic-object-aware-egomotion",
+        "data-to-d3"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 161.125,
+      "estimated_cost_usd": 1.085e-05
+    },
+    {
+      "task_id": "court-form-filling",
+      "category": "document-processing",
+      "expected_skill_id": 69,
+      "expected_benchmark_task_id": "court-form-filling",
+      "retrieved_skill_ids": [
+        69,
+        59,
+        76,
+        60,
+        67
+      ],
+      "retrieved_benchmark_task_ids": [
+        "court-form-filling",
+        "edit-pdf",
+        "seismic-phase-picking",
+        "3d-scan-calc",
+        "exceltable-in-ppt"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 162.189,
+      "estimated_cost_usd": 1.421e-05
+    },
+    {
+      "task_id": "crystallographic-wyckoff-position-analysis",
+      "category": "materials_science",
+      "expected_skill_id": 70,
+      "expected_benchmark_task_id": "crystallographic-wyckoff-position-analysis",
+      "retrieved_skill_ids": [
+        70,
+        60,
+        72,
+        77,
+        59
+      ],
+      "retrieved_benchmark_task_ids": [
+        "crystallographic-wyckoff-position-analysis",
+        "3d-scan-calc",
+        "dialogue-parser",
+        "gravitational-wave-detection",
+        "edit-pdf"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 152.387,
+      "estimated_cost_usd": 1.099e-05
+    },
+    {
+      "task_id": "dapt-intrusion-detection",
+      "category": "security",
+      "expected_skill_id": 71,
+      "expected_benchmark_task_id": "dapt-intrusion-detection",
+      "retrieved_skill_ids": [
+        71,
+        58,
+        68,
+        76,
+        61
+      ],
+      "retrieved_benchmark_task_ids": [
+        "dapt-intrusion-detection",
+        "data-to-d3",
+        "exoplanet-detection-period",
+        "seismic-phase-picking",
+        "adaptive-cruise-control"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 144.353,
+      "estimated_cost_usd": 1.421e-05
+    },
+    {
+      "task_id": "dialogue-parser",
+      "category": "game",
+      "expected_skill_id": 72,
+      "expected_benchmark_task_id": "dialogue-parser",
+      "retrieved_skill_ids": [
+        72,
+        58,
+        59,
+        60,
+        80
+      ],
+      "retrieved_benchmark_task_ids": [
+        "dialogue-parser",
+        "data-to-d3",
+        "edit-pdf",
+        "3d-scan-calc",
+        "r2r-mpc-control"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 140.018,
+      "estimated_cost_usd": 1.0079999999999998e-05
+    },
+    {
+      "task_id": "dynamic-object-aware-egomotion",
+      "category": "video-analysis",
+      "expected_skill_id": 73,
+      "expected_benchmark_task_id": "dynamic-object-aware-egomotion",
+      "retrieved_skill_ids": [
+        73,
+        80,
+        77,
+        72,
+        61
+      ],
+      "retrieved_benchmark_task_ids": [
+        "dynamic-object-aware-egomotion",
+        "r2r-mpc-control",
+        "gravitational-wave-detection",
+        "dialogue-parser",
+        "adaptive-cruise-control"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 202.979,
+      "estimated_cost_usd": 1.2879999999999999e-05
+    },
+    {
+      "task_id": "earthquake-plate-calculation",
+      "category": "geophysics",
+      "expected_skill_id": 74,
+      "expected_benchmark_task_id": "earthquake-plate-calculation",
+      "retrieved_skill_ids": [
+        74,
+        76,
+        64,
+        72,
+        58
+      ],
+      "retrieved_benchmark_task_ids": [
+        "earthquake-plate-calculation",
+        "seismic-phase-picking",
+        "earthquake-phase-association",
+        "dialogue-parser",
+        "data-to-d3"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 163.155,
+      "estimated_cost_usd": 1.169e-05
+    },
+    {
+      "task_id": "econ-detrending-correlation",
+      "category": "economics",
+      "expected_skill_id": 75,
+      "expected_benchmark_task_id": "econ-detrending-correlation",
+      "retrieved_skill_ids": [
+        75,
+        58,
+        77,
+        73,
+        78
+      ],
+      "retrieved_benchmark_task_ids": [
+        "econ-detrending-correlation",
+        "data-to-d3",
+        "gravitational-wave-detection",
+        "dynamic-object-aware-egomotion",
+        "energy-market-pricing"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 154.416,
+      "estimated_cost_usd": 8.89e-06
+    },
+    {
+      "task_id": "seismic-phase-picking",
+      "category": "seismology",
+      "expected_skill_id": 76,
+      "expected_benchmark_task_id": "seismic-phase-picking",
+      "retrieved_skill_ids": [
+        76,
+        64,
+        77,
+        68,
+        60
+      ],
+      "retrieved_benchmark_task_ids": [
+        "seismic-phase-picking",
+        "earthquake-phase-association",
+        "gravitational-wave-detection",
+        "exoplanet-detection-period",
+        "3d-scan-calc"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 144.598,
+      "estimated_cost_usd": 1.2249999999999998e-05
+    },
+    {
+      "task_id": "gravitational-wave-detection",
+      "category": "astronomy",
+      "expected_skill_id": 77,
+      "expected_benchmark_task_id": "gravitational-wave-detection",
+      "retrieved_skill_ids": [
+        77,
+        68,
+        64,
+        73,
+        76
+      ],
+      "retrieved_benchmark_task_ids": [
+        "gravitational-wave-detection",
+        "exoplanet-detection-period",
+        "earthquake-phase-association",
+        "dynamic-object-aware-egomotion",
+        "seismic-phase-picking"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 179.285,
+      "estimated_cost_usd": 1.1129999999999998e-05
+    },
+    {
+      "task_id": "energy-market-pricing",
+      "category": "energy",
+      "expected_skill_id": 78,
+      "expected_benchmark_task_id": "energy-market-pricing",
+      "retrieved_skill_ids": [
+        78,
+        65,
+        80,
+        61,
+        63
+      ],
+      "retrieved_benchmark_task_ids": [
+        "energy-market-pricing",
+        "energy-ac-optimal-power-flow",
+        "r2r-mpc-control",
+        "adaptive-cruise-control",
+        "civ6-adjacency-optimizer"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 154.187,
+      "estimated_cost_usd": 8.609999999999999e-06
+    },
+    {
+      "task_id": "setup-fuzzing-py",
+      "category": "security",
+      "expected_skill_id": 79,
+      "expected_benchmark_task_id": "setup-fuzzing-py",
+      "retrieved_skill_ids": [
+        79,
+        61,
+        60,
+        80,
+        70
+      ],
+      "retrieved_benchmark_task_ids": [
+        "setup-fuzzing-py",
+        "adaptive-cruise-control",
+        "3d-scan-calc",
+        "r2r-mpc-control",
+        "crystallographic-wyckoff-position-analysis"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 217.594,
+      "estimated_cost_usd": 1.1129999999999998e-05
+    },
+    {
+      "task_id": "r2r-mpc-control",
+      "category": "control-systems",
+      "expected_skill_id": 80,
+      "expected_benchmark_task_id": "r2r-mpc-control",
+      "retrieved_skill_ids": [
+        80,
+        61,
+        79,
+        73,
+        65
+      ],
+      "retrieved_benchmark_task_ids": [
+        "r2r-mpc-control",
+        "adaptive-cruise-control",
+        "setup-fuzzing-py",
+        "dynamic-object-aware-egomotion",
+        "energy-ac-optimal-power-flow"
+      ],
+      "hit_at_1": true,
+      "hit_at_5": true,
+      "elapsed_ms": 194.458,
+      "estimated_cost_usd": 1.0569999999999999e-05
+    }
+  ]
+}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from academic.config import EXTRACT_MODEL, LLM_CALL_TIMEOUT
 from academic.skill_store import Skill
@@ -61,6 +61,26 @@ assert <function_name>(<args>) == <expected>
 
 Separate multiple skills with a blank line.
 If nothing to extract, output: NO_SKILL
+"""
+
+REFINE_SYSTEM = """\
+You are incrementally refining a previously extracted Python skill after it failed validation or tests.
+
+You will receive:
+- the original problem/query
+- the current candidate skill code
+- a FIXED public test code block
+- the tester failure
+- optional previous refinement history
+
+Rules:
+1. Treat the public test code as FIXED. Do NOT modify, replace, or reinterpret the test.
+2. Preserve as much of the previous skill code as possible. Make the smallest incremental edit that fixes the failure.
+3. Keep the same skill name unless the original name is clearly invalid Python.
+4. Prefer local edits over full rewrites. If only one expression or one branch is wrong, change only that part.
+5. Output exactly one skill in the same extractor format.
+6. The SKILL_TEST block in your output must repeat the FIXED public test unchanged.
+7. Output NO_SKILL only if the candidate is fundamentally unsalvageable.
 """
 
 
@@ -118,6 +138,59 @@ async def extract_skills(
         return []
 
     return _parse_skills(response, source_problem=query)
+
+
+async def refine_skill_after_test_failure(
+    query: str,
+    skill: Skill,
+    test_error: str,
+    fixed_test_code: str,
+    existing_skills_prompt: str = "",
+    llm_config: str = EXTRACT_MODEL,
+    refinement_history: Optional[List[Dict[str, Any]]] = None,
+) -> List[Skill]:
+    from app.llm import LLM
+
+    system = REFINE_SYSTEM
+    history_block = ""
+    if refinement_history:
+        lines = []
+        for idx, item in enumerate(refinement_history[-4:], start=1):
+            lines.append(
+                f"Attempt {idx}:\n"
+                f"Failure: {item.get('test_error', '')}\n"
+                f"Candidate code:\n```python\n{item.get('skill_code', '')}\n```"
+            )
+        history_block = "\n\n## Previous refinement history\n" + "\n\n".join(lines)
+    user_msg = (
+        f"## Problem\n{query}\n\n"
+        f"## Existing Skills\n{existing_skills_prompt or '(none)'}\n\n"
+        f"## Candidate Skill\n```python\n{skill.code}\n```\n\n"
+        f"## Fixed Public Test\n```python\n{fixed_test_code or '# no test provided'}\n```"
+        f"{history_block}\n\n"
+        f"## Tester Failure\n{test_error}\n\n"
+        "Refine this skill incrementally and return exactly one corrected skill in extractor format."
+    )
+
+    llm = LLM(config_name=llm_config)
+    try:
+        response = await asyncio.wait_for(
+            llm.ask(
+                messages=[{"role": "user", "content": user_msg}],
+                system_msgs=[{"role": "system", "content": system}],
+            ),
+            timeout=LLM_CALL_TIMEOUT,
+        )
+    except (asyncio.TimeoutError, Exception):
+        return []
+
+    if not response or "NO_SKILL" in response:
+        return []
+
+    refined = _parse_skills(response, source_problem=query)
+    for item in refined:
+        item.test_code = fixed_test_code
+    return refined
 
 
 def _parse_skills(text: str, source_problem: str) -> List[Skill]:

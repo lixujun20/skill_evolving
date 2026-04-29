@@ -1,0 +1,589 @@
+{
+  "engine": {
+    "engine": "desc_first",
+    "llm_config": "glm5",
+    "elapsed_s": 230.63,
+    "shared_sub_functions": [
+      {
+        "name": "_shared_cross_product_2d",
+        "description": "The common sub-task is the calculation of the 2D cross product (or determinant) of two vectors.",
+        "source_skills": [
+          "polygon_area",
+          "point_in_convex_polygon",
+          "signed_triangle_area"
+        ],
+        "code": "def _shared_cross_product_2d(ux, uy, vx, vy):\n    \"\"\"Calculates the 2D cross product of vectors (ux, uy) and (vx, vy).\"\"\"\n    return ux * vy - uy * vx"
+      },
+      {
+        "name": "_shared_det_2x2",
+        "description": "Computing the determinant of a 2x2 matrix represented as a list of two rows.",
+        "source_skills": [
+          "det_2x2",
+          "inverse_2x2",
+          "solve_linear_2x2"
+        ],
+        "code": "def _shared_det_2x2(M):\n    \"\"\"Return the determinant of a 2x2 matrix M.\"\"\"\n    return M[0][0] * M[1][1] - M[0][1] * M[1][0]"
+      },
+      {
+        "name": "_shared_gcd",
+        "description": "All four skills perform the computation of the greatest common divisor (GCD) of two integers using the Euclidean algorithm.",
+        "source_skills": [
+          "gcd_pair",
+          "lcm_of_list",
+          "simplify_fraction",
+          "count_coprime_pairs"
+        ],
+        "code": "def _shared_gcd(a, b):\n    \"\"\"Return the greatest common divisor of a and b using the Euclidean algorithm.\"\"\"\n    while b:\n        a, b = b, a % b\n    return a"
+      },
+      {
+        "name": "_shared_pow_mod",
+        "description": "The common sub-task is efficient modular exponentiation, specifically computing (base^exp) % mod using the binary exponentiation method.",
+        "source_skills": [
+          "pow_mod",
+          "modular_inverse_prime",
+          "binomial_mod_prime"
+        ],
+        "code": "def _shared_pow_mod(base, exp, mod):\n    \"\"\"Compute (base**exp) % mod using binary exponentiation.\"\"\"\n    result = 1\n    base %= mod\n    while exp > 0:\n        if exp & 1:\n            result = (result * base) % mod\n        base = (base * base) % mod\n        exp >>= 1\n    return result"
+      },
+      {
+        "name": "_shared_sum",
+        "description": "The common sub-task is iterating over a sequence to compute the sum of its elements.",
+        "source_skills": [
+          "sample_mean",
+          "sample_variance"
+        ],
+        "code": "def _shared_sum(xs):\n    \"\"\"Return the sum of elements in sequence xs.\"\"\"\n    return sum(xs)"
+      }
+    ],
+    "rejected_merges": [],
+    "standalone_after": [
+      {
+        "skill": "polygon_area",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Area of quadrilateral (0,0),(4,0),(4,3),(0,3)?",
+            "expected": 12.0,
+            "got": 12.0,
+            "ok": true
+          },
+          {
+            "q": "Area of triangle (0,0),(6,0),(3,4)?",
+            "expected": 12.0,
+            "got": 12.0,
+            "ok": true
+          },
+          {
+            "q": "Area of pentagon (0,0),(2,0),(3,2),(1,4),(-1,2)?",
+            "expected": 10.0,
+            "got": 10.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "point_in_convex_polygon",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Is (2,2) inside square (0,0),(4,0),(4,4),(0,4)?",
+            "expected": true,
+            "got": true,
+            "ok": true
+          },
+          {
+            "q": "Is (5,2) inside square (0,0),(4,0),(4,4),(0,4)?",
+            "expected": false,
+            "got": false,
+            "ok": true
+          },
+          {
+            "q": "Is (1,1) inside triangle (0,0),(3,0),(0,3)?",
+            "expected": true,
+            "got": true,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "signed_triangle_area",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Signed area of (0,0),(4,0),(0,3) (CCW)?",
+            "expected": 6.0,
+            "got": 6.0,
+            "ok": true
+          },
+          {
+            "q": "Signed area of (0,0),(0,3),(4,0) (CW)?",
+            "expected": -6.0,
+            "got": -6.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "power_of_point",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Power of (5,0) wrt circle centre (0,0) radius 3?",
+            "expected": 16.0,
+            "got": 16,
+            "ok": true
+          },
+          {
+            "q": "Power of (1,1) wrt circle centre (0,0) radius 2?",
+            "expected": -2.0,
+            "got": -2,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "gcd_pair",
+        "ok": true,
+        "tests": [
+          {
+            "q": "gcd(12, 18)?",
+            "expected": 6,
+            "got": 6,
+            "ok": true
+          },
+          {
+            "q": "gcd(17, 5)?",
+            "expected": 1,
+            "got": 1,
+            "ok": true
+          },
+          {
+            "q": "gcd(0, 9)?",
+            "expected": 9,
+            "got": 9,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "lcm_of_list",
+        "ok": true,
+        "tests": [
+          {
+            "q": "lcm of [2, 3, 4]?",
+            "expected": 12,
+            "got": 12,
+            "ok": true
+          },
+          {
+            "q": "lcm of [6, 8, 12]?",
+            "expected": 24,
+            "got": 24,
+            "ok": true
+          },
+          {
+            "q": "lcm of [5, 7]?",
+            "expected": 35,
+            "got": 35,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "simplify_fraction",
+        "ok": true,
+        "tests": [
+          {
+            "q": "simplify 8/12?",
+            "expected": [
+              2,
+              3
+            ],
+            "got": [
+              2,
+              3
+            ],
+            "ok": true
+          },
+          {
+            "q": "simplify 14/21?",
+            "expected": [
+              2,
+              3
+            ],
+            "got": [
+              2,
+              3
+            ],
+            "ok": true
+          },
+          {
+            "q": "simplify 5/7?",
+            "expected": [
+              5,
+              7
+            ],
+            "got": [
+              5,
+              7
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "count_coprime_pairs",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Coprime pair count in [2,3,4,5]?",
+            "expected": 5,
+            "got": 5,
+            "ok": true
+          },
+          {
+            "q": "Coprime pair count in [6,10,15]?",
+            "expected": 0,
+            "got": 0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "pow_mod",
+        "ok": true,
+        "tests": [
+          {
+            "q": "2^10 mod 1000?",
+            "expected": 24,
+            "got": 24,
+            "ok": true
+          },
+          {
+            "q": "3^200 mod 7?",
+            "expected": 2,
+            "got": 2,
+            "ok": true
+          },
+          {
+            "q": "5^0 mod 13?",
+            "expected": 1,
+            "got": 1,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "modular_inverse_prime",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Inverse of 3 mod 7?",
+            "expected": 5,
+            "got": 5,
+            "ok": true
+          },
+          {
+            "q": "Inverse of 10 mod 17?",
+            "expected": 12,
+            "got": 12,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "binomial_mod_prime",
+        "ok": true,
+        "tests": [
+          {
+            "q": "C(5,2) mod 13?",
+            "expected": 10,
+            "got": 10,
+            "ok": true
+          },
+          {
+            "q": "C(10,3) mod 97?",
+            "expected": 23,
+            "got": 23,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "det_2x2",
+        "ok": true,
+        "tests": [
+          {
+            "q": "det([[1,2],[3,4]])?",
+            "expected": -2,
+            "got": -2,
+            "ok": true
+          },
+          {
+            "q": "det([[2,0],[0,5]])?",
+            "expected": 10,
+            "got": 10,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "inverse_2x2",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Inverse of [[1,2],[3,4]]?",
+            "expected": [
+              -2.0,
+              1.0,
+              1.5,
+              -0.5
+            ],
+            "got": [
+              -2.0,
+              1.0,
+              1.5,
+              -0.5
+            ],
+            "ok": true
+          },
+          {
+            "q": "Inverse of [[1,0],[0,1]]?",
+            "expected": [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "got": [
+              1.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "solve_linear_2x2",
+        "ok": true,
+        "tests": [
+          {
+            "q": "Solve [[2,1],[1,3]]x=[5,10]?",
+            "expected": [
+              1.0,
+              3.0
+            ],
+            "got": [
+              1.0,
+              3.0
+            ],
+            "ok": true
+          },
+          {
+            "q": "Solve [[1,0],[0,1]]x=[7,-2]?",
+            "expected": [
+              7.0,
+              -2.0
+            ],
+            "got": [
+              7.0,
+              -2.0
+            ],
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "sample_mean",
+        "ok": true,
+        "tests": [
+          {
+            "q": "mean of [1,2,3,4,5]?",
+            "expected": 3.0,
+            "got": 3.0,
+            "ok": true
+          },
+          {
+            "q": "mean of [10,10,10]?",
+            "expected": 10.0,
+            "got": 10.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "sample_variance",
+        "ok": true,
+        "tests": [
+          {
+            "q": "variance of [1,2,3,4,5]?",
+            "expected": 2.0,
+            "got": 2.0,
+            "ok": true
+          },
+          {
+            "q": "variance of [2,2,2]?",
+            "expected": 0.0,
+            "got": 0.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "expected_value",
+        "ok": true,
+        "tests": [
+          {
+            "q": "EV of [(1,0.5),(2,0.5)]?",
+            "expected": 1.5,
+            "got": 1.5,
+            "ok": true
+          },
+          {
+            "q": "EV of [(-1,0.25),(0,0.5),(1,0.25)]?",
+            "expected": 0.0,
+            "got": 0.0,
+            "ok": true
+          }
+        ]
+      },
+      {
+        "skill": "sample_median",
+        "ok": true,
+        "tests": [
+          {
+            "q": "median of [1,2,3,4,5]?",
+            "expected": 3.0,
+            "got": 3.0,
+            "ok": true
+          },
+          {
+            "q": "median of [1,2,3,4]?",
+            "expected": 2.5,
+            "got": 2.5,
+            "ok": true
+          }
+        ]
+      }
+    ],
+    "correctness_pass_rate": 1.0,
+    "token_report": {
+      "per_skill_before_tokens": {
+        "polygon_area": 104,
+        "point_in_convex_polygon": 123,
+        "signed_triangle_area": 46,
+        "power_of_point": 42,
+        "gcd_pair": 31,
+        "lcm_of_list": 83,
+        "simplify_fraction": 70,
+        "count_coprime_pairs": 95,
+        "pow_mod": 66,
+        "modular_inverse_prime": 98,
+        "binomial_mod_prime": 184,
+        "det_2x2": 47,
+        "inverse_2x2": 94,
+        "solve_linear_2x2": 151,
+        "sample_mean": 54,
+        "sample_variance": 119,
+        "expected_value": 48,
+        "sample_median": 75
+      },
+      "per_skill_after_tokens": {
+        "polygon_area": 99,
+        "point_in_convex_polygon": 92,
+        "signed_triangle_area": 47,
+        "power_of_point": 42,
+        "gcd_pair": 17,
+        "lcm_of_list": 36,
+        "simplify_fraction": 31,
+        "count_coprime_pairs": 60,
+        "pow_mod": 21,
+        "modular_inverse_prime": 23,
+        "binomial_mod_prime": 112,
+        "det_2x2": 19,
+        "inverse_2x2": 87,
+        "solve_linear_2x2": 98,
+        "sample_mean": 31,
+        "sample_variance": 69,
+        "expected_value": 48,
+        "sample_median": 75
+      },
+      "sub_functions_total_tokens": 251,
+      "total_before_tokens": 1530,
+      "total_after_tokens": 1258,
+      "delta_tokens": -272,
+      "delta_pct": -0.17777777777777778
+    },
+    "cluster_eval": {
+      "predictions": [
+        {
+          "predicted_sub_function": "_shared_cross_product_2d",
+          "predicted_members": [
+            "point_in_convex_polygon",
+            "polygon_area",
+            "signed_triangle_area"
+          ],
+          "best_gt_cluster": "geometry_cross_product",
+          "jaccard": 1.0,
+          "negative_controls_incorrectly_merged": []
+        },
+        {
+          "predicted_sub_function": "_shared_det_2x2",
+          "predicted_members": [
+            "det_2x2",
+            "inverse_2x2",
+            "solve_linear_2x2"
+          ],
+          "best_gt_cluster": "linalg_2x2_det",
+          "jaccard": 1.0,
+          "negative_controls_incorrectly_merged": []
+        },
+        {
+          "predicted_sub_function": "_shared_gcd",
+          "predicted_members": [
+            "count_coprime_pairs",
+            "gcd_pair",
+            "lcm_of_list",
+            "simplify_fraction"
+          ],
+          "best_gt_cluster": "number_theory_gcd",
+          "jaccard": 1.0,
+          "negative_controls_incorrectly_merged": []
+        },
+        {
+          "predicted_sub_function": "_shared_pow_mod",
+          "predicted_members": [
+            "binomial_mod_prime",
+            "modular_inverse_prime",
+            "pow_mod"
+          ],
+          "best_gt_cluster": "combinatorics_pow_mod",
+          "jaccard": 1.0,
+          "negative_controls_incorrectly_merged": []
+        },
+        {
+          "predicted_sub_function": "_shared_sum",
+          "predicted_members": [
+            "sample_mean",
+            "sample_variance"
+          ],
+          "best_gt_cluster": "statistics_sum_reduction",
+          "jaccard": 0.667,
+          "negative_controls_incorrectly_merged": []
+        }
+      ],
+      "missed_gt_clusters": []
+    }
+  },
+  "judge": {
+    "sub_function_quality": 5,
+    "naming_quality": 5,
+    "merge_correctness": 5,
+    "over_merging_detected": false,
+    "under_merging_detected": false,
+    "overall_recommendation": "accept",
+    "rationale": "The refactoring successfully identified and extracted correct, reusable logic units across all skill domains (geometry, linear algebra, number theory, and modular arithmetic), achieving a 17.8% token reduction while maintaining full test coverage. The naming conventions are professional and precise, accurately describing the mathematical operations (e.g., `_shared_cross_product_2d`, `_shared_pow_mod`). The clustering evaluation confirms perfect alignment with ground truth clusters, demonstrating that the algorithm correctly distinguished between similar but distinct patterns (e.g., separating 2x2 determinant logic from 2D cross product logic)."
+  }
+}

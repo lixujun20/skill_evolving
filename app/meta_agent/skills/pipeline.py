@@ -20,12 +20,14 @@ Usage (programmatic):
 from __future__ import annotations
 
 import asyncio
+import ast
 import logging
+import re
 import textwrap
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
 from sqlmodel import Session, SQLModel, select
@@ -37,6 +39,14 @@ from app.meta_agent.skills.schemas import AgentTrace, TraceFormat, TraceStep
 from app.meta_agent.skills.workflow_view import WorkflowView
 
 logger = logging.getLogger("skill_pipeline")
+
+_PLANNER_MAX_CANDIDATE_SKILLS = 6
+_PLANNER_MAX_PAIRWISE_CALLS = 8
+_PLANNER_PAIR_SIM_THRESHOLD = 0.14
+_PLANNER_MIN_SHARED_TOKEN_OVERLAP = 2
+_PLANNER_MIN_SKILLS_TO_REFACTOR = 2
+_PLANNER_TOTAL_BUDGET_S = 45.0
+_PLANNER_ALIGN_BUDGET_S = 18.0
 
 
 # ── Result dataclass ─────────────────────────────────────────────────────────
@@ -63,6 +73,7 @@ class PlanningResult:
     """v2.1: 规划阶段的结构化输出。"""
     workflow_plan: str                                         # Python 工作流骨架
     proposed_skills: List[ProposedSkill] = field(default_factory=list)  # 从历史中提取的候选技能
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -225,6 +236,85 @@ def _build_skill_module_code(skills: List[Skill]) -> str:
     return "\n".join(parts)
 
 
+def _tokenize_for_overlap(text: str) -> set[str]:
+    return {
+        tok for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", (text or "").lower())
+        if tok not in {"def", "return", "true", "false", "none", "self"}
+    }
+
+
+def _cheap_similarity(a: str, b: str) -> float:
+    ta = _tokenize_for_overlap(a)
+    tb = _tokenize_for_overlap(b)
+    if not ta or not tb:
+        return 0.0
+    return len(ta & tb) / max(len(ta | tb), 1)
+
+
+def _first_line(text: str, limit: int = 120) -> str:
+    return ((text or "").strip().splitlines() or [""])[0][:limit]
+
+
+def _extract_fn_name(code: str) -> Optional[str]:
+    for line in (code or "").splitlines():
+        line = line.strip()
+        if line.startswith("def "):
+            return line[4:].split("(")[0].strip()
+    return None
+
+
+def _collect_trace_snippets(session: Optional["PipelineSession"], limit: int = 3) -> List[Dict[str, str]]:
+    if not session:
+        return []
+    snippets: List[Dict[str, str]] = []
+    for result in reversed(session.round_results[-limit:]):
+        trace = result.execution_trace
+        if not trace:
+            continue
+        code = "\n\n".join(trace.code_blocks[:2])[:900]
+        if not code.strip():
+            continue
+        snippets.append({
+            "query": trace.query[:180],
+            "code": code,
+            "plan": (trace.workflow_plan or "")[:600],
+        })
+    return snippets
+
+
+def _collect_workflow_summaries(session: Optional["PipelineSession"], limit: int = 3) -> List[Dict[str, str]]:
+    if not session:
+        return []
+    summaries: List[Dict[str, str]] = []
+    for result in reversed(session.round_results[-limit:]):
+        trace = result.execution_trace
+        if not trace:
+            continue
+        summary = ""
+        if trace.steps:
+            last_step = trace.steps[-1]
+            summary = "\n".join(
+                x for x in [last_step.thought or "", last_step.tool_output or ""] if x
+            ).strip()
+        if not summary and trace.final_answer:
+            summary = trace.final_answer
+        if not summary:
+            continue
+        summaries.append(
+            {
+                "query": trace.query[:180],
+                "summary": summary[:500],
+                "plan": (trace.workflow_plan or "")[:600],
+            }
+        )
+    return summaries
+
+
+def _summarize_skill(sk: Skill) -> str:
+    doc = _first_line(sk.docstring or f"skill_id={sk.id}")
+    return f"{doc}\n```python\n{(sk.code or '')[:600]}\n```"
+
+
 def _build_executor_workflow(query: str, skills: List[Skill]) -> str:
     """
     Build the 'workflow guideline' string passed to CodeActWorkflowExecutorAgent.
@@ -268,6 +358,167 @@ def _build_executor_workflow(query: str, skills: List[Skill]) -> str:
       is what the downstream Extractor agent will learn from.
     - Do NOT silently skip calling the existing skill.
     """).strip()
+
+
+def _planner_skip_rubric(
+    query: str,
+    retrieved_skills: List[Skill],
+    session: Optional["PipelineSession"],
+) -> Tuple[bool, Dict[str, Any]]:
+    metrics: Dict[str, Any] = {
+        "retrieved_skill_count": len(retrieved_skills),
+        "candidate_pair_count": 0,
+        "best_pair_similarity": 0.0,
+        "reason": "",
+    }
+    if len(retrieved_skills) < _PLANNER_MIN_SKILLS_TO_REFACTOR:
+        metrics["reason"] = "too_few_skills"
+        return True, metrics
+
+    query_tokens = _tokenize_for_overlap(query)
+    if not query_tokens:
+        metrics["reason"] = "query_too_short"
+        return True, metrics
+
+    best = 0.0
+    pair_count = 0
+    for i in range(len(retrieved_skills)):
+        for j in range(i + 1, len(retrieved_skills)):
+            pair_count += 1
+            si = retrieved_skills[i]
+            sj = retrieved_skills[j]
+            sim = _cheap_similarity(
+                f"{si.docstring}\n{si.code}",
+                f"{sj.docstring}\n{sj.code}",
+            )
+            best = max(best, sim)
+    metrics["candidate_pair_count"] = pair_count
+    metrics["best_pair_similarity"] = round(best, 4)
+
+    if best < _PLANNER_PAIR_SIM_THRESHOLD:
+        metrics["reason"] = "pair_similarity_too_low"
+        return True, metrics
+
+    if session and session.round_results:
+        prev = session.round_results[-1]
+        prev_trace = prev.execution_trace
+        if prev_trace and prev.tester.ok and prev_trace.workflow_plan:
+            qsim = _cheap_similarity(prev_trace.query, query)
+            metrics["prev_query_similarity"] = round(qsim, 4)
+            if qsim >= 0.92:
+                metrics["reason"] = "reuse_previous_plan"
+                return True, metrics
+
+    metrics["reason"] = "run_joint_planner"
+    return False, metrics
+
+
+def _select_candidate_pairs(query: str, retrieved_skills: List[Skill]) -> List[Tuple[Skill, Skill, float]]:
+    query_tokens = _tokenize_for_overlap(query)
+    scored: List[Tuple[Skill, Skill, float]] = []
+    for i in range(min(len(retrieved_skills), _PLANNER_MAX_CANDIDATE_SKILLS)):
+        for j in range(i + 1, min(len(retrieved_skills), _PLANNER_MAX_CANDIDATE_SKILLS)):
+            si = retrieved_skills[i]
+            sj = retrieved_skills[j]
+            sim = _cheap_similarity(
+                f"{si.docstring}\n{si.code}",
+                f"{sj.docstring}\n{sj.code}",
+            )
+            shared_query = len((_tokenize_for_overlap(si.docstring + "\n" + si.code) & query_tokens))
+            shared_query += len((_tokenize_for_overlap(sj.docstring + "\n" + sj.code) & query_tokens))
+            boosted = sim + 0.02 * shared_query
+            if boosted >= _PLANNER_PAIR_SIM_THRESHOLD:
+                scored.append((si, sj, boosted))
+    scored.sort(key=lambda item: item[2], reverse=True)
+    return scored[:_PLANNER_MAX_PAIRWISE_CALLS]
+
+
+def _parse_python_block(text: str) -> str:
+    if "```python" in text:
+        return text.split("```python", 1)[1].split("```", 1)[0].strip()
+    if "```" in text:
+        return text.split("```", 1)[1].split("```", 1)[0].strip()
+    return text.strip()
+
+
+def _extract_section(text: str, heading: str) -> str:
+    marker = f"## {heading}"
+    if marker not in text:
+        return ""
+    tail = text.split(marker, 1)[1]
+    next_heading = re.search(r"\n##\s+", tail)
+    if next_heading:
+        tail = tail[:next_heading.start()]
+    return tail.strip()
+
+
+def _parse_history_reuse_section(text: str) -> Dict[str, Any]:
+    section = _extract_section(text, "历史复用决策")
+    if not section:
+        return {}
+
+    action = None
+    reused_fragments: List[str] = []
+    reason = ""
+    for line in section.splitlines():
+        line = line.strip()
+        if line.startswith("决策:"):
+            action = line[len("决策:"):].strip()
+        elif line.startswith("复用片段:"):
+            raw = line[len("复用片段:"):].strip()
+            if raw and raw.upper() not in {"NONE", "无"}:
+                reused_fragments = [
+                    item.strip()
+                    for item in re.split(r"[,，]", raw)
+                    if item.strip()
+                ]
+        elif line.startswith("理由:"):
+            reason = line[len("理由:"):].strip()
+    return {
+        "history_reuse_action": action,
+        "reused_fragments": reused_fragments,
+        "history_reuse_reason": reason,
+    }
+
+
+def _parse_joint_planner_response(response: str) -> Tuple[List[ProposedSkill], str, Dict[str, Any]]:
+    proposed_skills: List[ProposedSkill] = []
+    workflow_plan = ""
+    parsed_metadata = _parse_history_reuse_section(response)
+    skills_section = ""
+    plan_section = response
+    if "## 工作流计划" in response:
+        skills_section, plan_section = response.split("## 工作流计划", 1)
+    if "## 共享技能" in skills_section:
+        skill_text = skills_section.split("## 共享技能", 1)[1]
+        if skill_text.strip().upper().startswith("NONE"):
+            workflow_plan = _parse_python_block(plan_section)
+            return proposed_skills, workflow_plan, parsed_metadata
+        blocks = re.split(r"\n###\s+", skill_text)
+        for blk in blocks:
+            blk = blk.strip()
+            if not blk:
+                continue
+            lines = blk.splitlines()
+            raw_name = lines[0].strip()
+            desc = ""
+            source_query = ""
+            for line in lines[1:]:
+                if line.startswith("描述:"):
+                    desc = line[len("描述:"):].strip()
+                elif line.startswith("来源:"):
+                    source_query = line[len("来源:"):].strip()
+            code_fragment = _parse_python_block(blk)
+            fn_name = _extract_fn_name(code_fragment) or raw_name.split("(")[0].strip()
+            if fn_name and code_fragment and fn_name.startswith("_shared_"):
+                proposed_skills.append(ProposedSkill(
+                    name=fn_name,
+                    description=desc or fn_name,
+                    code_fragment=code_fragment,
+                    source_query=source_query or "historical_skills_and_traces",
+                ))
+    workflow_plan = _parse_python_block(plan_section)
+    return proposed_skills, workflow_plan, parsed_metadata
 
 
 # ── Executor trace builder ────────────────────────────────────────────────────
@@ -982,227 +1233,355 @@ class SkillEvolvingPipeline:
         session: Optional["PipelineSession"] = None,
         query_embedding: Optional[List[float]] = None,
     ) -> Optional["PlanningResult"]:
-        """v2.2: Two-phase planning.
-
-        Phase 1 (multi-turn only): single LLM call determines mode:
-          FRESH  — query changed or last round failed → re-plan from scratch.
-          UPDATE — skeleton still valid, needs local edits.
-          REUSE  — identical query, last round passed → return previous plan verbatim.
-        Round 1 skips Phase 1 (always FRESH).
-
-        Phase 2 (FRESH / UPDATE): full planning call.
-          proposed_skills are ALWAYS extracted when the section is present
-          (removed the erroneous patch_mode gate that kept them permanently dead).
-
-        Returns None on failure; caller applies application-level retry (ARCH-BUG-3).
-        """
         try:
-            from app.llm import LLM
-            import ast
-            import re
-
-            # ── 已有技能：展示简介 + 完整代码（最多前 600 chars） ────────────
-            skill_parts: List[str] = []
-            for sk in retrieved_skills:
-                first_line = (sk.docstring or "").splitlines()[0][:60] if sk.docstring else f"skill_id={sk.id}"
-                code_snippet = (sk.code or "")[:600]
-                skill_parts.append(
-                    f"  [{first_line}]\n```python\n{code_snippet}\n```"
-                )
-            skill_block = "\n\n".join(skill_parts) if skill_parts else "  (no skills retrieved — implement from scratch)"
-
-            # ── 跨会话历史参考 ────────────────────────────────────────────────
-            hist_context = self._fetch_historical_context(query_embedding)
-            hist_section = (
-                f"\n## 历史相似查询参考\n"
-                f"以下是历史上相似查询的解决方案（含产出技能代码），请仔细阅读，"
-                f"思考其中哪些逻辑片段可以抽象为通用技能供当前查询复用：\n\n"
-                f"{hist_context}\n"
-            ) if hist_context else ""
-
-            # ── 会话内历史（多轮） ────────────────────────────────────────────
+            planner_mode = "FRESH"
             history_block = self._build_planning_context(session)
             is_multi_turn = history_block is not None
-
-            # ══ Phase 1: Mode determination (only for multi-turn) ══════════════
-            planner_mode: str = "FRESH"  # round 1 default
             if is_multi_turn:
-                mode_system = (
-                    "你是工作流规划模式分类器。根据当前查询与上一轮执行历史，判断最合适的规划模式：\n\n"
-                    "- **FRESH** — 查询与上轮本质不同，或上轮测试未通过，需从头规划。\n"
-                    "- **UPDATE** — 上一轮计划的整体骨架仍适用，但需局部修改（例如新增子任务或参数调整）。\n"
-                    "- **REUSE** — 查询完全相同且上一轮测试通过，可直接复用上一轮计划。\n\n"
-                    "判断原则：上一轮测试未通过 → 优先 FRESH；查询仅扩展子任务 → UPDATE；完全相同且测试通过 → REUSE。\n\n"
-                    "严格按以下格式输出（两行，不输出其他内容）：\n"
-                    "## 模式\n"
-                    "<FRESH|UPDATE|REUSE>"
-                )
-                mode_user = (
-                    f"{history_block}\n\n"
-                    f"## 当前查询\n{query}\n\n"
-                    "请判断规划模式："
-                )
-                llm_mode = LLM(config_name="tool_maker")
-                mode_resp = await llm_mode.ask(
-                    messages=[{"role": "user", "content": mode_user}],
-                    system_msgs=[{"role": "system", "content": mode_system}],
-                )
-                if mode_resp:
-                    m = re.search(r"\b(FRESH|UPDATE|REUSE)\b", mode_resp, re.IGNORECASE)
-                    if m:
-                        planner_mode = m.group(1).upper()
-                        logger.info(f"[pipeline] planning phase 1: mode={planner_mode}")
-                    else:
-                        logger.warning("[pipeline] planning phase 1: unrecognized mode response — defaulting to FRESH")
+                planner_mode = await self._classify_planner_mode(query, history_block)
 
-            # ══ REUSE path: skip Phase 2, return previous plan verbatim ════════
             if planner_mode == "REUSE":
-                if session and session.round_results:
-                    prev_trace = session.round_results[-1].execution_trace
-                    if prev_trace and prev_trace.workflow_plan:
-                        logger.info("[pipeline] planning phase: REUSE — returning previous plan verbatim")
-                        return PlanningResult(workflow_plan=prev_trace.workflow_plan)
-                # No valid previous plan — fall back to FRESH
-                logger.warning("[pipeline] planning phase: REUSE requested but no previous plan — falling back to FRESH")
+                reused = self._reuse_previous_plan(session)
+                if reused is not None:
+                    return reused
                 planner_mode = "FRESH"
 
-            # ══ Phase 2: Full planning (FRESH or UPDATE) ════════════════════════
-            mode_hint = (
-                "\n## 当前规划模式\n"
-                f"**{planner_mode}**\n"
-                + (
-                    "上一轮计划骨架仍然适用，请在此基础上做最小改动，输出修改后的完整两段格式。\n"
-                    if planner_mode == "UPDATE"
-                    else "从头规划，不受上一轮计划限制。\n"
+            skip_refactor, rubric = _planner_skip_rubric(query, retrieved_skills, session)
+            if planner_mode == "UPDATE" and rubric.get("reason") == "reuse_previous_plan":
+                reused = self._reuse_previous_plan(session)
+                if reused is not None:
+                    return reused
+
+            if skip_refactor:
+                legacy = await self._run_legacy_planner(
+                    query=query,
+                    retrieved_skills=retrieved_skills,
+                    session=session,
+                    query_embedding=query_embedding,
+                    planner_mode=planner_mode,
+                    rubric=rubric,
                 )
-            ) if is_multi_turn else ""
+                if legacy:
+                    return legacy
 
-            system_prompt = (
-                "你是一个工作流规划师，同时承担部分技能抽取职责。\n\n"
-                "## 任务\n"
-                "1. 阅读历史相似查询的解决经验（如有），识别可以抽象复用的代码片段（不必是完整技能，片段和思路均可）。\n"
-                "2. 将识别到的复用片段提炼为候选技能（函数骨架）。\n"
-                "3. 规划当前查询的工作流，优先使用已有技能和候选技能。\n\n"
-                "## 输出格式（严格遵守）\n"
-                "输出分为两段，用 `## 候选技能提取` 和 `## 工作流计划` 作为分隔标题。\n\n"
-                "**段1：候选技能提取**（若无可复用片段可留空，但标题必须保留）\n"
-                "每个候选技能格式：\n"
-                "### 函数名\n"
-                "描述: 一句话说明功能\n"
-                "来源查询: \"历史查询文本片段\"\n"
-                "```python\n"
-                "def 函数名(PARAM1, PARAM2=DEFAULT):\n"
-                "    # 核心逻辑骨架\n"
-                "    return result\n"
-                "```\n\n"
-                "**段2：工作流计划**\n"
-                "使用已有 core_skills + 候选技能规划工作流（候选技能加注释 `# TODO: Gardener 待创建`）。\n"
-                "代码不超过 20 行，给 high-level 骨架，CAPS_VARIABLE 占位可变输入，`return_(result)` 返回结果。\n\n"
-                "## 示例输出\n"
-                "## 候选技能提取\n"
-                "### compute_at_risk_stats\n"
-                "描述: 计算不及格学生列表及统计摘要\n"
-                "来源查询: \"分析班级成绩，找出不及格学生\"\n"
-                "```python\n"
-                "def compute_at_risk_stats(scores, threshold=60):\n"
-                "    at_risk = [s for s in scores if s < threshold]\n"
-                "    return {'at_risk': at_risk, 'mean': sum(scores)/len(scores)}\n"
-                "```\n\n"
-                "## 工作流计划\n"
-                "```python\n"
-                "from core_skills import generate_learning_discussion\n"
-                "stats = compute_at_risk_stats(SCORES)  # TODO: Gardener 待创建\n"
-                "advice = [generate_learning_discussion(score=s) for s in stats['at_risk']]\n"
-                "return_({'stats': stats, 'advice': advice})\n"
-                "```"
-                + mode_hint
+            joint = await self._run_joint_refactor_planner(
+                query=query,
+                retrieved_skills=retrieved_skills,
+                session=session,
+                query_embedding=query_embedding,
+                planner_mode=planner_mode,
+                rubric=rubric,
             )
+            if joint is not None:
+                return joint
 
-            # ── User message ────────────────────────────────────────────────
-            history_section = f"{history_block}\n\n" if history_block else ""
-            user_msg = (
-                f"{history_section}"
-                f"{hist_section}"
-                f"## 当前查询\n{query}\n\n"
-                f"## 已有技能（已通过 `from core_skills import ...` 预导入）\n{skill_block}\n\n"
-                "请按格式输出（## 候选技能提取 + ## 工作流计划）："
+            return await self._run_legacy_planner(
+                query=query,
+                retrieved_skills=retrieved_skills,
+                session=session,
+                query_embedding=query_embedding,
+                planner_mode=planner_mode,
+                rubric={**rubric, "fallback_reason": "joint_planner_failed"},
             )
-
-            llm = LLM(config_name="tool_maker")
-            response = await llm.ask(
-                messages=[{"role": "user", "content": user_msg}],
-                system_msgs=[{"role": "system", "content": system_prompt}],
-            )
-
-            if not response or not response.strip():
-                return None
-
-            # ── 解析结构化输出 ─────────────────────────────────────────────
-            proposed_skills: List[ProposedSkill] = []
-            workflow_plan: str = ""
-
-            # 分割两段
-            if "## 工作流计划" in response:
-                parts = response.split("## 工作流计划", 1)
-                skills_section = parts[0]
-                plan_section = parts[1]
-            else:
-                skills_section = ""
-                plan_section = response
-
-            # 候选技能提取 — ALWAYS extract when section is present
-            # (removed erroneous patch_mode gate: previously all proposed_skills were dead code)
-            if "## 候选技能提取" in skills_section:
-                skills_text = skills_section.split("## 候选技能提取", 1)[1]
-                skill_blocks = re.split(r"\n###\s+", skills_text)
-                for blk in skill_blocks:
-                    blk = blk.strip()
-                    if not blk:
-                        continue
-                    lines_blk = blk.splitlines()
-                    name = lines_blk[0].strip()
-                    if not name or " " in name.split("(")[0]:
-                        continue  # 跳过非合法函数名
-                    desc = ""
-                    source_q = ""
-                    for line in lines_blk[1:]:
-                        if line.startswith("描述:"):
-                            desc = line[len("描述:"):].strip()
-                        elif line.startswith("来源查询:"):
-                            source_q = line[len("来源查询:"):].strip().strip('"\'')
-                    m = re.search(r"```python\s*(.*?)\s*```", blk, re.DOTALL)
-                    code_frag = m.group(1).strip() if m else ""
-                    if name and code_frag:
-                        proposed_skills.append(ProposedSkill(
-                            name=name.split("(")[0].strip(),
-                            description=desc,
-                            code_fragment=code_frag,
-                            source_query=source_q,
-                        ))
-
-            # 解析工作流计划
-            if "```python" in plan_section:
-                workflow_plan = plan_section.split("```python")[1].split("```")[0].strip()
-            elif "```" in plan_section:
-                workflow_plan = plan_section.split("```")[1].split("```")[0].strip()
-            else:
-                workflow_plan = plan_section.strip()
-
-            # 语法检查（非阻塞）
-            try:
-                ast.parse(workflow_plan)
-            except SyntaxError:
-                logger.warning("[pipeline] planning phase: syntax error in workflow plan, using as-is")
-
-            logger.info(
-                f"[pipeline] planning phase 2 ({planner_mode}): plan={len(workflow_plan)}chars "
-                f"proposed_skills={len(proposed_skills)}"
-            )
-            return PlanningResult(workflow_plan=workflow_plan, proposed_skills=proposed_skills)
-
         except Exception as exc:
             logger.warning(f"[pipeline] planning phase failed: {exc}")
             return None
+
+    async def _classify_planner_mode(self, query: str, history_block: str) -> str:
+        from app.llm import LLM
+
+        mode_system = (
+            "你是工作流规划模式分类器。根据当前查询与上一轮执行历史，判断最合适的规划模式：\n\n"
+            "- FRESH: 查询本质变化较大，或上一轮失败，需要重新规划。\n"
+            "- UPDATE: 上一轮计划大体可用，但要局部修改。\n"
+            "- REUSE: 查询几乎相同且上一轮通过，可以直接复用上一轮计划。\n\n"
+            "只输出 FRESH、UPDATE 或 REUSE。"
+        )
+        llm_mode = LLM(config_name="tool_maker")
+        resp = await llm_mode.ask(
+            messages=[{"role": "user", "content": f"{history_block}\n\n当前查询: {query}\n\n输出模式："}],
+            system_msgs=[{"role": "system", "content": mode_system}],
+        )
+        m = re.search(r"\b(FRESH|UPDATE|REUSE)\b", resp or "", re.IGNORECASE)
+        mode = m.group(1).upper() if m else "FRESH"
+        logger.info(f"[pipeline] planning phase 1: mode={mode}")
+        return mode
+
+    def _reuse_previous_plan(self, session: Optional["PipelineSession"]) -> Optional["PlanningResult"]:
+        if session and session.round_results:
+            prev = session.round_results[-1]
+            prev_trace = prev.execution_trace
+            if prev_trace and prev_trace.workflow_plan:
+                logger.info("[pipeline] planning phase: REUSE — returning previous plan verbatim")
+                metadata = {}
+                if prev.planning_result and prev.planning_result.metadata:
+                    metadata.update(prev.planning_result.metadata)
+                metadata["planner_strategy"] = "reuse"
+                return PlanningResult(
+                    workflow_plan=prev_trace.workflow_plan,
+                    proposed_skills=(prev.planning_result.proposed_skills if prev.planning_result else []),
+                    metadata=metadata,
+                )
+        logger.warning("[pipeline] planning phase: REUSE requested but no previous plan — falling back")
+        return None
+
+    async def _run_joint_refactor_planner(
+        self,
+        query: str,
+        retrieved_skills: List[Skill],
+        session: Optional["PipelineSession"],
+        query_embedding: Optional[List[float]],
+        planner_mode: str,
+        rubric: Dict[str, Any],
+    ) -> Optional["PlanningResult"]:
+        from app.llm import LLM
+
+        start_t = time.monotonic()
+        candidate_pairs = _select_candidate_pairs(query, retrieved_skills)
+        hist_context = self._fetch_historical_context(query_embedding)
+        workflow_summaries = _collect_workflow_summaries(session)
+        trace_snippets = _collect_trace_snippets(session)
+        if not candidate_pairs and not hist_context and not workflow_summaries:
+            logger.info("[pipeline] joint planner skipped: no useful historical reuse signals")
+            return None
+
+        alignments: List[str] = []
+        for idx, (sa, sb, sim) in enumerate(candidate_pairs):
+            if time.monotonic() - start_t > _PLANNER_ALIGN_BUDGET_S:
+                rubric["alignment_budget_exceeded"] = True
+                break
+            prompt = (
+                "分析下面两个历史技能是否共享一个可以抽象成函数的核心子任务。\n"
+                "若共享，输出一行 COMMON: <共享子任务短语>；否则输出 NONE。\n\n"
+                f"SKILL A\n{_summarize_skill(sa)}\n\n"
+                f"SKILL B\n{_summarize_skill(sb)}\n\n"
+                f"当前查询: {query}\n"
+                f"相似度参考: {sim:.3f}\n"
+            )
+            llm = LLM(config_name="tool_maker")
+            resp = await llm.ask(messages=[{"role": "user", "content": prompt}])
+            common = None
+            for line in (resp or "").splitlines():
+                line = line.strip()
+                if line.upper().startswith("COMMON:"):
+                    common = line.split(":", 1)[1].strip()
+                    break
+                if line.upper() == "NONE":
+                    break
+            if common:
+                alignments.append(
+                    f"- {_first_line(sa.docstring)} <-> {_first_line(sb.docstring)} | "
+                    f"common={common} | sim={sim:.3f}"
+                )
+            if idx + 1 >= _PLANNER_MAX_PAIRWISE_CALLS:
+                break
+
+        if not alignments and not hist_context and not workflow_summaries:
+            logger.info("[pipeline] joint planner skipped: no positive alignments or reusable history")
+            return None
+        if time.monotonic() - start_t > _PLANNER_TOTAL_BUDGET_S:
+            rubric["planner_budget_exceeded"] = True
+            logger.warning("[pipeline] joint planner budget exceeded before synthesis")
+            return None
+
+        skill_block = "\n\n".join(_summarize_skill(sk) for sk in retrieved_skills[:_PLANNER_MAX_CANDIDATE_SKILLS])
+        summary_block = "\n\n".join(
+            f"### 历史工作流摘要\n查询: {item['query']}\n摘要: {item['summary']}\n"
+            + (f"历史计划:\n```python\n{item['plan']}\n```" if item["plan"] else "")
+            for item in workflow_summaries
+        ) or "(none)"
+        trace_block = "\n\n".join(
+            f"### 历史Trace\n查询: {item['query']}\n```python\n{item['code']}\n```"
+            for item in trace_snippets
+        ) or "(none)"
+        history_section = f"{self._build_planning_context(session)}\n\n" if session else ""
+        hist_section = (
+            "## 相似历史查询\n"
+            f"{hist_context}\n\n"
+            if hist_context else ""
+        )
+        system_prompt = (
+            "你是一个 planner-aware history reuse planner。你的任务不是强制抽取 shared skill，"
+            "而是根据历史工作流摘要、上一轮计划、相似查询摘要和必要时的历史技能，判断当前查询最好的规划方式。\n\n"
+            "优先级如下：\n"
+            "1. 能直接复用历史 workflow plan，则复用。\n"
+            "2. 不能直接复用，但能复用 workflow fragment 或 workflow summary，则在新计划中显式继承这些步骤。\n"
+            "3. 只有在多个历史技能/流程确实共享一个会被当前计划调用的可复用函数时，才产出共享技能。\n"
+            "4. 如果历史素材帮助不大，则 fresh plan。\n\n"
+            "输出必须分成三段：\n"
+            "1. `## 历史复用决策`\n"
+            "2. `## 共享技能`\n"
+            "3. `## 工作流计划`\n\n"
+            "`## 历史复用决策` 必须包含三行：\n"
+            "`决策: fresh|reuse_plan|adapt_plan|reuse_workflow_fragment|propose_shared_skill`\n"
+            "`复用片段: fragment_id_1, fragment_id_2` 或 `NONE`\n"
+            "`理由: ...`\n\n"
+            "`## 共享技能` 中可以写 `NONE`。只有当当前计划确实需要调用新抽出的共享函数时，才输出技能条目。\n"
+            "共享技能条目格式必须是：\n"
+            "### 名称\n"
+            "描述: 一句话\n"
+            "来源: 技能名、workflow_summary 或 history_trace\n"
+            "```python\n"
+            "def helper_name(...):\n"
+            "    ...\n"
+            "```\n\n"
+            "`## 工作流计划` 必须是 Python 骨架；如果复用了历史 workflow fragment，请在注释中标明 fragment_id。"
+        )
+        user_msg = (
+            f"{history_section}"
+            f"## 当前模式\n{planner_mode}\n\n"
+            f"## 当前查询\n{query}\n\n"
+            f"{hist_section}"
+            f"## 候选已有技能\n{skill_block}\n\n"
+            f"## 历史工作流摘要\n{summary_block}\n\n"
+            f"## 历史 trace 片段\n{trace_block}\n\n"
+            "## 已识别的共享子任务线索\n"
+            + ("\n".join(alignments) if alignments else "(none)")
+            + "\n\n请先做历史复用决策，再按需产出共享技能与工作流计划。"
+        )
+        llm = LLM(config_name="tool_maker")
+        response = await llm.ask(
+            messages=[{"role": "user", "content": user_msg}],
+            system_msgs=[{"role": "system", "content": system_prompt}],
+        )
+        if not response or not response.strip():
+            return None
+
+        proposed_skills, workflow_plan, parsed_metadata = _parse_joint_planner_response(response)
+        if not workflow_plan.strip():
+            return None
+        try:
+            ast.parse(workflow_plan)
+        except SyntaxError:
+            logger.warning("[pipeline] joint planner produced invalid python plan")
+            return None
+
+        called_names = {
+            n.id for n in ast.walk(ast.parse(workflow_plan))
+            if isinstance(n, ast.Name)
+        }
+        filtered_skills = [ps for ps in proposed_skills if ps.name in called_names]
+        metadata = {
+            "planner_strategy": "joint_refactor",
+            "planner_mode": planner_mode,
+            "runtime_s": round(time.monotonic() - start_t, 3),
+            "rubric": rubric,
+            "candidate_pairs_considered": len(candidate_pairs),
+            "positive_alignments": len(alignments),
+            "shared_skill_count": len(filtered_skills),
+            **parsed_metadata,
+        }
+        logger.info(
+            f"[pipeline] joint planner: plan={len(workflow_plan)}chars "
+            f"shared={len(filtered_skills)} runtime={metadata['runtime_s']}s"
+        )
+        return PlanningResult(
+            workflow_plan=workflow_plan,
+            proposed_skills=filtered_skills,
+            metadata=metadata,
+        )
+
+    async def _run_legacy_planner(
+        self,
+        query: str,
+        retrieved_skills: List[Skill],
+        session: Optional["PipelineSession"],
+        query_embedding: Optional[List[float]],
+        planner_mode: str,
+        rubric: Dict[str, Any],
+    ) -> Optional["PlanningResult"]:
+        from app.llm import LLM
+
+        skill_parts = [_summarize_skill(sk) for sk in retrieved_skills]
+        skill_block = "\n\n".join(skill_parts) if skill_parts else "  (no skills retrieved — implement from scratch)"
+        hist_context = self._fetch_historical_context(query_embedding)
+        hist_section = (
+            f"\n## 历史相似查询参考\n{hist_context}\n"
+            if hist_context else ""
+        )
+        history_block = self._build_planning_context(session)
+        mode_hint = (
+            "\n## 当前规划模式\n"
+            f"**{planner_mode}**\n"
+            + (
+                "上一轮计划骨架仍然适用，请在此基础上做最小改动，输出修改后的完整两段格式。\n"
+                if planner_mode == "UPDATE"
+                else "从头规划，不受上一轮计划限制。\n"
+            )
+        ) if history_block else ""
+        system_prompt = (
+            "你是一个工作流规划师，同时承担部分技能抽取职责。\n\n"
+            "输出分为两段，用 `## 候选技能提取` 和 `## 工作流计划` 作为分隔标题。\n"
+            "候选技能必须给出代码骨架；工作流计划必须是 Python 骨架。"
+            + mode_hint
+        )
+        user_msg = (
+            f"{history_block + chr(10) * 2 if history_block else ''}"
+            f"{hist_section}"
+            f"## 当前查询\n{query}\n\n"
+            f"## 已有技能\n{skill_block}\n\n"
+            "请按格式输出（## 候选技能提取 + ## 工作流计划）："
+        )
+        llm = LLM(config_name="tool_maker")
+        response = await llm.ask(
+            messages=[{"role": "user", "content": user_msg}],
+            system_msgs=[{"role": "system", "content": system_prompt}],
+        )
+        if not response or not response.strip():
+            return None
+
+        proposed_skills: List[ProposedSkill] = []
+        skills_section = ""
+        plan_section = response
+        if "## 工作流计划" in response:
+            skills_section, plan_section = response.split("## 工作流计划", 1)
+        if "## 候选技能提取" in skills_section:
+            skills_text = skills_section.split("## 候选技能提取", 1)[1]
+            skill_blocks = re.split(r"\n###\s+", skills_text)
+            for blk in skill_blocks:
+                blk = blk.strip()
+                if not blk:
+                    continue
+                lines_blk = blk.splitlines()
+                name = lines_blk[0].strip()
+                if not name or " " in name.split("(")[0]:
+                    continue
+                desc = ""
+                source_q = ""
+                for line in lines_blk[1:]:
+                    if line.startswith("描述:"):
+                        desc = line[len("描述:"):].strip()
+                    elif line.startswith("来源查询:"):
+                        source_q = line[len("来源查询:"):].strip().strip('"\'')
+                code_frag = _parse_python_block(blk)
+                if name and code_frag:
+                    proposed_skills.append(ProposedSkill(
+                        name=name.split("(")[0].strip(),
+                        description=desc or name,
+                        code_fragment=code_frag,
+                        source_query=source_q or "historical_context",
+                    ))
+        workflow_plan = _parse_python_block(plan_section)
+        try:
+            ast.parse(workflow_plan)
+        except SyntaxError:
+            logger.warning("[pipeline] legacy planner produced invalid python plan")
+            return None
+        metadata = {
+            "planner_strategy": "legacy_fallback",
+            "planner_mode": planner_mode,
+            "rubric": rubric,
+            "shared_skill_count": len(proposed_skills),
+        }
+        logger.info(
+            f"[pipeline] legacy planner: plan={len(workflow_plan)}chars "
+            f"proposed_skills={len(proposed_skills)}"
+        )
+        return PlanningResult(
+            workflow_plan=workflow_plan,
+            proposed_skills=proposed_skills,
+            metadata=metadata,
+        )
 
     # ── v2: Save QueryRecord for collaborative filtering ──────────────────────
 
@@ -1243,4 +1622,3 @@ class SkillEvolvingPipeline:
             logger.info(f"[pipeline] QueryRecord saved for query={query[:60]!r}")
         except Exception as exc:
             logger.warning(f"[pipeline] save_query_record failed (non-blocking): {exc}")
-

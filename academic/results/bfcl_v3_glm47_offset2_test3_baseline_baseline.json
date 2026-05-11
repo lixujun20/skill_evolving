@@ -1,0 +1,560 @@
+{
+  "benchmark": "bfcl_v3",
+  "mode": "baseline",
+  "tag": "glm47_offset2_test3_baseline",
+  "llm_config": "bigmodel",
+  "n_train_reserved": 3,
+  "n_tasks": 3,
+  "n_runs": 3,
+  "total_success": 0,
+  "success_rate": 0.0,
+  "avg_score": 0.2667,
+  "avg_total_tokens": 11891.3,
+  "avg_at_k": 0.0,
+  "pass_at_k": 0.0,
+  "avg_call_recall": 0.2667,
+  "avg_call_precision": 0.2667,
+  "avg_turn_success_rate": 0.1667,
+  "avg_relaxed_turn_success_rate": 0.1667,
+  "official_valid_rate": 0.0,
+  "call_error_summary": {
+    "error_type_counts": {
+      "extra_call": 1,
+      "missing_call": 1
+    },
+    "param_error_counts": {}
+  },
+  "skill_stats": {
+    "retrieved_counts": {},
+    "used_counts": {},
+    "domain_tool_called_counts": {
+      "check_tire_pressure": 1,
+      "displayCarStatus": 1,
+      "find_nearest_tire_shop": 1,
+      "lockDoors": 1,
+      "startEngine": 1
+    }
+  },
+  "details": [
+    {
+      "task_id": "multi_turn_base_64",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.8,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_64",
+          "success": false,
+          "score": 0.8,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": false,
+            "turn_success_rate": 0.5,
+            "relaxed_turn_success_rate": 0.5,
+            "call_precision": 0.8,
+            "call_recall": 0.8,
+            "call_f1": 0.8,
+            "n_expected_calls": 5,
+            "n_actual_calls": 5,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 3,
+                "actual_calls": 3,
+                "matched_calls": 2,
+                "precision": 0.6667,
+                "recall": 0.6667,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 2,
+                "actual_calls": 2,
+                "matched_calls": 2,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "missing_call",
+                "expected_name": "pressBrakePedal",
+                "expected_arguments": {
+                  "pedalPosition": 1.0
+                }
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "displayCarStatus",
+                "actual_arguments": {
+                  "option": "doors"
+                }
+              }
+            ],
+            "total_tokens": 35674,
+            "completion_tokens": 379,
+            "elapsed_s": 72.566,
+            "retrieved_skills": [],
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "model_name": "glm-4.7",
+            "official_valid": false,
+            "official_error_type": "multi_turn:instance_state_mismatch",
+            "official_check": {
+              "valid": false,
+              "error_message": "Model instance for VehicleControlAPI does not match the state with ground truth instance.",
+              "error_type": "multi_turn:instance_state_mismatch",
+              "details": {
+                "differences": {
+                  "engine_state": {
+                    "model": "stopped",
+                    "ground_truth": "running"
+                  },
+                  "brakePedalStatus": {
+                    "model": "released",
+                    "ground_truth": "pressed"
+                  }
+                },
+                "model_instance_state": {
+                  "fuelLevel": 15.5,
+                  "batteryVoltage": 12.8,
+                  "engine_state": "stopped",
+                  "remainingUnlockedDoors": 0,
+                  "doorStatus": {
+                    "driver": "locked",
+                    "passenger": "locked",
+                    "rear_left": "locked",
+                    "rear_right": "locked"
+                  },
+                  "acTemperature": 22.0,
+                  "fanSpeed": 60,
+                  "acMode": "auto",
+                  "humidityLevel": 45.0,
+                  "headLightStatus": "off",
+                  "parkingBrakeStatus": "released",
+                  "brakePedalStatus": "released",
+                  "distanceToNextVehicle": 100.0,
+                  "cruiseStatus": "inactive",
+                  "destination": "None",
+                  "frontLeftTirePressure": 35.0,
+                  "frontRightTirePressure": 34.0,
+                  "rearLeftTirePressure": 33.0,
+                  "rearRightTirePressure": 32.0,
+                  "long_context": false
+                },
+                "ground_truth_instance_state": {
+                  "fuelLevel": 15.5,
+                  "batteryVoltage": 12.8,
+                  "engine_state": "running",
+                  "remainingUnlockedDoors": 0,
+                  "doorStatus": {
+                    "driver": "locked",
+                    "passenger": "locked",
+                    "rear_left": "locked",
+                    "rear_right": "locked"
+                  },
+                  "acTemperature": 22.0,
+                  "fanSpeed": 60,
+                  "acMode": "auto",
+                  "humidityLevel": 45.0,
+                  "headLightStatus": "off",
+                  "parkingBrakeStatus": "released",
+                  "brakePedalStatus": "pressed",
+                  "distanceToNextVehicle": 100.0,
+                  "cruiseStatus": "inactive",
+                  "destination": "None",
+                  "frontLeftTirePressure": 35.0,
+                  "frontRightTirePressure": 34.0,
+                  "rearLeftTirePressure": 33.0,
+                  "rearRightTirePressure": 32.0,
+                  "long_context": false
+                }
+              },
+              "execution_result": [
+                {
+                  "model": [
+                    [
+                      "{\"doorStatus\": {\"driver\": \"unlocked\", \"passenger\": \"unlocked\", \"rear_left\": \"unlocked\", \"rear_right\": \"unlocked\"}}"
+                    ],
+                    [
+                      "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}"
+                    ],
+                    [
+                      "{\"error\": \"Brake pedal needs to be pressed when starting the engine.\"}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}",
+                    "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 1000.0}",
+                    "{\"engineState\": \"running\", \"fuelLevel\": 15.5, \"batteryVoltage\": 12.8}"
+                  ]
+                }
+              ]
+            },
+            "available_tool_count": 22
+          },
+          "trace": {
+            "task_id": "multi_turn_base_64",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll first check the status of all car doors to ensure they are properly secured, then proceed with starting the engine if everything is confirmed.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667567447238503639",
+                    "type": "function",
+                    "function": {
+                      "name": "displayCarStatus",
+                      "arguments": "{\"option\":\"doors\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667567447238503639",
+                "content": "{\"doorStatus\": {\"driver\": \"unlocked\", \"passenger\": \"unlocked\", \"rear_left\": \"unlocked\", \"rear_right\": \"unlocked\"}}"
+              },
+              {
+                "role": "assistant",
+                "content": "I can see that all car doors are currently **unlocked**. Before proceeding with engine start, I need to secure all doors first. Let me lock all doors now:",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667559475779200288",
+                    "type": "function",
+                    "function": {
+                      "name": "lockDoors",
+                      "arguments": "{\"unlock\":false,\"door\":[\"driver\", \"passenger\", \"rear_left\", \"rear_right\"]}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667559475779200288",
+                "content": "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}"
+              },
+              {
+                "role": "assistant",
+                "content": "**Confirmed**: Every car door has been meticulously secured - all doors are now locked with no remaining unlocked doors.\n\nProceeding with engine activation in START mode:",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667560918888216411",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667560918888216411",
+                "content": "{\"error\": \"Brake pedal needs to be pressed when starting the engine.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "**Doors confirmed**: All car doors have been meticulously secured - all four doors (driver, passenger, rear left, and rear right) are now locked with zero remaining unlocked doors.\n\n**Engine status**: I attempted to activate START mode, but the system requires the brake pedal to be pressed before starting the engine. \n\nWould you like me to press the brake pedal and then start the engine?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667596137620043368",
+                    "type": "function",
+                    "function": {
+                      "name": "check_tire_pressure",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667596137620043368",
+                "content": "{\"frontLeftTirePressure\": 35.0, \"frontRightTirePressure\": 34.0, \"rearLeftTirePressure\": 33.0, \"rearRightTirePressure\": 32.0, \"healthy_tire_pressure\": true, \"car_info\": {}}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667535904998685701",
+                    "type": "function",
+                    "function": {
+                      "name": "find_nearest_tire_shop",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667535904998685701",
+                "content": "{\"shopLocation\": \"456 Oakwood Avenue, Rivermist, 83214\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "**Tire Pressure Assessment:**\n\nYour tire pressures are all below the 40 PSI threshold you specified:\n- Front Left: 35.0 PSI\n- Front Right: 34.0 PSI  \n- Rear Left: 33.0 PSI\n- Rear Right: 32.0 PSI\n\n**Action Required:**\n\nSince all tires are registering below your specified safe threshold of 40 PSI, I'm directing you to the nearest tire service facility:\n\n**Nearest Tire Shop:** 456 Oakwood Avenue, Rivermist, 83214\n\nI recommend visiting this location promptly to get your tires properly inflated to ensure safe driving conditions."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Before attempting to start the engine, kindly verify that every car door is meticulously secured—acknowledge once confirmed. Should everything be aligned, proceed with activating the START mode."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "displayCarStatus",
+                    "arguments": {
+                      "option": "doors"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667567447238503639",
+                    "result": {
+                      "doorStatus": {
+                        "driver": "unlocked",
+                        "passenger": "unlocked",
+                        "rear_left": "unlocked",
+                        "rear_right": "unlocked"
+                      }
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "lockDoors",
+                    "arguments": {
+                      "unlock": false,
+                      "door": [
+                        "driver",
+                        "passenger",
+                        "rear_left",
+                        "rear_right"
+                      ]
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667559475779200288",
+                    "result": {
+                      "lockStatus": "locked",
+                      "remainingUnlockedDoors": 0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667560918888216411",
+                    "result": {
+                      "error": "Brake pedal needs to be pressed when starting the engine."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Please assess my tire pressures within the context of the car's current status. If any tire registers under 40 PSI, which might imply it's below the safe threshold, promptly guide me to the closest tire service facility."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "check_tire_pressure",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667596137620043368",
+                    "result": {
+                      "frontLeftTirePressure": 35.0,
+                      "frontRightTirePressure": 34.0,
+                      "rearLeftTirePressure": 33.0,
+                      "rearRightTirePressure": 32.0,
+                      "healthy_tire_pressure": true,
+                      "car_info": {}
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "find_nearest_tire_shop",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667535904998685701",
+                    "result": {
+                      "shopLocation": "456 Oakwood Avenue, Rivermist, 83214"
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "displayCarStatus",
+                "arguments": {
+                  "option": "doors"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667567447238503639",
+                "result": {
+                  "doorStatus": {
+                    "driver": "unlocked",
+                    "passenger": "unlocked",
+                    "rear_left": "unlocked",
+                    "rear_right": "unlocked"
+                  }
+                },
+                "error": null
+              },
+              {
+                "name": "lockDoors",
+                "arguments": {
+                  "unlock": false,
+                  "door": [
+                    "driver",
+                    "passenger",
+                    "rear_left",
+                    "rear_right"
+                  ]
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667559475779200288",
+                "result": {
+                  "lockStatus": "locked",
+                  "remainingUnlockedDoors": 0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667560918888216411",
+                "result": {
+                  "error": "Brake pedal needs to be pressed when starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "check_tire_pressure",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7667596137620043368",
+                "result": {
+                  "frontLeftTirePressure": 35.0,
+                  "frontRightTirePressure": 34.0,
+                  "rearLeftTirePressure": 33.0,
+                  "rearRightTirePressure": 32.0,
+                  "healthy_tire_pressure": true,
+                  "car_info": {}
+                },
+                "error": null
+              },
+              {
+                "name": "find_nearest_tire_shop",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7667535904998685701",
+                "result": {
+                  "shopLocation": "456 Oakwood Avenue, Rivermist, 83214"
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "total_tokens": 35674,
+            "completion_tokens": 379,
+            "elapsed_s": 72.566,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_44",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.0,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_44",
+          "success": false,
+          "score": 0.0,
+          "metrics": {
+            "exception": "TaskTimeout",
+            "max_task_seconds": 180.0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_44",
+            "timed_out": true
+          },
+          "error": "Task exceeded 180.0 seconds",
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_136",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.0,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_136",
+          "success": false,
+          "score": 0.0,
+          "metrics": {
+            "exception": "TaskTimeout",
+            "max_task_seconds": 180.0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_136",
+            "timed_out": true
+          },
+          "error": "Task exceeded 180.0 seconds",
+          "run_idx": 0
+        }
+      ]
+    }
+  ],
+  "model_name": "glm-4.7",
+  "adapter_mode": "official",
+  "execution_backend": "auto",
+  "bfcl_data_source": "bfcl_eval_bundle",
+  "bfcl_prompt_style": "native",
+  "bfcl_tool_api_style": "openai",
+  "top_k_skills": 5,
+  "temperature": null,
+  "bfcl_synthetic_continue": false,
+  "bfcl_explicit_skill_tool": false,
+  "elapsed_s": 433.203
+}

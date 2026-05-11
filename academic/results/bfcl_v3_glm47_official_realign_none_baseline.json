@@ -1,0 +1,3101 @@
+{
+  "benchmark": "bfcl_v3",
+  "mode": "baseline",
+  "tag": "glm47_official_realign_none",
+  "llm_config": "bigmodel",
+  "n_train_reserved": 50,
+  "n_tasks": 5,
+  "n_runs": 5,
+  "total_success": 0,
+  "success_rate": 0.0,
+  "avg_score": 0.7185,
+  "avg_total_tokens": 64205.2,
+  "timeout_rate": 0.0,
+  "avg_elapsed_s": 82.601,
+  "max_elapsed_s": 164.64,
+  "avg_model_steps": 10.4,
+  "max_model_steps": 17,
+  "avg_at_k": 0.0,
+  "pass_at_k": 0.0,
+  "avg_call_recall": 0.975,
+  "avg_call_precision": 0.5773,
+  "avg_turn_success_rate": 0.5167,
+  "avg_relaxed_turn_success_rate": 0.95,
+  "official_valid_rate": 1.0,
+  "call_error_summary": {
+    "error_type_counts": {
+      "argument_mismatch": 3,
+      "extra_call": 17
+    },
+    "param_error_counts": {
+      "distance": 1,
+      "missing:arg0": 2,
+      "unexpected:city": 2
+    }
+  },
+  "skill_stats": {
+    "retrieved_counts": {},
+    "prompt_injected_counts": {},
+    "tool_injected_counts": {},
+    "used_counts": {},
+    "called_skill_tool_counts": {},
+    "domain_tool_called_counts": {
+      "activateParkingBrake": 1,
+      "cd": 1,
+      "displayCarStatus": 2,
+      "estimate_distance": 1,
+      "estimate_drive_feasibility_by_mileage": 2,
+      "fillFuelTank": 2,
+      "find": 1,
+      "fund_account": 1,
+      "gallon_to_liter": 1,
+      "get_available_stocks": 1,
+      "get_outside_temperature_from_google": 1,
+      "get_outside_temperature_from_weather_com": 1,
+      "get_stock_info": 2,
+      "get_user_id": 1,
+      "get_watchlist": 2,
+      "get_zipcode_based_on_city": 2,
+      "lockDoors": 2,
+      "ls": 1,
+      "place_order": 1,
+      "post_tweet": 2,
+      "pressBrakePedal": 4,
+      "pwd": 1,
+      "remove_stock_from_watchlist": 1,
+      "send_message": 1,
+      "startEngine": 7,
+      "view_messages_sent": 1
+    }
+  },
+  "details": [
+    {
+      "task_id": "multi_turn_base_117",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.8571,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_117",
+          "success": false,
+          "score": 0.8571,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.6667,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.75,
+            "call_recall": 1.0,
+            "call_f1": 0.8571,
+            "n_expected_calls": 6,
+            "n_actual_calls": 8,
+            "n_matched_calls": 6,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 4,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 5,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "get_watchlist",
+                "actual_arguments": {}
+              },
+              {
+                "turn_index": 5,
+                "type": "extra_call",
+                "actual_name": "get_stock_info",
+                "actual_arguments": {
+                  "symbol": "OMEG"
+                }
+              }
+            ],
+            "total_tokens": 56260,
+            "completion_tokens": 1718,
+            "elapsed_s": 164.64,
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              2,
+              2,
+              2,
+              2,
+              3
+            ],
+            "n_model_steps": 14,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "none",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 20,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_117",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you manage your watchlist. Let me first check what stocks are currently in your watchlist to see if Zeta Corp is there.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667181175059773041",
+                    "type": "function",
+                    "function": {
+                      "name": "get_watchlist",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667181175059773041",
+                "content": "{\"watchlist\": [\"NVDA\", \"ZETA\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667144788096841401",
+                    "type": "function",
+                    "function": {
+                      "name": "remove_stock_from_watchlist",
+                      "arguments": "{\"symbol\":\"ZETA\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667144788096841401",
+                "content": "{\"status\": \"Stock ZETA removed from watchlist successfully.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've successfully removed Zeta Corp (ZETA) from your watchlist. The stock was indeed in your watchlist, and it has now been removed due to your concerns about their extraction market trends. Your watchlist now only contains NVDA."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667167328085212894",
+                    "type": "function",
+                    "function": {
+                      "name": "get_watchlist",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667167328085212894",
+                "content": "{\"watchlist\": [\"NVDA\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your watchlist now contains just one stock:\n\n- **NVDA** (NVIDIA Corporation)\n\nThis is the only stock remaining on your radar after removing Zeta Corp. You now have a focused view of your investment tracking."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667157707358462562",
+                    "type": "function",
+                    "function": {
+                      "name": "get_available_stocks",
+                      "arguments": "{\"sector\":\"Technology\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667157707358462562",
+                "content": "{\"stock_list\": [\"AAPL\", \"GOOG\", \"MSFT\", \"NVDA\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here are the available technology stock symbols:\n\n- **AAPL** (Apple Inc.)\n- **GOOG** (Alphabet Inc./Google)\n- **MSFT** (Microsoft Corporation)\n- **NVDA** (NVIDIA Corporation)\n\nThese are the technology stocks currently available in the system. I notice that NVDA is already in your watchlist, so you're already tracking one of the major technology companies. Would you like more information about any of these stocks, or would you like to add any of them to your watchlist?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667193750724016415",
+                    "type": "function",
+                    "function": {
+                      "name": "get_stock_info",
+                      "arguments": "{\"symbol\":\"MSFT\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667193750724016415",
+                "content": "{\"price\": 310.23, \"percent_change\": 0.09, \"volume\": 3.234, \"MA(5)\": 309.88, \"MA(20)\": 310.11}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here's the current status and trend analysis for Microsoft (MSFT):\n\n**Current Performance:**\n- **Current Price:** $310.23\n- **Daily Change:** +0.09% (positive momentum)\n- **Volume:** 3.234M shares\n\n**Technical Indicators:**\n- **5-Day Moving Average:** $309.88\n- **20-Day Moving Average:** $310.11\n\n**Key Observations:**\n- The stock is trading above both its 5-day and 20-day moving averages, suggesting some positive short-term momentum\n- The current price ($310.23) is higher than both moving averages, indicating the stock may be in an uptrend\n- The modest positive daily change of 0.09% shows stability rather than volatility\n- The stock is currently trading about $0.35 above its 5-day MA and $0.12 above its 20-day MA\n\nThe technical setup appears supportive, with the stock maintaining levels above key moving averages. This could indicate continued investor confidence in Microsoft's performance."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667200622671686095",
+                    "type": "function",
+                    "function": {
+                      "name": "place_order",
+                      "arguments": "{\"order_type\":\"Buy\",\"symbol\":\"MSFT\",\"price\":320,\"amount\":50}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667200622671686095",
+                "content": "{\"order_id\": 12446, \"order_type\": \"Buy\", \"status\": \"Pending\", \"price\": 320.0, \"amount\": 50}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your buy order has been successfully placed! Here are the details:\n\n- **Order ID**: 12446\n- **Stock**: MSFT (Microsoft)\n- **Order Type**: Buy\n- **Shares**: 50\n- **Price**: $320.00 per share\n- **Total Value**: $16,000.00\n- **Status**: Pending\n\nThe order is now in the system and pending execution. You can track its status using the order ID 12446 if needed."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667178529359914442",
+                    "type": "function",
+                    "function": {
+                      "name": "get_stock_info",
+                      "arguments": "{\"symbol\":\"OMEG\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667178529359914442",
+                "content": "{\"price\": 457.23, \"percent_change\": 0.12, \"volume\": 2.345, \"MA(5)\": 456.78, \"MA(20)\": 458.12}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667171107656433618",
+                    "type": "function",
+                    "function": {
+                      "name": "fund_account",
+                      "arguments": "{\"amount\":5000}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667171107656433618",
+                "content": "{\"status\": \"Account funded successfully\", \"new_balance\": 21000.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've successfully funded your trading account with $5,000. Here's what I did:\n\n1. Retrieved the current price of OMEG: $457.23\n2. Calculated 10 times the price: $4,572.30\n3. Rounded to the nearest thousand: $5,000\n4. Deposited the amount into your account\n\nYour new account balance is now $21,000, providing you with the liquidity you need for your upcoming investment ventures."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I'd like some assistance today with my investment portfolio. If Zeta Corp is part of my watchlist, please remove it for me. The market trends for their extractions are concerning me recently."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_watchlist",
+                    "arguments": {},
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667181175059773041",
+                    "result": {
+                      "watchlist": [
+                        "NVDA",
+                        "ZETA"
+                      ]
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "remove_stock_from_watchlist",
+                    "arguments": {
+                      "symbol": "ZETA"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667144788096841401",
+                    "result": {
+                      "status": "Stock ZETA removed from watchlist successfully."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "With my watchlist refreshed, please retrieve the current stocks still listed. I need a clear view of what remains on my radar."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_watchlist",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667167328085212894",
+                    "result": {
+                      "watchlist": [
+                        "NVDA"
+                      ]
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I'm intrigued by the recent advancements in technology and wish to explore investment opportunities there. Could you provide a list of available technology stock symbols?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_available_stocks",
+                    "arguments": {
+                      "sector": "Technology"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667157707358462562",
+                    "result": {
+                      "stock_list": [
+                        "AAPL",
+                        "GOOG",
+                        "MSFT",
+                        "NVDA"
+                      ]
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I've been observing Microsoft's stock performance and I find it quite compelling. Could you give me a detailed update on its current status and trends?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_stock_info",
+                    "arguments": {
+                      "symbol": "MSFT"
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667193750724016415",
+                    "result": {
+                      "price": 310.23,
+                      "percent_change": 0.09,
+                      "volume": 3.234,
+                      "MA(5)": 309.88,
+                      "MA(20)": 310.11
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 4,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I'm ready to act on my analysis. Please purchase 50 shares of Microsoft at $320 each, given today's indicators."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "place_order",
+                    "arguments": {
+                      "order_type": "Buy",
+                      "symbol": "MSFT",
+                      "price": 320,
+                      "amount": 50
+                    },
+                    "turn_index": 4,
+                    "tool_call_id": "call_-7667200622671686095",
+                    "result": {
+                      "order_id": 12446,
+                      "order_type": "Buy",
+                      "status": "Pending",
+                      "price": 320.0,
+                      "amount": 50
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 5,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Finally, before the end of the trading day, I intend to deposit 10 times the prices of OMEG rounded to nearest thousands into my trading account to secure liquidity for forthcoming ventures."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_stock_info",
+                    "arguments": {
+                      "symbol": "OMEG"
+                    },
+                    "turn_index": 5,
+                    "tool_call_id": "call_-7667178529359914442",
+                    "result": {
+                      "price": 457.23,
+                      "percent_change": 0.12,
+                      "volume": 2.345,
+                      "MA(5)": 456.78,
+                      "MA(20)": 458.12
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "fund_account",
+                    "arguments": {
+                      "amount": 5000
+                    },
+                    "turn_index": 5,
+                    "tool_call_id": "call_-7667171107656433618",
+                    "result": {
+                      "status": "Account funded successfully",
+                      "new_balance": 21000.0
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_watchlist",
+                "arguments": {},
+                "turn_index": 0,
+                "tool_call_id": "call_-7667181175059773041",
+                "result": {
+                  "watchlist": [
+                    "NVDA",
+                    "ZETA"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "remove_stock_from_watchlist",
+                "arguments": {
+                  "symbol": "ZETA"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667144788096841401",
+                "result": {
+                  "status": "Stock ZETA removed from watchlist successfully."
+                },
+                "error": null
+              },
+              {
+                "name": "get_watchlist",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7667167328085212894",
+                "result": {
+                  "watchlist": [
+                    "NVDA"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "get_available_stocks",
+                "arguments": {
+                  "sector": "Technology"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667157707358462562",
+                "result": {
+                  "stock_list": [
+                    "AAPL",
+                    "GOOG",
+                    "MSFT",
+                    "NVDA"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "get_stock_info",
+                "arguments": {
+                  "symbol": "MSFT"
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667193750724016415",
+                "result": {
+                  "price": 310.23,
+                  "percent_change": 0.09,
+                  "volume": 3.234,
+                  "MA(5)": 309.88,
+                  "MA(20)": 310.11
+                },
+                "error": null
+              },
+              {
+                "name": "place_order",
+                "arguments": {
+                  "order_type": "Buy",
+                  "symbol": "MSFT",
+                  "price": 320,
+                  "amount": 50
+                },
+                "turn_index": 4,
+                "tool_call_id": "call_-7667200622671686095",
+                "result": {
+                  "order_id": 12446,
+                  "order_type": "Buy",
+                  "status": "Pending",
+                  "price": 320.0,
+                  "amount": 50
+                },
+                "error": null
+              },
+              {
+                "name": "get_stock_info",
+                "arguments": {
+                  "symbol": "OMEG"
+                },
+                "turn_index": 5,
+                "tool_call_id": "call_-7667178529359914442",
+                "result": {
+                  "price": 457.23,
+                  "percent_change": 0.12,
+                  "volume": 2.345,
+                  "MA(5)": 456.78,
+                  "MA(20)": 458.12
+                },
+                "error": null
+              },
+              {
+                "name": "fund_account",
+                "arguments": {
+                  "amount": 5000
+                },
+                "turn_index": 5,
+                "tool_call_id": "call_-7667171107656433618",
+                "result": {
+                  "status": "Account funded successfully",
+                  "new_balance": 21000.0
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              2,
+              2,
+              2,
+              2,
+              3
+            ],
+            "n_model_steps": 14,
+            "total_tokens": 56260,
+            "completion_tokens": 1718,
+            "elapsed_s": 164.64,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_11",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.5714,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_11",
+          "success": false,
+          "score": 0.5714,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.5,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.4,
+            "call_recall": 1.0,
+            "call_f1": 0.5714,
+            "n_expected_calls": 2,
+            "n_actual_calls": 5,
+            "n_matched_calls": 2,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 4,
+                "matched_calls": 1,
+                "precision": 0.25,
+                "recall": 1.0,
+                "f1": 0.4,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "cd",
+                "actual_arguments": {
+                  "folder": "temp"
+                }
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "pwd",
+                "actual_arguments": {}
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "find",
+                "actual_arguments": {
+                  "path": "."
+                }
+              }
+            ],
+            "total_tokens": 44795,
+            "completion_tokens": 923,
+            "elapsed_s": 118.878,
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              5,
+              2
+            ],
+            "n_model_steps": 7,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "none",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 32,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_11",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you display all files in the '/temp' directory including hidden ones. Let me first navigate to the directory and then list all its contents.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667188012647706759",
+                    "type": "function",
+                    "function": {
+                      "name": "cd",
+                      "arguments": "{\"folder\":\"temp\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667188012647706759",
+                "content": "{\"error\": \"cd: 'temp': No such file or directory\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667156882724744253",
+                    "type": "function",
+                    "function": {
+                      "name": "pwd",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667156882724744253",
+                "content": "{\"current_working_directory\": \"/temp\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667200004196394372",
+                    "type": "function",
+                    "function": {
+                      "name": "ls",
+                      "arguments": "{\"a\":true}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667200004196394372",
+                "content": "{\"current_directory_content\": [\"file1.txt\", \"file2.txt\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667161074612829064",
+                    "type": "function",
+                    "function": {
+                      "name": "find",
+                      "arguments": "{\"path\":\".\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667161074612829064",
+                "content": "{\"matches\": [\"./file1.txt\", \"./file2.txt\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've successfully displayed all available files in the '/temp' directory, including hidden ones. Here are the results:\n\n**Files found:**\n- file1.txt\n- file2.txt\n\nThe `ls -a` command (which shows all files including hidden ones) and the `find` command both returned the same two files. There are no hidden files (files starting with a dot) in this directory.\n\nThe current working directory is `/temp` and it contains exactly 2 files, both with the `.txt` extension."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667182721247996559",
+                    "type": "function",
+                    "function": {
+                      "name": "post_tweet",
+                      "arguments": "{\"content\":\"file1.txt, file2.txt\",\"tags\":[\"#fileshowcase\"]}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667182721247996559",
+                "content": "{\"id\": 1, \"username\": \"michael\", \"content\": \"file1.txt, file2.txt\", \"tags\": [\"#fileshowcase\"], \"mentions\": []}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've successfully posted your tweet! Here are the details:\n\n- **Tweet ID**: 1\n- **Username**: michael\n- **Content**: file1.txt, file2.txt\n- **Hashtag**: #fileshowcase\n\nThe tweet has been posted with the file names from the /temp directory (file1.txt and file2.txt) separated by comma and space, and includes the #fileshowcase hashtag as requested."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Display all the available files located within the '/temp' directory including hidden one using the terminal interface ."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "cd",
+                    "arguments": {
+                      "folder": "temp"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667188012647706759",
+                    "result": {
+                      "error": "cd: 'temp': No such file or directory"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "pwd",
+                    "arguments": {},
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667156882724744253",
+                    "result": {
+                      "current_working_directory": "/temp"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "ls",
+                    "arguments": {
+                      "a": true
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667200004196394372",
+                    "result": {
+                      "current_directory_content": [
+                        "file1.txt",
+                        "file2.txt"
+                      ]
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "find",
+                    "arguments": {
+                      "path": "."
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667161074612829064",
+                    "result": {
+                      "matches": [
+                        "./file1.txt",
+                        "./file2.txt"
+                      ]
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "With the information presented on the terminal, draft a post on Twitter mentioning only the file names seperated them by comma and space, and include the hashtag '#fileshowcase' to spread the word."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "post_tweet",
+                    "arguments": {
+                      "content": "file1.txt, file2.txt",
+                      "tags": [
+                        "#fileshowcase"
+                      ]
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667182721247996559",
+                    "result": {
+                      "id": 1,
+                      "username": "michael",
+                      "content": "file1.txt, file2.txt",
+                      "tags": [
+                        "#fileshowcase"
+                      ],
+                      "mentions": []
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "cd",
+                "arguments": {
+                  "folder": "temp"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667188012647706759",
+                "result": {
+                  "error": "cd: 'temp': No such file or directory"
+                },
+                "error": null
+              },
+              {
+                "name": "pwd",
+                "arguments": {},
+                "turn_index": 0,
+                "tool_call_id": "call_-7667156882724744253",
+                "result": {
+                  "current_working_directory": "/temp"
+                },
+                "error": null
+              },
+              {
+                "name": "ls",
+                "arguments": {
+                  "a": true
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667200004196394372",
+                "result": {
+                  "current_directory_content": [
+                    "file1.txt",
+                    "file2.txt"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "find",
+                "arguments": {
+                  "path": "."
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667161074612829064",
+                "result": {
+                  "matches": [
+                    "./file1.txt",
+                    "./file2.txt"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "post_tweet",
+                "arguments": {
+                  "content": "file1.txt, file2.txt",
+                  "tags": [
+                    "#fileshowcase"
+                  ]
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667182721247996559",
+                "result": {
+                  "id": 1,
+                  "username": "michael",
+                  "content": "file1.txt, file2.txt",
+                  "tags": [
+                    "#fileshowcase"
+                  ],
+                  "mentions": []
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              5,
+              2
+            ],
+            "n_model_steps": 7,
+            "total_tokens": 44795,
+            "completion_tokens": 923,
+            "elapsed_s": 118.878,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_67",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.6364,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_67",
+          "success": false,
+          "score": 0.6364,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": false,
+            "turn_success_rate": 0.25,
+            "relaxed_turn_success_rate": 0.75,
+            "call_precision": 0.5,
+            "call_recall": 0.875,
+            "call_f1": 0.6364,
+            "n_expected_calls": 8,
+            "n_actual_calls": 14,
+            "n_matched_calls": 7,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 3,
+                "actual_calls": 3,
+                "matched_calls": 3,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 3,
+                "matched_calls": 1,
+                "precision": 0.3333,
+                "recall": 1.0,
+                "f1": 0.5,
+                "turn_success": false
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 3,
+                "actual_calls": 7,
+                "matched_calls": 3,
+                "precision": 0.4286,
+                "recall": 1.0,
+                "f1": 0.6,
+                "turn_success": false
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "argument_mismatch",
+                "name": "get_zipcode_based_on_city",
+                "missing": {
+                  "arg0": "San Francisco"
+                },
+                "unexpected": {
+                  "city": "San Francisco"
+                },
+                "wrong": {}
+              },
+              {
+                "turn_index": 0,
+                "type": "argument_mismatch",
+                "name": "get_zipcode_based_on_city",
+                "missing": {
+                  "arg0": "Silverpine"
+                },
+                "unexpected": {
+                  "city": "Silverpine"
+                },
+                "wrong": {}
+              },
+              {
+                "turn_index": 1,
+                "type": "argument_mismatch",
+                "name": "estimate_drive_feasibility_by_mileage",
+                "missing": {},
+                "unexpected": {},
+                "wrong": {
+                  "distance": {
+                    "expected": 780.0,
+                    "actual": 484.7
+                  }
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "displayCarStatus",
+                "actual_arguments": {
+                  "option": "fuel"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "estimate_drive_feasibility_by_mileage",
+                "actual_arguments": {
+                  "distance": 484.7
+                }
+              },
+              {
+                "turn_index": 3,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              },
+              {
+                "turn_index": 3,
+                "type": "extra_call",
+                "actual_name": "pressBrakePedal",
+                "actual_arguments": {
+                  "pedalPosition": 0.5
+                }
+              },
+              {
+                "turn_index": 3,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              },
+              {
+                "turn_index": 3,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              }
+            ],
+            "total_tokens": 115803,
+            "completion_tokens": 1435,
+            "elapsed_s": 42.12,
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              2,
+              4,
+              8
+            ],
+            "n_model_steps": 17,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "none",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 32,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_67",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you estimate the distance between San Francisco and Silverpine. To do this, I need to first get the zipcodes for both cities, then calculate the distance between them.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667185435667329459",
+                    "type": "function",
+                    "function": {
+                      "name": "get_zipcode_based_on_city",
+                      "arguments": "{\"city\":\"San Francisco\"}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667185435667329458",
+                    "type": "function",
+                    "function": {
+                      "name": "get_zipcode_based_on_city",
+                      "arguments": "{\"city\":\"Silverpine\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667185435667329459",
+                "content": "{\"zipcode\": \"94016\"}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667185435667329458",
+                "content": "{\"zipcode\": \"62947\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667181518657153228",
+                    "type": "function",
+                    "function": {
+                      "name": "estimate_distance",
+                      "arguments": "{\"cityA\":\"94016\",\"cityB\":\"62947\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667181518657153228",
+                "content": "{\"distance\": 780.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "The estimated distance between San Francisco and Silverpine is **780.0 kilometers** (approximately 484.7 miles)."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667149186143352985",
+                    "type": "function",
+                    "function": {
+                      "name": "estimate_drive_feasibility_by_mileage",
+                      "arguments": "{\"distance\":484.7}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667149186143352985",
+                "content": "{\"canDrive\": false}"
+              },
+              {
+                "role": "assistant",
+                "content": "Based on the distance estimate, your vehicle cannot cover the 484.7 miles (780 km) between San Francisco and Silverpine without refueling. You'll need to plan for at least one fuel stop during the trip.\n\nWould you like me to check your current fuel level or help you find gas stations along the route?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667162036685503098",
+                    "type": "function",
+                    "function": {
+                      "name": "displayCarStatus",
+                      "arguments": "{\"option\":\"fuel\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667162036685503098",
+                "content": "{\"fuelLevel\": 10.5}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667178735518347564",
+                    "type": "function",
+                    "function": {
+                      "name": "fillFuelTank",
+                      "arguments": "{\"fuelAmount\":39.5}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667178735518347564",
+                "content": "{\"fuelLevel\": 50.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667169149151343747",
+                    "type": "function",
+                    "function": {
+                      "name": "estimate_drive_feasibility_by_mileage",
+                      "arguments": "{\"distance\":484.7}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667169149151343747",
+                "content": "{\"canDrive\": true}"
+              },
+              {
+                "role": "assistant",
+                "content": "Great! I've filled your fuel tank completely. Your tank now has 50.0 gallons (it was at 10.5 gallons before). \n\nWith a full tank, your vehicle can now cover the 484.7-mile distance between San Francisco and Silverpine without needing to refuel. You're all set for the trip!"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667156058091025944",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667156058091025944",
+                "content": "{\"error\": \"All doors must be locked before starting the engine. Here are the unlocked doors: driver, passenger, rear_left, rear_right\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667172894362824590",
+                    "type": "function",
+                    "function": {
+                      "name": "lockDoors",
+                      "arguments": "{\"unlock\":false,\"door\":[\"driver\", \"passenger\", \"rear_left\", \"rear_right\"]}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667172894362824590",
+                "content": "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667182102772711393",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667182102772711393",
+                "content": "{\"error\": \"Brake pedal needs to be pressed when starting the engine.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667184233076484263",
+                    "type": "function",
+                    "function": {
+                      "name": "pressBrakePedal",
+                      "arguments": "{\"pedalPosition\":0.5}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667184233076484263",
+                "content": "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 500.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667159734583028814",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667159734583028814",
+                "content": "{\"error\": \"Must press the brake fully before starting the engine.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667158841229834283",
+                    "type": "function",
+                    "function": {
+                      "name": "pressBrakePedal",
+                      "arguments": "{\"pedalPosition\":1}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667158841229834283",
+                "content": "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 1000.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667175265184769308",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667175265184769308",
+                "content": "{\"engineState\": \"running\", \"fuelLevel\": 50.0, \"batteryVoltage\": 12.6}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! Your vehicle's engine has been started successfully in 'START' mode. Here's the current status:\n\n- **Engine**: Running\n- **Fuel Level**: 50.0 gallons (full tank)\n- **Battery Voltage**: 12.6V (healthy)\n\nYou're all set to go! The engine is now running and you have a full tank of fuel for your trip from San Francisco to Silverpine."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Will you estimate the distance between San Francisco and Silverpine for me?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_zipcode_based_on_city",
+                    "arguments": {
+                      "city": "San Francisco"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667185435667329459",
+                    "result": {
+                      "zipcode": "94016"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "get_zipcode_based_on_city",
+                    "arguments": {
+                      "city": "Silverpine"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667185435667329458",
+                    "result": {
+                      "zipcode": "62947"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "estimate_distance",
+                    "arguments": {
+                      "cityA": "94016",
+                      "cityB": "62947"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667181518657153228",
+                    "result": {
+                      "distance": 780.0
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I need that info to check if my vehicle can cover the distance without refueling."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "estimate_drive_feasibility_by_mileage",
+                    "arguments": {
+                      "distance": 484.7
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667149186143352985",
+                    "result": {
+                      "canDrive": false
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "In case it can't, just fill out the fuel tank completely."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "displayCarStatus",
+                    "arguments": {
+                      "option": "fuel"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667162036685503098",
+                    "result": {
+                      "fuelLevel": 10.5
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "fillFuelTank",
+                    "arguments": {
+                      "fuelAmount": 39.5
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667178735518347564",
+                    "result": {
+                      "fuelLevel": 50.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "estimate_drive_feasibility_by_mileage",
+                    "arguments": {
+                      "distance": 484.7
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667169149151343747",
+                    "result": {
+                      "canDrive": true
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Turn on my vehicle's engine in 'START' mode."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667156058091025944",
+                    "result": {
+                      "error": "All doors must be locked before starting the engine. Here are the unlocked doors: driver, passenger, rear_left, rear_right"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "lockDoors",
+                    "arguments": {
+                      "unlock": false,
+                      "door": [
+                        "driver",
+                        "passenger",
+                        "rear_left",
+                        "rear_right"
+                      ]
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667172894362824590",
+                    "result": {
+                      "lockStatus": "locked",
+                      "remainingUnlockedDoors": 0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667182102772711393",
+                    "result": {
+                      "error": "Brake pedal needs to be pressed when starting the engine."
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "pressBrakePedal",
+                    "arguments": {
+                      "pedalPosition": 0.5
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667184233076484263",
+                    "result": {
+                      "brakePedalStatus": "pressed",
+                      "brakePedalForce": 500.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667159734583028814",
+                    "result": {
+                      "error": "Must press the brake fully before starting the engine."
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "pressBrakePedal",
+                    "arguments": {
+                      "pedalPosition": 1
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667158841229834283",
+                    "result": {
+                      "brakePedalStatus": "pressed",
+                      "brakePedalForce": 1000.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667175265184769308",
+                    "result": {
+                      "engineState": "running",
+                      "fuelLevel": 50.0,
+                      "batteryVoltage": 12.6
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_zipcode_based_on_city",
+                "arguments": {
+                  "city": "San Francisco"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667185435667329459",
+                "result": {
+                  "zipcode": "94016"
+                },
+                "error": null
+              },
+              {
+                "name": "get_zipcode_based_on_city",
+                "arguments": {
+                  "city": "Silverpine"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667185435667329458",
+                "result": {
+                  "zipcode": "62947"
+                },
+                "error": null
+              },
+              {
+                "name": "estimate_distance",
+                "arguments": {
+                  "cityA": "94016",
+                  "cityB": "62947"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667181518657153228",
+                "result": {
+                  "distance": 780.0
+                },
+                "error": null
+              },
+              {
+                "name": "estimate_drive_feasibility_by_mileage",
+                "arguments": {
+                  "distance": 484.7
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667149186143352985",
+                "result": {
+                  "canDrive": false
+                },
+                "error": null
+              },
+              {
+                "name": "displayCarStatus",
+                "arguments": {
+                  "option": "fuel"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667162036685503098",
+                "result": {
+                  "fuelLevel": 10.5
+                },
+                "error": null
+              },
+              {
+                "name": "fillFuelTank",
+                "arguments": {
+                  "fuelAmount": 39.5
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667178735518347564",
+                "result": {
+                  "fuelLevel": 50.0
+                },
+                "error": null
+              },
+              {
+                "name": "estimate_drive_feasibility_by_mileage",
+                "arguments": {
+                  "distance": 484.7
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667169149151343747",
+                "result": {
+                  "canDrive": true
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667156058091025944",
+                "result": {
+                  "error": "All doors must be locked before starting the engine. Here are the unlocked doors: driver, passenger, rear_left, rear_right"
+                },
+                "error": null
+              },
+              {
+                "name": "lockDoors",
+                "arguments": {
+                  "unlock": false,
+                  "door": [
+                    "driver",
+                    "passenger",
+                    "rear_left",
+                    "rear_right"
+                  ]
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667172894362824590",
+                "result": {
+                  "lockStatus": "locked",
+                  "remainingUnlockedDoors": 0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667182102772711393",
+                "result": {
+                  "error": "Brake pedal needs to be pressed when starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "pressBrakePedal",
+                "arguments": {
+                  "pedalPosition": 0.5
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667184233076484263",
+                "result": {
+                  "brakePedalStatus": "pressed",
+                  "brakePedalForce": 500.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667159734583028814",
+                "result": {
+                  "error": "Must press the brake fully before starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "pressBrakePedal",
+                "arguments": {
+                  "pedalPosition": 1
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667158841229834283",
+                "result": {
+                  "brakePedalStatus": "pressed",
+                  "brakePedalForce": 1000.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667175265184769308",
+                "result": {
+                  "engineState": "running",
+                  "fuelLevel": 50.0,
+                  "batteryVoltage": 12.6
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              2,
+              4,
+              8
+            ],
+            "n_model_steps": 17,
+            "total_tokens": 115803,
+            "completion_tokens": 1435,
+            "elapsed_s": 42.12,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_88",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.7778,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_88",
+          "success": false,
+          "score": 0.7778,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.6667,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.6364,
+            "call_recall": 1.0,
+            "call_f1": 0.7778,
+            "n_expected_calls": 7,
+            "n_actual_calls": 11,
+            "n_matched_calls": 7,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 3,
+                "actual_calls": 3,
+                "matched_calls": 3,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 3,
+                "actual_calls": 7,
+                "matched_calls": 3,
+                "precision": 0.4286,
+                "recall": 1.0,
+                "f1": 0.6,
+                "turn_success": false
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "displayCarStatus",
+                "actual_arguments": {
+                  "option": "fuel"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "pressBrakePedal",
+                "actual_arguments": {
+                  "pedalPosition": 0.5
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              }
+            ],
+            "total_tokens": 64314,
+            "completion_tokens": 1281,
+            "elapsed_s": 33.248,
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              2,
+              4
+            ],
+            "n_model_steps": 8,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "none",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 36,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_88",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you convert 13.2 gallons to liters.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667154065226198857",
+                    "type": "function",
+                    "function": {
+                      "name": "gallon_to_liter",
+                      "arguments": "{\"gallon\":13.2}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667154065226198857",
+                "content": "{\"liter\": 49.967411999999996}"
+              },
+              {
+                "role": "assistant",
+                "content": "13.2 gallons is approximately **49.97 liters**."
+              },
+              {
+                "role": "assistant",
+                "content": "I've already converted 13.2 gallons to liters for you - that's **49.97 liters**.\n\nNow let me help you with the rest:\n\n**Filling the tank to maximum:**\nYour tank can hold up to 50 gallons total. Since you've already added 13.2 gallons, you'll need to add 36.8 more gallons to reach the maximum capacity.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667151179008176125",
+                    "type": "function",
+                    "function": {
+                      "name": "fillFuelTank",
+                      "arguments": "{\"fuelAmount\":36.8}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667151179008176124",
+                    "type": "function",
+                    "function": {
+                      "name": "lockDoors",
+                      "arguments": "{\"unlock\":false,\"door\":[\"driver\", \"passenger\", \"rear_left\", \"rear_right\"]}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667151179008176123",
+                    "type": "function",
+                    "function": {
+                      "name": "activateParkingBrake",
+                      "arguments": "{\"mode\":\"engage\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667151179008176125",
+                "content": "{\"fuelLevel\": 50.0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667151179008176124",
+                "content": "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667151179008176123",
+                "content": "{\"parkingBrakeStatus\": \"engaged\", \"_parkingBrakeForce\": 500.0, \"_slopeAngle\": 10.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've completed all the tasks for you:\n\n**Conversion:** 13.2 gallons = 49.97 liters\n\n**Fuel Tank:** I've filled your tank to the maximum capacity of 50 gallons (added the remaining 36.8 gallons to your existing 13.2 gallons).\n\n**Door Security:** All doors are now securely locked (driver, passenger, rear left, and rear right doors - 0 doors remaining unlocked).\n\n**Parking Brake:** The parking brake has been firmly engaged with 500.0N of force.\n\nYour vehicle is now fully fueled, secured, and safely parked!"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667200347793783318",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667200347793783317",
+                    "type": "function",
+                    "function": {
+                      "name": "displayCarStatus",
+                      "arguments": "{\"option\":\"fuel\"}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667200347793783316",
+                    "type": "function",
+                    "function": {
+                      "name": "post_tweet",
+                      "arguments": "{\"content\":\"Embarking on an exciting road trip from SF to Rivermist!\",\"tags\":[\"#RoadTrip\", \"#Adventure\", \"#Exploring\"]}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667200347793783318",
+                "content": "{\"error\": \"Brake pedal needs to be pressed when starting the engine.\"}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667200347793783317",
+                "content": "{\"fuelLevel\": 50.0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667200347793783316",
+                "content": "{\"id\": 0, \"username\": \"john\", \"content\": \"Embarking on an exciting road trip from SF to Rivermist!\", \"tags\": [\"#RoadTrip\", \"#Adventure\", \"#Exploring\"], \"mentions\": []}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667191826578662390",
+                    "type": "function",
+                    "function": {
+                      "name": "pressBrakePedal",
+                      "arguments": "{\"pedalPosition\":0.5}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667191826578662389",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667191826578662390",
+                "content": "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 500.0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667191826578662389",
+                "content": "{\"error\": \"Must press the brake fully before starting the engine.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667197461575760479",
+                    "type": "function",
+                    "function": {
+                      "name": "pressBrakePedal",
+                      "arguments": "{\"pedalPosition\":1}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667197461575760478",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667197461575760479",
+                "content": "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 1000.0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667197461575760478",
+                "content": "{\"engineState\": \"running\", \"fuelLevel\": 50.0, \"batteryVoltage\": 12.6}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! Here's what I've accomplished for your road trip:\n\n**Engine Status:** ✅ Engine is now running in START mode\n- Engine state: running\n- Battery voltage: 12.6V\n\n**Fuel Level:** ✅ Tank is at maximum capacity (50.0 gallons)\n- Your tank is fully prepped for the journey\n\n**Tweet Posted:** ✅ Successfully posted your tweet:\n- \"Embarking on an exciting road trip from SF to Rivermist!\"\n- Hashtags included: #RoadTrip #Adventure #Exploring\n- Tweet ID: 0\n\nYour car is all set for the San Francisco to Rivermist adventure! The engine is running, tank is full, and you've shared your excitement with the world. Have a safe and enjoyable road trip! 🚗✨"
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Hey, I've just filled my car up with 13.2 gallons of fuel. How much is that in liters?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "gallon_to_liter",
+                    "arguments": {
+                      "gallon": 13.2
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667154065226198857",
+                    "result": {
+                      "liter": 49.967411999999996
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Once you've converted it to liters, please guide me in filling the tank to the max limit. After that's sorted, I need to ensure that all the doors are securely locked and the parking brake is firmly set."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "fillFuelTank",
+                    "arguments": {
+                      "fuelAmount": 36.8
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667151179008176125",
+                    "result": {
+                      "fuelLevel": 50.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "lockDoors",
+                    "arguments": {
+                      "unlock": false,
+                      "door": [
+                        "driver",
+                        "passenger",
+                        "rear_left",
+                        "rear_right"
+                      ]
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667151179008176124",
+                    "result": {
+                      "lockStatus": "locked",
+                      "remainingUnlockedDoors": 0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "activateParkingBrake",
+                    "arguments": {
+                      "mode": "engage"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667151179008176123",
+                    "result": {
+                      "parkingBrakeStatus": "engaged",
+                      "_parkingBrakeForce": 500.0,
+                      "_slopeAngle": 10.0
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "With the car prepped, I need to gear up for a drive from San Francisco to Rivermist. I'll be checking the fuel level once the engine is on in 'START' mode. Then, help me post a tweet, 'Embarking on an exciting road trip from SF to Rivermist!' and please throw in hashtags #RoadTrip #Adventure #Exploring."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667200347793783318",
+                    "result": {
+                      "error": "Brake pedal needs to be pressed when starting the engine."
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "displayCarStatus",
+                    "arguments": {
+                      "option": "fuel"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667200347793783317",
+                    "result": {
+                      "fuelLevel": 50.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "post_tweet",
+                    "arguments": {
+                      "content": "Embarking on an exciting road trip from SF to Rivermist!",
+                      "tags": [
+                        "#RoadTrip",
+                        "#Adventure",
+                        "#Exploring"
+                      ]
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667200347793783316",
+                    "result": {
+                      "id": 0,
+                      "username": "john",
+                      "content": "Embarking on an exciting road trip from SF to Rivermist!",
+                      "tags": [
+                        "#RoadTrip",
+                        "#Adventure",
+                        "#Exploring"
+                      ],
+                      "mentions": []
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "pressBrakePedal",
+                    "arguments": {
+                      "pedalPosition": 0.5
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667191826578662390",
+                    "result": {
+                      "brakePedalStatus": "pressed",
+                      "brakePedalForce": 500.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667191826578662389",
+                    "result": {
+                      "error": "Must press the brake fully before starting the engine."
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "pressBrakePedal",
+                    "arguments": {
+                      "pedalPosition": 1
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667197461575760479",
+                    "result": {
+                      "brakePedalStatus": "pressed",
+                      "brakePedalForce": 1000.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667197461575760478",
+                    "result": {
+                      "engineState": "running",
+                      "fuelLevel": 50.0,
+                      "batteryVoltage": 12.6
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "gallon_to_liter",
+                "arguments": {
+                  "gallon": 13.2
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667154065226198857",
+                "result": {
+                  "liter": 49.967411999999996
+                },
+                "error": null
+              },
+              {
+                "name": "fillFuelTank",
+                "arguments": {
+                  "fuelAmount": 36.8
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667151179008176125",
+                "result": {
+                  "fuelLevel": 50.0
+                },
+                "error": null
+              },
+              {
+                "name": "lockDoors",
+                "arguments": {
+                  "unlock": false,
+                  "door": [
+                    "driver",
+                    "passenger",
+                    "rear_left",
+                    "rear_right"
+                  ]
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667151179008176124",
+                "result": {
+                  "lockStatus": "locked",
+                  "remainingUnlockedDoors": 0
+                },
+                "error": null
+              },
+              {
+                "name": "activateParkingBrake",
+                "arguments": {
+                  "mode": "engage"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667151179008176123",
+                "result": {
+                  "parkingBrakeStatus": "engaged",
+                  "_parkingBrakeForce": 500.0,
+                  "_slopeAngle": 10.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667200347793783318",
+                "result": {
+                  "error": "Brake pedal needs to be pressed when starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "displayCarStatus",
+                "arguments": {
+                  "option": "fuel"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667200347793783317",
+                "result": {
+                  "fuelLevel": 50.0
+                },
+                "error": null
+              },
+              {
+                "name": "post_tweet",
+                "arguments": {
+                  "content": "Embarking on an exciting road trip from SF to Rivermist!",
+                  "tags": [
+                    "#RoadTrip",
+                    "#Adventure",
+                    "#Exploring"
+                  ]
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667200347793783316",
+                "result": {
+                  "id": 0,
+                  "username": "john",
+                  "content": "Embarking on an exciting road trip from SF to Rivermist!",
+                  "tags": [
+                    "#RoadTrip",
+                    "#Adventure",
+                    "#Exploring"
+                  ],
+                  "mentions": []
+                },
+                "error": null
+              },
+              {
+                "name": "pressBrakePedal",
+                "arguments": {
+                  "pedalPosition": 0.5
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667191826578662390",
+                "result": {
+                  "brakePedalStatus": "pressed",
+                  "brakePedalForce": 500.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667191826578662389",
+                "result": {
+                  "error": "Must press the brake fully before starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "pressBrakePedal",
+                "arguments": {
+                  "pedalPosition": 1
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667197461575760479",
+                "result": {
+                  "brakePedalStatus": "pressed",
+                  "brakePedalForce": 1000.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667197461575760478",
+                "result": {
+                  "engineState": "running",
+                  "fuelLevel": 50.0,
+                  "batteryVoltage": 12.6
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              2,
+              4
+            ],
+            "n_model_steps": 8,
+            "total_tokens": 64314,
+            "completion_tokens": 1281,
+            "elapsed_s": 33.248,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_91",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.75,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_91",
+          "success": false,
+          "score": 0.75,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.5,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.6,
+            "call_recall": 1.0,
+            "call_f1": 0.75,
+            "n_expected_calls": 3,
+            "n_actual_calls": 5,
+            "n_matched_calls": 3,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 2,
+                "actual_calls": 4,
+                "matched_calls": 2,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "get_user_id",
+                "actual_arguments": {
+                  "user": "Michael"
+                }
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "get_outside_temperature_from_weather_com",
+                "actual_arguments": {}
+              }
+            ],
+            "total_tokens": 39854,
+            "completion_tokens": 715,
+            "elapsed_s": 54.118,
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              4,
+              2
+            ],
+            "n_model_steps": 6,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "none",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 32,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_91",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you check the outdoor temperature and send a message to Michael. Let me get the current temperature first and then send that message to Michael.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667178391920962836",
+                    "type": "function",
+                    "function": {
+                      "name": "get_user_id",
+                      "arguments": "{\"user\":\"Michael\"}"
+                    }
+                  },
+                  {
+                    "id": "call_-7667178391920962835",
+                    "type": "function",
+                    "function": {
+                      "name": "get_outside_temperature_from_weather_com",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667178391920962836",
+                "content": "{\"user_id\": \"USR006\"}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667178391920962835",
+                "content": "{\"error\": 404}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667188699842472541",
+                    "type": "function",
+                    "function": {
+                      "name": "get_outside_temperature_from_google",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667188699842472541",
+                "content": "{\"outsideTemperature\": 36.63485703790535}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667197461575758592",
+                    "type": "function",
+                    "function": {
+                      "name": "send_message",
+                      "arguments": "{\"receiver_id\":\"USR006\",\"message\":\"It is hot outside.\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667197461575758592",
+                "content": "{\"sent_status\": true, \"message_id\": {\"new_id\": 67410}, \"message\": \"Message sent to 'USR006' successfully.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Hi Kelly! I can definitely help you with that.\n\nThe current temperature outside is 36.6°C (about 98°F) - no wonder you're sweating! That's quite hot.\n\nI've successfully sent Michael the message \"It is hot outside.\" so he knows to dress down for the weather rather than bundle up. He should definitely dress for warm weather today!"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667159906381724857",
+                    "type": "function",
+                    "function": {
+                      "name": "view_messages_sent",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667159906381724857",
+                "content": "{\"messages\": {\"USR008\": [[\"Can you send the report?\"]], \"USR005\": [[\"The meeting is at 3 PM.\"]], \"USR006\": [[\"Please review the document.\"], \"It is hot outside.\"], \"USR007\": [[\"Let's catch up later.\"]]}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here are all the messages you have sent so far:\n\n**To USR008:**\n- \"Can you send the report?\"\n\n**To USR005:**\n- \"The meeting is at 3 PM.\"\n\n**To USR006 (Michael):**\n- \"Please review the document.\"\n- \"It is hot outside.\" *(the message we just sent)*\n\n**To USR007:**\n- \"Let's catch up later.\"\n\nYou have sent a total of 5 messages to 4 different contacts. The most recent message was the one about the hot weather that we sent to Michael."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Hi, I am Kelly. I'm sweating. What's the temp outside right now? Would you be able to update Michael on today's outdoor temperature with message 'It is hot outside.'? He should know whether to bundle up or dress down for the weather."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_user_id",
+                    "arguments": {
+                      "user": "Michael"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667178391920962836",
+                    "result": {
+                      "user_id": "USR006"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "get_outside_temperature_from_weather_com",
+                    "arguments": {},
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667178391920962835",
+                    "result": {
+                      "error": 404
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "get_outside_temperature_from_google",
+                    "arguments": {},
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667188699842472541",
+                    "result": {
+                      "outsideTemperature": 36.63485703790535
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "send_message",
+                    "arguments": {
+                      "receiver_id": "USR006",
+                      "message": "It is hot outside."
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667197461575758592",
+                    "result": {
+                      "sent_status": true,
+                      "message_id": {
+                        "new_id": 67410
+                      },
+                      "message": "Message sent to 'USR006' successfully."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Let's review all the messages I have send so far."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "view_messages_sent",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667159906381724857",
+                    "result": {
+                      "messages": {
+                        "USR008": [
+                          [
+                            "Can you send the report?"
+                          ]
+                        ],
+                        "USR005": [
+                          [
+                            "The meeting is at 3 PM."
+                          ]
+                        ],
+                        "USR006": [
+                          [
+                            "Please review the document."
+                          ],
+                          "It is hot outside."
+                        ],
+                        "USR007": [
+                          [
+                            "Let's catch up later."
+                          ]
+                        ]
+                      }
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_user_id",
+                "arguments": {
+                  "user": "Michael"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667178391920962836",
+                "result": {
+                  "user_id": "USR006"
+                },
+                "error": null
+              },
+              {
+                "name": "get_outside_temperature_from_weather_com",
+                "arguments": {},
+                "turn_index": 0,
+                "tool_call_id": "call_-7667178391920962835",
+                "result": {
+                  "error": 404
+                },
+                "error": null
+              },
+              {
+                "name": "get_outside_temperature_from_google",
+                "arguments": {},
+                "turn_index": 0,
+                "tool_call_id": "call_-7667188699842472541",
+                "result": {
+                  "outsideTemperature": 36.63485703790535
+                },
+                "error": null
+              },
+              {
+                "name": "send_message",
+                "arguments": {
+                  "receiver_id": "USR006",
+                  "message": "It is hot outside."
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667197461575758592",
+                "result": {
+                  "sent_status": true,
+                  "message_id": {
+                    "new_id": 67410
+                  },
+                  "message": "Message sent to 'USR006' successfully."
+                },
+                "error": null
+              },
+              {
+                "name": "view_messages_sent",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7667159906381724857",
+                "result": {
+                  "messages": {
+                    "USR008": [
+                      [
+                        "Can you send the report?"
+                      ]
+                    ],
+                    "USR005": [
+                      [
+                        "The meeting is at 3 PM."
+                      ]
+                    ],
+                    "USR006": [
+                      [
+                        "Please review the document."
+                      ],
+                      "It is hot outside."
+                    ],
+                    "USR007": [
+                      [
+                        "Let's catch up later."
+                      ]
+                    ]
+                  }
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              4,
+              2
+            ],
+            "n_model_steps": 6,
+            "total_tokens": 39854,
+            "completion_tokens": 715,
+            "elapsed_s": 54.118,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    }
+  ],
+  "model_name": "glm-4.7",
+  "adapter_mode": "official",
+  "execution_backend": "official",
+  "bfcl_data_source": "bfcl_eval_bundle",
+  "bfcl_prompt_style": "native",
+  "bfcl_tool_api_style": "auto",
+  "top_k_skills": 2,
+  "skill_injection_mode": "none",
+  "max_steps_per_turn": 20,
+  "temperature": null,
+  "bfcl_synthetic_continue": false,
+  "bfcl_explicit_skill_tool": false,
+  "elapsed_s": 413.585
+}

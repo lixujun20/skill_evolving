@@ -1,0 +1,3726 @@
+{
+  "task_id": "multi_turn_base_24",
+  "rounds": [
+    {
+      "round": 0,
+      "before": [],
+      "official_valid": true,
+      "call_f1": 0.9231,
+      "retrieved": [],
+      "prompt": [],
+      "errors": [
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "ls",
+          "actual_arguments": {}
+        },
+        {
+          "turn_index": 1,
+          "type": "argument_mismatch",
+          "name": "cd",
+          "missing": {
+            "arg0": "archives"
+          },
+          "unexpected": {
+            "folder": "archives"
+          },
+          "wrong": {}
+        }
+      ],
+      "after": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback"
+      ]
+    },
+    {
+      "round": 1,
+      "before": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback"
+      ],
+      "official_valid": true,
+      "call_f1": 0.9231,
+      "retrieved": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback"
+      ],
+      "prompt": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback"
+      ],
+      "errors": [
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "ls",
+          "actual_arguments": {}
+        },
+        {
+          "turn_index": 1,
+          "type": "argument_mismatch",
+          "name": "cd",
+          "missing": {
+            "arg0": "archives"
+          },
+          "unexpected": {
+            "folder": "archives"
+          },
+          "wrong": {}
+        }
+      ],
+      "after": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback",
+        "bfcl_params_resolve_ticket",
+        "bfcl_params_get_ticket",
+        "bfcl_params_diff"
+      ]
+    },
+    {
+      "round": 2,
+      "before": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback",
+        "bfcl_params_resolve_ticket",
+        "bfcl_params_get_ticket",
+        "bfcl_params_diff"
+      ],
+      "official_valid": false,
+      "call_f1": 0.25,
+      "retrieved": [
+        "bfcl_params_diff",
+        "bfcl_params_mv",
+        "bfcl_params_get_ticket",
+        "bfcl_params_resolve_ticket"
+      ],
+      "prompt": [
+        "bfcl_params_diff",
+        "bfcl_params_mv",
+        "bfcl_params_get_ticket",
+        "bfcl_params_resolve_ticket"
+      ],
+      "errors": [
+        {
+          "turn_index": 0,
+          "type": "missing_call",
+          "expected_name": "diff",
+          "expected_arguments": {
+            "file_name1": "report_draft.txt",
+            "file_name2": "report_final.txt"
+          }
+        },
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "ls",
+          "actual_arguments": {}
+        },
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "find",
+          "actual_arguments": {
+            "path": ".",
+            "name": "draft"
+          }
+        },
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "find",
+          "actual_arguments": {
+            "path": ".",
+            "name": "final"
+          }
+        },
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "find",
+          "actual_arguments": {
+            "path": ".",
+            "name": "report"
+          }
+        },
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "find",
+          "actual_arguments": {
+            "path": "."
+          }
+        },
+        {
+          "turn_index": 1,
+          "type": "missing_call",
+          "expected_name": "mv",
+          "expected_arguments": {
+            "source": "temp_notes.txt",
+            "destination": "archives"
+          }
+        },
+        {
+          "turn_index": 1,
+          "type": "missing_call",
+          "expected_name": "cd",
+          "expected_arguments": {
+            "arg0": "archives"
+          }
+        },
+        {
+          "turn_index": 1,
+          "type": "missing_call",
+          "expected_name": "mv",
+          "expected_arguments": {
+            "source": "temp_notes.txt",
+            "destination": "notes_2024.txt"
+          }
+        },
+        {
+          "turn_index": 1,
+          "type": "extra_call",
+          "actual_name": "ls",
+          "actual_arguments": {}
+        },
+        {
+          "turn_index": 1,
+          "type": "extra_call",
+          "actual_name": "find",
+          "actual_arguments": {
+            "path": ".",
+            "name": "temp_notes.txt"
+          }
+        },
+        {
+          "turn_index": 1,
+          "type": "extra_call",
+          "actual_name": "find",
+          "actual_arguments": {
+            "path": ".",
+            "name": "archives"
+          }
+        }
+      ],
+      "after": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback",
+        "bfcl_params_resolve_ticket",
+        "bfcl_params_get_ticket",
+        "bfcl_params_diff",
+        "bfcl_complete_call_mv",
+        "bfcl_avoid_extra_find",
+        "bfcl_avoid_extra_ls",
+        "bfcl_direct_action_bias"
+      ]
+    },
+    {
+      "round": 3,
+      "before": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback",
+        "bfcl_params_resolve_ticket",
+        "bfcl_params_get_ticket",
+        "bfcl_params_diff",
+        "bfcl_complete_call_mv",
+        "bfcl_avoid_extra_find",
+        "bfcl_avoid_extra_ls",
+        "bfcl_direct_action_bias"
+      ],
+      "official_valid": true,
+      "call_f1": 0.8571,
+      "retrieved": [
+        "bfcl_avoid_extra_ls",
+        "bfcl_avoid_extra_find",
+        "bfcl_params_diff",
+        "bfcl_complete_call_mv",
+        "bfcl_params_mv",
+        "bfcl_params_get_ticket",
+        "bfcl_params_resolve_ticket"
+      ],
+      "prompt": [
+        "bfcl_avoid_extra_ls",
+        "bfcl_avoid_extra_find",
+        "bfcl_params_diff",
+        "bfcl_complete_call_mv",
+        "bfcl_params_mv",
+        "bfcl_params_get_ticket",
+        "bfcl_params_resolve_ticket"
+      ],
+      "errors": [
+        {
+          "turn_index": 0,
+          "type": "extra_call",
+          "actual_name": "ls",
+          "actual_arguments": {}
+        },
+        {
+          "turn_index": 1,
+          "type": "argument_mismatch",
+          "name": "cd",
+          "missing": {
+            "arg0": "archives"
+          },
+          "unexpected": {
+            "folder": "archives"
+          },
+          "wrong": {}
+        },
+        {
+          "turn_index": 1,
+          "type": "extra_call",
+          "actual_name": "mv",
+          "actual_arguments": {
+            "source": "temp_notes.txt",
+            "destination": "archives/notes_2024.txt"
+          }
+        }
+      ],
+      "after": [
+        "bfcl_params_mv",
+        "bfcl_observed_error_feedback",
+        "bfcl_params_resolve_ticket",
+        "bfcl_params_get_ticket",
+        "bfcl_params_diff",
+        "bfcl_complete_call_mv",
+        "bfcl_avoid_extra_find",
+        "bfcl_avoid_extra_ls",
+        "bfcl_direct_action_bias"
+      ]
+    }
+  ],
+  "final_skills": [
+    {
+      "name": "bfcl_params_mv",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed high-confidence parameter names for mv.",
+      "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "mv",
+        "allowed_tools": [
+          "mv"
+        ],
+        "domains": [
+          "GorillaFileSystem"
+        ],
+        "injection_type": "informational",
+        "intent_keywords": [
+          "move",
+          "file",
+          "or",
+          "directory",
+          "one",
+          "location",
+          "to",
+          "another",
+          "mv",
+          "destination",
+          "source"
+        ],
+        "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_tool_count": 7,
+        "source_param_counts": {
+          "source": 7,
+          "destination": 7
+        },
+        "source_examples": [
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 1,
+            "arguments": {
+              "source": "temp_notes.txt",
+              "destination": "archives"
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 1,
+            "arguments": {
+              "source": "temp_notes.txt",
+              "destination": "notes_2024.txt"
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 1,
+            "arguments": {
+              "source": "temp_notes.txt",
+              "destination": "archives"
+            }
+          }
+        ],
+        "source_train_total_runs": 4,
+        "source_train_positive_runs": 3,
+        "version_kind": "seed"
+      },
+      "version": 4,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_params_mv.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 3,
+        "parent_version_id": "bfcl_params_mv@v3",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_params_mv",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for mv.",
+          "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "mv",
+            "allowed_tools": [
+              "mv"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "move",
+              "file",
+              "or",
+              "directory",
+              "one",
+              "location",
+              "to",
+              "another",
+              "mv",
+              "destination",
+              "source"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 2,
+            "source_param_counts": {
+              "source": 2,
+              "destination": 2
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "archives"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "notes_2024.txt"
+                }
+              }
+            ],
+            "source_train_total_runs": 1,
+            "source_train_positive_runs": 1,
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_mv.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        },
+        {
+          "name": "bfcl_params_mv",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for mv.",
+          "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "mv",
+            "allowed_tools": [
+              "mv"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "move",
+              "file",
+              "or",
+              "directory",
+              "one",
+              "location",
+              "to",
+              "another",
+              "mv",
+              "destination",
+              "source"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 4,
+            "source_param_counts": {
+              "source": 4,
+              "destination": 4
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "archives"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "notes_2024.txt"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "archives"
+                }
+              }
+            ],
+            "source_train_total_runs": 2,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 2,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_mv.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": 1,
+            "parent_version_id": "bfcl_params_mv@v1",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [
+            {
+              "name": "bfcl_params_mv",
+              "kind": "atomic_tool_rule_card",
+              "description": "Observed high-confidence parameter names for mv.",
+              "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "tool": "mv",
+                "allowed_tools": [
+                  "mv"
+                ],
+                "domains": [
+                  "GorillaFileSystem"
+                ],
+                "injection_type": "informational",
+                "intent_keywords": [
+                  "move",
+                  "file",
+                  "or",
+                  "directory",
+                  "one",
+                  "location",
+                  "to",
+                  "another",
+                  "mv",
+                  "destination",
+                  "source"
+                ],
+                "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_tool_count": 2,
+                "source_param_counts": {
+                  "source": 2,
+                  "destination": 2
+                },
+                "source_examples": [
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 1,
+                    "arguments": {
+                      "source": "temp_notes.txt",
+                      "destination": "archives"
+                    }
+                  },
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 1,
+                    "arguments": {
+                      "source": "temp_notes.txt",
+                      "destination": "notes_2024.txt"
+                    }
+                  }
+                ],
+                "source_train_total_runs": 1,
+                "source_train_positive_runs": 1,
+                "version_kind": "seed"
+              },
+              "version": 1,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_params_mv.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": null,
+                "parent_version_id": "",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [],
+              "stale": false
+            }
+          ],
+          "stale": false
+        },
+        {
+          "name": "bfcl_params_mv",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for mv.",
+          "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "mv",
+            "allowed_tools": [
+              "mv"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "move",
+              "file",
+              "or",
+              "directory",
+              "one",
+              "location",
+              "to",
+              "another",
+              "mv",
+              "destination",
+              "source"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 4,
+            "source_param_counts": {
+              "source": 4,
+              "destination": 4
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "archives"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "notes_2024.txt"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "archives"
+                }
+              }
+            ],
+            "source_train_total_runs": 3,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 3,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_mv.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": 2,
+            "parent_version_id": "bfcl_params_mv@v2",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [
+            {
+              "name": "bfcl_params_mv",
+              "kind": "atomic_tool_rule_card",
+              "description": "Observed high-confidence parameter names for mv.",
+              "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "tool": "mv",
+                "allowed_tools": [
+                  "mv"
+                ],
+                "domains": [
+                  "GorillaFileSystem"
+                ],
+                "injection_type": "informational",
+                "intent_keywords": [
+                  "move",
+                  "file",
+                  "or",
+                  "directory",
+                  "one",
+                  "location",
+                  "to",
+                  "another",
+                  "mv",
+                  "destination",
+                  "source"
+                ],
+                "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_tool_count": 2,
+                "source_param_counts": {
+                  "source": 2,
+                  "destination": 2
+                },
+                "source_examples": [
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 1,
+                    "arguments": {
+                      "source": "temp_notes.txt",
+                      "destination": "archives"
+                    }
+                  },
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 1,
+                    "arguments": {
+                      "source": "temp_notes.txt",
+                      "destination": "notes_2024.txt"
+                    }
+                  }
+                ],
+                "source_train_total_runs": 1,
+                "source_train_positive_runs": 1,
+                "version_kind": "seed"
+              },
+              "version": 1,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_params_mv.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": null,
+                "parent_version_id": "",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [],
+              "stale": false
+            },
+            {
+              "name": "bfcl_params_mv",
+              "kind": "atomic_tool_rule_card",
+              "description": "Observed high-confidence parameter names for mv.",
+              "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "tool": "mv",
+                "allowed_tools": [
+                  "mv"
+                ],
+                "domains": [
+                  "GorillaFileSystem"
+                ],
+                "injection_type": "informational",
+                "intent_keywords": [
+                  "move",
+                  "file",
+                  "or",
+                  "directory",
+                  "one",
+                  "location",
+                  "to",
+                  "another",
+                  "mv",
+                  "destination",
+                  "source"
+                ],
+                "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_tool_count": 4,
+                "source_param_counts": {
+                  "source": 4,
+                  "destination": 4
+                },
+                "source_examples": [
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 1,
+                    "arguments": {
+                      "source": "temp_notes.txt",
+                      "destination": "archives"
+                    }
+                  },
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 1,
+                    "arguments": {
+                      "source": "temp_notes.txt",
+                      "destination": "notes_2024.txt"
+                    }
+                  },
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 1,
+                    "arguments": {
+                      "source": "temp_notes.txt",
+                      "destination": "archives"
+                    }
+                  }
+                ],
+                "source_train_total_runs": 2,
+                "source_train_positive_runs": 2,
+                "version_kind": "seed"
+              },
+              "version": 2,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_params_mv.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": 1,
+                "parent_version_id": "bfcl_params_mv@v1",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [
+                {
+                  "name": "bfcl_params_mv",
+                  "kind": "atomic_tool_rule_card",
+                  "description": "Observed high-confidence parameter names for mv.",
+                  "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+                  "metadata": {
+                    "source": "evolve_rollouts",
+                    "tool": "mv",
+                    "allowed_tools": [
+                      "mv"
+                    ],
+                    "domains": [
+                      "GorillaFileSystem"
+                    ],
+                    "injection_type": "informational",
+                    "intent_keywords": [
+                      "move",
+                      "file",
+                      "or",
+                      "directory",
+                      "one",
+                      "location",
+                      "to",
+                      "another",
+                      "mv",
+                      "destination",
+                      "source"
+                    ],
+                    "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+                    "source_task_ids": [
+                      "multi_turn_base_24"
+                    ],
+                    "source_tool_count": 2,
+                    "source_param_counts": {
+                      "source": 2,
+                      "destination": 2
+                    },
+                    "source_examples": [
+                      {
+                        "task_id": "multi_turn_base_24",
+                        "turn_index": 1,
+                        "arguments": {
+                          "source": "temp_notes.txt",
+                          "destination": "archives"
+                        }
+                      },
+                      {
+                        "task_id": "multi_turn_base_24",
+                        "turn_index": 1,
+                        "arguments": {
+                          "source": "temp_notes.txt",
+                          "destination": "notes_2024.txt"
+                        }
+                      }
+                    ],
+                    "source_train_total_runs": 1,
+                    "source_train_positive_runs": 1,
+                    "version_kind": "seed"
+                  },
+                  "version": 1,
+                  "usage_count": 0,
+                  "success_count": 0,
+                  "interface": {
+                    "summary": "",
+                    "usage": "",
+                    "input_contract": {},
+                    "output_contract": {},
+                    "invocation_contract": {},
+                    "compatibility_notes": ""
+                  },
+                  "bundle": {
+                    "bundle_id": "bfcl_params_mv.bundle",
+                    "bundle_version": 1,
+                    "positive_cases": [],
+                    "negative_cases": [],
+                    "integration_cases": [],
+                    "fixtures": {},
+                    "contrast_protocol": {
+                      "with_skill": true,
+                      "without_skill": true
+                    },
+                    "maintenance_notes": ""
+                  },
+                  "evidence": {
+                    "source_traces": [],
+                    "helpful_cases": [],
+                    "harmful_cases": [],
+                    "repeated_evidence": [],
+                    "integration_failures": []
+                  },
+                  "status": "active",
+                  "lineage": {
+                    "parent_version": null,
+                    "parent_version_id": "",
+                    "version_kind": "seed",
+                    "migration_reason": "",
+                    "refined_from_result_ids": [],
+                    "refactor_group_id": ""
+                  },
+                  "dependency_pins": [],
+                  "dependencies": [],
+                  "history": [],
+                  "stale": false
+                }
+              ],
+              "stale": false
+            }
+          ],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_params_mv@v4",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_observed_error_feedback",
+      "kind": "debug_feedback_card",
+      "description": "Observed BFCL failure modes from train rollouts.",
+      "body": "Recent train rollouts showed error types: extra_call=12, missing_call=4, argument_mismatch=3. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "error_counts": {
+          "extra_call": 12,
+          "argument_mismatch": 3,
+          "missing_call": 4
+        },
+        "source_error_task_ids": {
+          "argument_mismatch": [
+            "multi_turn_base_24"
+          ],
+          "extra_call": [
+            "multi_turn_base_24"
+          ],
+          "missing_call": [
+            "multi_turn_base_24"
+          ]
+        },
+        "source_param_task_ids": {},
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_train_total_runs": 4,
+        "source_train_positive_runs": 3,
+        "domains": [
+          "all"
+        ],
+        "injection_type": "workflow",
+        "intent_keywords": [
+          "schema",
+          "argument",
+          "literal",
+          "tool",
+          "call"
+        ],
+        "version_kind": "seed"
+      },
+      "version": 4,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_observed_error_feedback.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 3,
+        "parent_version_id": "bfcl_observed_error_feedback@v3",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_observed_error_feedback",
+          "kind": "debug_feedback_card",
+          "description": "Observed BFCL failure modes from train rollouts.",
+          "body": "Recent train rollouts showed error types: extra_call=1, argument_mismatch=1. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "error_counts": {
+              "extra_call": 1,
+              "argument_mismatch": 1
+            },
+            "source_error_task_ids": {
+              "argument_mismatch": [
+                "multi_turn_base_24"
+              ],
+              "extra_call": [
+                "multi_turn_base_24"
+              ]
+            },
+            "source_param_task_ids": {},
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_train_total_runs": 1,
+            "source_train_positive_runs": 1,
+            "domains": [
+              "all"
+            ],
+            "injection_type": "workflow",
+            "intent_keywords": [
+              "schema",
+              "argument",
+              "literal",
+              "tool",
+              "call"
+            ],
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_observed_error_feedback.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        },
+        {
+          "name": "bfcl_observed_error_feedback",
+          "kind": "debug_feedback_card",
+          "description": "Observed BFCL failure modes from train rollouts.",
+          "body": "Recent train rollouts showed error types: extra_call=2, argument_mismatch=2. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "error_counts": {
+              "extra_call": 2,
+              "argument_mismatch": 2
+            },
+            "source_error_task_ids": {
+              "argument_mismatch": [
+                "multi_turn_base_24"
+              ],
+              "extra_call": [
+                "multi_turn_base_24"
+              ]
+            },
+            "source_param_task_ids": {},
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_train_total_runs": 2,
+            "source_train_positive_runs": 2,
+            "domains": [
+              "all"
+            ],
+            "injection_type": "workflow",
+            "intent_keywords": [
+              "schema",
+              "argument",
+              "literal",
+              "tool",
+              "call"
+            ],
+            "version_kind": "seed"
+          },
+          "version": 2,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_observed_error_feedback.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": 1,
+            "parent_version_id": "bfcl_observed_error_feedback@v1",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [
+            {
+              "name": "bfcl_observed_error_feedback",
+              "kind": "debug_feedback_card",
+              "description": "Observed BFCL failure modes from train rollouts.",
+              "body": "Recent train rollouts showed error types: extra_call=1, argument_mismatch=1. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "error_counts": {
+                  "extra_call": 1,
+                  "argument_mismatch": 1
+                },
+                "source_error_task_ids": {
+                  "argument_mismatch": [
+                    "multi_turn_base_24"
+                  ],
+                  "extra_call": [
+                    "multi_turn_base_24"
+                  ]
+                },
+                "source_param_task_ids": {},
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_train_total_runs": 1,
+                "source_train_positive_runs": 1,
+                "domains": [
+                  "all"
+                ],
+                "injection_type": "workflow",
+                "intent_keywords": [
+                  "schema",
+                  "argument",
+                  "literal",
+                  "tool",
+                  "call"
+                ],
+                "version_kind": "seed"
+              },
+              "version": 1,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_observed_error_feedback.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": null,
+                "parent_version_id": "",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [],
+              "stale": false
+            }
+          ],
+          "stale": false
+        },
+        {
+          "name": "bfcl_observed_error_feedback",
+          "kind": "debug_feedback_card",
+          "description": "Observed BFCL failure modes from train rollouts.",
+          "body": "Recent train rollouts showed error types: extra_call=10, missing_call=4, argument_mismatch=2. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "error_counts": {
+              "extra_call": 10,
+              "argument_mismatch": 2,
+              "missing_call": 4
+            },
+            "source_error_task_ids": {
+              "argument_mismatch": [
+                "multi_turn_base_24"
+              ],
+              "extra_call": [
+                "multi_turn_base_24"
+              ],
+              "missing_call": [
+                "multi_turn_base_24"
+              ]
+            },
+            "source_param_task_ids": {},
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_train_total_runs": 3,
+            "source_train_positive_runs": 2,
+            "domains": [
+              "all"
+            ],
+            "injection_type": "workflow",
+            "intent_keywords": [
+              "schema",
+              "argument",
+              "literal",
+              "tool",
+              "call"
+            ],
+            "version_kind": "seed"
+          },
+          "version": 3,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_observed_error_feedback.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": 2,
+            "parent_version_id": "bfcl_observed_error_feedback@v2",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [
+            {
+              "name": "bfcl_observed_error_feedback",
+              "kind": "debug_feedback_card",
+              "description": "Observed BFCL failure modes from train rollouts.",
+              "body": "Recent train rollouts showed error types: extra_call=1, argument_mismatch=1. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "error_counts": {
+                  "extra_call": 1,
+                  "argument_mismatch": 1
+                },
+                "source_error_task_ids": {
+                  "argument_mismatch": [
+                    "multi_turn_base_24"
+                  ],
+                  "extra_call": [
+                    "multi_turn_base_24"
+                  ]
+                },
+                "source_param_task_ids": {},
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_train_total_runs": 1,
+                "source_train_positive_runs": 1,
+                "domains": [
+                  "all"
+                ],
+                "injection_type": "workflow",
+                "intent_keywords": [
+                  "schema",
+                  "argument",
+                  "literal",
+                  "tool",
+                  "call"
+                ],
+                "version_kind": "seed"
+              },
+              "version": 1,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_observed_error_feedback.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": null,
+                "parent_version_id": "",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [],
+              "stale": false
+            },
+            {
+              "name": "bfcl_observed_error_feedback",
+              "kind": "debug_feedback_card",
+              "description": "Observed BFCL failure modes from train rollouts.",
+              "body": "Recent train rollouts showed error types: extra_call=2, argument_mismatch=2. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "error_counts": {
+                  "extra_call": 2,
+                  "argument_mismatch": 2
+                },
+                "source_error_task_ids": {
+                  "argument_mismatch": [
+                    "multi_turn_base_24"
+                  ],
+                  "extra_call": [
+                    "multi_turn_base_24"
+                  ]
+                },
+                "source_param_task_ids": {},
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_train_total_runs": 2,
+                "source_train_positive_runs": 2,
+                "domains": [
+                  "all"
+                ],
+                "injection_type": "workflow",
+                "intent_keywords": [
+                  "schema",
+                  "argument",
+                  "literal",
+                  "tool",
+                  "call"
+                ],
+                "version_kind": "seed"
+              },
+              "version": 2,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_observed_error_feedback.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": 1,
+                "parent_version_id": "bfcl_observed_error_feedback@v1",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [
+                {
+                  "name": "bfcl_observed_error_feedback",
+                  "kind": "debug_feedback_card",
+                  "description": "Observed BFCL failure modes from train rollouts.",
+                  "body": "Recent train rollouts showed error types: extra_call=1, argument_mismatch=1. Parameter-level issues: none. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+                  "metadata": {
+                    "source": "evolve_rollouts",
+                    "error_counts": {
+                      "extra_call": 1,
+                      "argument_mismatch": 1
+                    },
+                    "source_error_task_ids": {
+                      "argument_mismatch": [
+                        "multi_turn_base_24"
+                      ],
+                      "extra_call": [
+                        "multi_turn_base_24"
+                      ]
+                    },
+                    "source_param_task_ids": {},
+                    "source_task_ids": [
+                      "multi_turn_base_24"
+                    ],
+                    "source_train_total_runs": 1,
+                    "source_train_positive_runs": 1,
+                    "domains": [
+                      "all"
+                    ],
+                    "injection_type": "workflow",
+                    "intent_keywords": [
+                      "schema",
+                      "argument",
+                      "literal",
+                      "tool",
+                      "call"
+                    ],
+                    "version_kind": "seed"
+                  },
+                  "version": 1,
+                  "usage_count": 0,
+                  "success_count": 0,
+                  "interface": {
+                    "summary": "",
+                    "usage": "",
+                    "input_contract": {},
+                    "output_contract": {},
+                    "invocation_contract": {},
+                    "compatibility_notes": ""
+                  },
+                  "bundle": {
+                    "bundle_id": "bfcl_observed_error_feedback.bundle",
+                    "bundle_version": 1,
+                    "positive_cases": [],
+                    "negative_cases": [],
+                    "integration_cases": [],
+                    "fixtures": {},
+                    "contrast_protocol": {
+                      "with_skill": true,
+                      "without_skill": true
+                    },
+                    "maintenance_notes": ""
+                  },
+                  "evidence": {
+                    "source_traces": [],
+                    "helpful_cases": [],
+                    "harmful_cases": [],
+                    "repeated_evidence": [],
+                    "integration_failures": []
+                  },
+                  "status": "active",
+                  "lineage": {
+                    "parent_version": null,
+                    "parent_version_id": "",
+                    "version_kind": "seed",
+                    "migration_reason": "",
+                    "refined_from_result_ids": [],
+                    "refactor_group_id": ""
+                  },
+                  "dependency_pins": [],
+                  "dependencies": [],
+                  "history": [],
+                  "stale": false
+                }
+              ],
+              "stale": false
+            }
+          ],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_observed_error_feedback@v4",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_params_resolve_ticket",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed high-confidence parameter names for resolve_ticket.",
+      "body": "For `resolve_ticket`, prefer these observed schema parameter names when applicable: ticket_id, resolution.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "resolve_ticket",
+        "allowed_tools": [
+          "resolve_ticket"
+        ],
+        "domains": [
+          "TicketAPI"
+        ],
+        "injection_type": "informational",
+        "intent_keywords": [
+          "resolve",
+          "ticket",
+          "resolution",
+          "ticket_id"
+        ],
+        "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Resolve a ticket with a resolution. Response schema: {\"type\": \"dict\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Status of the resolve operation.\"}}}",
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_tool_count": 3,
+        "source_param_counts": {
+          "ticket_id": 3,
+          "resolution": 3
+        },
+        "source_examples": [
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 3,
+            "arguments": {
+              "ticket_id": 987654,
+              "resolution": "Fixed through manual troubleshooting techniques."
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 3,
+            "arguments": {
+              "ticket_id": 987654,
+              "resolution": "Fixed through manual troubleshooting techniques."
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 3,
+            "arguments": {
+              "ticket_id": 987654,
+              "resolution": "Fixed through manual troubleshooting techniques."
+            }
+          }
+        ],
+        "source_train_total_runs": 4,
+        "source_train_positive_runs": 3,
+        "version_kind": "seed"
+      },
+      "version": 3,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_params_resolve_ticket.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 2,
+        "parent_version_id": "bfcl_params_resolve_ticket@v2",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_params_resolve_ticket",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for resolve_ticket.",
+          "body": "For `resolve_ticket`, prefer these observed schema parameter names when applicable: ticket_id, resolution.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "resolve_ticket",
+            "allowed_tools": [
+              "resolve_ticket"
+            ],
+            "domains": [
+              "TicketAPI"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "resolve",
+              "ticket",
+              "resolution",
+              "ticket_id"
+            ],
+            "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Resolve a ticket with a resolution. Response schema: {\"type\": \"dict\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Status of the resolve operation.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 2,
+            "source_param_counts": {
+              "ticket_id": 2,
+              "resolution": 2
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 3,
+                "arguments": {
+                  "ticket_id": 987654,
+                  "resolution": "Fixed through manual troubleshooting techniques."
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 3,
+                "arguments": {
+                  "ticket_id": 987654,
+                  "resolution": "Fixed through manual troubleshooting techniques."
+                }
+              }
+            ],
+            "source_train_total_runs": 2,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_resolve_ticket.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        },
+        {
+          "name": "bfcl_params_resolve_ticket",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for resolve_ticket.",
+          "body": "For `resolve_ticket`, prefer these observed schema parameter names when applicable: ticket_id, resolution.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "resolve_ticket",
+            "allowed_tools": [
+              "resolve_ticket"
+            ],
+            "domains": [
+              "TicketAPI"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "resolve",
+              "ticket",
+              "resolution",
+              "ticket_id"
+            ],
+            "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Resolve a ticket with a resolution. Response schema: {\"type\": \"dict\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Status of the resolve operation.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 2,
+            "source_param_counts": {
+              "ticket_id": 2,
+              "resolution": 2
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 3,
+                "arguments": {
+                  "ticket_id": 987654,
+                  "resolution": "Fixed through manual troubleshooting techniques."
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 3,
+                "arguments": {
+                  "ticket_id": 987654,
+                  "resolution": "Fixed through manual troubleshooting techniques."
+                }
+              }
+            ],
+            "source_train_total_runs": 3,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 2,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_resolve_ticket.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": 1,
+            "parent_version_id": "bfcl_params_resolve_ticket@v1",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [
+            {
+              "name": "bfcl_params_resolve_ticket",
+              "kind": "atomic_tool_rule_card",
+              "description": "Observed high-confidence parameter names for resolve_ticket.",
+              "body": "For `resolve_ticket`, prefer these observed schema parameter names when applicable: ticket_id, resolution.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "tool": "resolve_ticket",
+                "allowed_tools": [
+                  "resolve_ticket"
+                ],
+                "domains": [
+                  "TicketAPI"
+                ],
+                "injection_type": "informational",
+                "intent_keywords": [
+                  "resolve",
+                  "ticket",
+                  "resolution",
+                  "ticket_id"
+                ],
+                "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Resolve a ticket with a resolution. Response schema: {\"type\": \"dict\", \"properties\": {\"status\": {\"type\": \"string\", \"description\": \"Status of the resolve operation.\"}}}",
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_tool_count": 2,
+                "source_param_counts": {
+                  "ticket_id": 2,
+                  "resolution": 2
+                },
+                "source_examples": [
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 3,
+                    "arguments": {
+                      "ticket_id": 987654,
+                      "resolution": "Fixed through manual troubleshooting techniques."
+                    }
+                  },
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 3,
+                    "arguments": {
+                      "ticket_id": 987654,
+                      "resolution": "Fixed through manual troubleshooting techniques."
+                    }
+                  }
+                ],
+                "source_train_total_runs": 2,
+                "source_train_positive_runs": 2,
+                "version_kind": "seed"
+              },
+              "version": 1,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_params_resolve_ticket.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": null,
+                "parent_version_id": "",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [],
+              "stale": false
+            }
+          ],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_params_resolve_ticket@v3",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_params_get_ticket",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed high-confidence parameter names for get_ticket.",
+      "body": "For `get_ticket`, prefer these observed schema parameter names when applicable: ticket_id.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "get_ticket",
+        "allowed_tools": [
+          "get_ticket"
+        ],
+        "domains": [
+          "TicketAPI"
+        ],
+        "injection_type": "informational",
+        "intent_keywords": [
+          "specific",
+          "ticket",
+          "by",
+          "its",
+          "id",
+          "ticket_id"
+        ],
+        "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Get a specific ticket by its ID. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"Unique identifier of the ticket.\"}, \"title\": {\"type\": \"string\", \"description\": \"Title of the ticket.\"}, \"description\": {\"type\": \"string\", \"description\": \"Description of the ticket.\"}, \"status\": {\"type\": \"string\", \"description\": \"Current status of the ticket.\"}, \"priority\": {\"type\": \"integer\", \"description\": \"Priority level of the ticket.\"}, \"created_by\": {\"type\": \"string\", \"description\": \"Username of the ticket creator.\"}}}",
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_tool_count": 3,
+        "source_param_counts": {
+          "ticket_id": 3
+        },
+        "source_examples": [
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 2,
+            "arguments": {
+              "ticket_id": 987654
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 2,
+            "arguments": {
+              "ticket_id": 987654
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 2,
+            "arguments": {
+              "ticket_id": 987654
+            }
+          }
+        ],
+        "source_train_total_runs": 4,
+        "source_train_positive_runs": 3,
+        "version_kind": "seed"
+      },
+      "version": 3,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_params_get_ticket.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 2,
+        "parent_version_id": "bfcl_params_get_ticket@v2",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_params_get_ticket",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for get_ticket.",
+          "body": "For `get_ticket`, prefer these observed schema parameter names when applicable: ticket_id.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "get_ticket",
+            "allowed_tools": [
+              "get_ticket"
+            ],
+            "domains": [
+              "TicketAPI"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "specific",
+              "ticket",
+              "by",
+              "its",
+              "id",
+              "ticket_id"
+            ],
+            "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Get a specific ticket by its ID. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"Unique identifier of the ticket.\"}, \"title\": {\"type\": \"string\", \"description\": \"Title of the ticket.\"}, \"description\": {\"type\": \"string\", \"description\": \"Description of the ticket.\"}, \"status\": {\"type\": \"string\", \"description\": \"Current status of the ticket.\"}, \"priority\": {\"type\": \"integer\", \"description\": \"Priority level of the ticket.\"}, \"created_by\": {\"type\": \"string\", \"description\": \"Username of the ticket creator.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 2,
+            "source_param_counts": {
+              "ticket_id": 2
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 2,
+                "arguments": {
+                  "ticket_id": 987654
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 2,
+                "arguments": {
+                  "ticket_id": 987654
+                }
+              }
+            ],
+            "source_train_total_runs": 2,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_get_ticket.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        },
+        {
+          "name": "bfcl_params_get_ticket",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for get_ticket.",
+          "body": "For `get_ticket`, prefer these observed schema parameter names when applicable: ticket_id.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "get_ticket",
+            "allowed_tools": [
+              "get_ticket"
+            ],
+            "domains": [
+              "TicketAPI"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "specific",
+              "ticket",
+              "by",
+              "its",
+              "id",
+              "ticket_id"
+            ],
+            "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Get a specific ticket by its ID. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"Unique identifier of the ticket.\"}, \"title\": {\"type\": \"string\", \"description\": \"Title of the ticket.\"}, \"description\": {\"type\": \"string\", \"description\": \"Description of the ticket.\"}, \"status\": {\"type\": \"string\", \"description\": \"Current status of the ticket.\"}, \"priority\": {\"type\": \"integer\", \"description\": \"Priority level of the ticket.\"}, \"created_by\": {\"type\": \"string\", \"description\": \"Username of the ticket creator.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 2,
+            "source_param_counts": {
+              "ticket_id": 2
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 2,
+                "arguments": {
+                  "ticket_id": 987654
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 2,
+                "arguments": {
+                  "ticket_id": 987654
+                }
+              }
+            ],
+            "source_train_total_runs": 3,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 2,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_get_ticket.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": 1,
+            "parent_version_id": "bfcl_params_get_ticket@v1",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [
+            {
+              "name": "bfcl_params_get_ticket",
+              "kind": "atomic_tool_rule_card",
+              "description": "Observed high-confidence parameter names for get_ticket.",
+              "body": "For `get_ticket`, prefer these observed schema parameter names when applicable: ticket_id.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "tool": "get_ticket",
+                "allowed_tools": [
+                  "get_ticket"
+                ],
+                "domains": [
+                  "TicketAPI"
+                ],
+                "injection_type": "informational",
+                "intent_keywords": [
+                  "specific",
+                  "ticket",
+                  "by",
+                  "its",
+                  "id",
+                  "ticket_id"
+                ],
+                "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Get a specific ticket by its ID. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"Unique identifier of the ticket.\"}, \"title\": {\"type\": \"string\", \"description\": \"Title of the ticket.\"}, \"description\": {\"type\": \"string\", \"description\": \"Description of the ticket.\"}, \"status\": {\"type\": \"string\", \"description\": \"Current status of the ticket.\"}, \"priority\": {\"type\": \"integer\", \"description\": \"Priority level of the ticket.\"}, \"created_by\": {\"type\": \"string\", \"description\": \"Username of the ticket creator.\"}}}",
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_tool_count": 2,
+                "source_param_counts": {
+                  "ticket_id": 2
+                },
+                "source_examples": [
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 2,
+                    "arguments": {
+                      "ticket_id": 987654
+                    }
+                  },
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 2,
+                    "arguments": {
+                      "ticket_id": 987654
+                    }
+                  }
+                ],
+                "source_train_total_runs": 2,
+                "source_train_positive_runs": 2,
+                "version_kind": "seed"
+              },
+              "version": 1,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_params_get_ticket.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": null,
+                "parent_version_id": "",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [],
+              "stale": false
+            }
+          ],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_params_get_ticket@v3",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_params_diff",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed high-confidence parameter names for diff.",
+      "body": "For `diff`, prefer these observed schema parameter names when applicable: file_name1, file_name2.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "diff",
+        "allowed_tools": [
+          "diff"
+        ],
+        "domains": [
+          "GorillaFileSystem"
+        ],
+        "injection_type": "informational",
+        "intent_keywords": [
+          "compare",
+          "two",
+          "files",
+          "of",
+          "any",
+          "extension",
+          "line",
+          "by",
+          "at",
+          "directory",
+          "diff",
+          "file_name1"
+        ],
+        "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Compare two files of any extension line by line at the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"diff_lines\": {\"type\": \"string\", \"description\": \"The differences between the two files.\"}}}",
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_tool_count": 3,
+        "source_param_counts": {
+          "file_name1": 3,
+          "file_name2": 3
+        },
+        "source_examples": [
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 0,
+            "arguments": {
+              "file_name1": "report_draft.txt",
+              "file_name2": "report_final.txt"
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 0,
+            "arguments": {
+              "file_name1": "report_draft.txt",
+              "file_name2": "report_final.txt"
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 0,
+            "arguments": {
+              "file_name1": "report_draft.txt",
+              "file_name2": "report_final.txt"
+            }
+          }
+        ],
+        "source_train_total_runs": 4,
+        "source_train_positive_runs": 3,
+        "version_kind": "seed"
+      },
+      "version": 3,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_params_diff.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 2,
+        "parent_version_id": "bfcl_params_diff@v2",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_params_diff",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for diff.",
+          "body": "For `diff`, prefer these observed schema parameter names when applicable: file_name1, file_name2.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "diff",
+            "allowed_tools": [
+              "diff"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "compare",
+              "two",
+              "files",
+              "of",
+              "any",
+              "extension",
+              "line",
+              "by",
+              "at",
+              "directory",
+              "diff",
+              "file_name1"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Compare two files of any extension line by line at the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"diff_lines\": {\"type\": \"string\", \"description\": \"The differences between the two files.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 2,
+            "source_param_counts": {
+              "file_name1": 2,
+              "file_name2": 2
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 0,
+                "arguments": {
+                  "file_name1": "report_draft.txt",
+                  "file_name2": "report_final.txt"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 0,
+                "arguments": {
+                  "file_name1": "report_draft.txt",
+                  "file_name2": "report_final.txt"
+                }
+              }
+            ],
+            "source_train_total_runs": 2,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_diff.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        },
+        {
+          "name": "bfcl_params_diff",
+          "kind": "atomic_tool_rule_card",
+          "description": "Observed high-confidence parameter names for diff.",
+          "body": "For `diff`, prefer these observed schema parameter names when applicable: file_name1, file_name2.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "diff",
+            "allowed_tools": [
+              "diff"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "compare",
+              "two",
+              "files",
+              "of",
+              "any",
+              "extension",
+              "line",
+              "by",
+              "at",
+              "directory",
+              "diff",
+              "file_name1"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Compare two files of any extension line by line at the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"diff_lines\": {\"type\": \"string\", \"description\": \"The differences between the two files.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_tool_count": 2,
+            "source_param_counts": {
+              "file_name1": 2,
+              "file_name2": 2
+            },
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 0,
+                "arguments": {
+                  "file_name1": "report_draft.txt",
+                  "file_name2": "report_final.txt"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 0,
+                "arguments": {
+                  "file_name1": "report_draft.txt",
+                  "file_name2": "report_final.txt"
+                }
+              }
+            ],
+            "source_train_total_runs": 3,
+            "source_train_positive_runs": 2,
+            "version_kind": "seed"
+          },
+          "version": 2,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_params_diff.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": 1,
+            "parent_version_id": "bfcl_params_diff@v1",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [
+            {
+              "name": "bfcl_params_diff",
+              "kind": "atomic_tool_rule_card",
+              "description": "Observed high-confidence parameter names for diff.",
+              "body": "For `diff`, prefer these observed schema parameter names when applicable: file_name1, file_name2.",
+              "metadata": {
+                "source": "evolve_rollouts",
+                "tool": "diff",
+                "allowed_tools": [
+                  "diff"
+                ],
+                "domains": [
+                  "GorillaFileSystem"
+                ],
+                "injection_type": "informational",
+                "intent_keywords": [
+                  "compare",
+                  "two",
+                  "files",
+                  "of",
+                  "any",
+                  "extension",
+                  "line",
+                  "by",
+                  "at",
+                  "directory",
+                  "diff",
+                  "file_name1"
+                ],
+                "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Compare two files of any extension line by line at the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"diff_lines\": {\"type\": \"string\", \"description\": \"The differences between the two files.\"}}}",
+                "source_task_ids": [
+                  "multi_turn_base_24"
+                ],
+                "source_tool_count": 2,
+                "source_param_counts": {
+                  "file_name1": 2,
+                  "file_name2": 2
+                },
+                "source_examples": [
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 0,
+                    "arguments": {
+                      "file_name1": "report_draft.txt",
+                      "file_name2": "report_final.txt"
+                    }
+                  },
+                  {
+                    "task_id": "multi_turn_base_24",
+                    "turn_index": 0,
+                    "arguments": {
+                      "file_name1": "report_draft.txt",
+                      "file_name2": "report_final.txt"
+                    }
+                  }
+                ],
+                "source_train_total_runs": 2,
+                "source_train_positive_runs": 2,
+                "version_kind": "seed"
+              },
+              "version": 1,
+              "usage_count": 0,
+              "success_count": 0,
+              "interface": {
+                "summary": "",
+                "usage": "",
+                "input_contract": {},
+                "output_contract": {},
+                "invocation_contract": {},
+                "compatibility_notes": ""
+              },
+              "bundle": {
+                "bundle_id": "bfcl_params_diff.bundle",
+                "bundle_version": 1,
+                "positive_cases": [],
+                "negative_cases": [],
+                "integration_cases": [],
+                "fixtures": {},
+                "contrast_protocol": {
+                  "with_skill": true,
+                  "without_skill": true
+                },
+                "maintenance_notes": ""
+              },
+              "evidence": {
+                "source_traces": [],
+                "helpful_cases": [],
+                "harmful_cases": [],
+                "repeated_evidence": [],
+                "integration_failures": []
+              },
+              "status": "active",
+              "lineage": {
+                "parent_version": null,
+                "parent_version_id": "",
+                "version_kind": "seed",
+                "migration_reason": "",
+                "refined_from_result_ids": [],
+                "refactor_group_id": ""
+              },
+              "dependency_pins": [],
+              "dependencies": [],
+              "history": [],
+              "stale": false
+            }
+          ],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_params_diff@v3",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_complete_call_mv",
+      "kind": "planning_card",
+      "description": "Do not stop before completing the `mv` call when it is needed.",
+      "body": "Train failures often ended the turn before issuing `mv`. If the current user turn implies this operation, continue calling tools until this action is actually completed before ending the turn. Common required arguments for `mv` include: source, destination.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "mv",
+        "allowed_tools": [
+          "mv"
+        ],
+        "domains": [
+          "GorillaFileSystem"
+        ],
+        "injection_type": "workflow",
+        "intent_keywords": [
+          "move",
+          "file",
+          "or",
+          "directory",
+          "one",
+          "location",
+          "to",
+          "another",
+          "mv",
+          "destination",
+          "source"
+        ],
+        "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_missing_call_count": 2,
+        "source_examples": [
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 1,
+            "expected_arguments": {
+              "source": "temp_notes.txt",
+              "destination": "archives"
+            }
+          },
+          {
+            "task_id": "multi_turn_base_24",
+            "turn_index": 1,
+            "expected_arguments": {
+              "source": "temp_notes.txt",
+              "destination": "notes_2024.txt"
+            }
+          }
+        ],
+        "version_kind": "seed"
+      },
+      "version": 2,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_complete_call_mv.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 1,
+        "parent_version_id": "bfcl_complete_call_mv@v1",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_complete_call_mv",
+          "kind": "planning_card",
+          "description": "Do not stop before completing the `mv` call when it is needed.",
+          "body": "Train failures often ended the turn before issuing `mv`. If the current user turn implies this operation, continue calling tools until this action is actually completed before ending the turn. Common required arguments for `mv` include: source, destination.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "mv",
+            "allowed_tools": [
+              "mv"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "workflow",
+            "intent_keywords": [
+              "move",
+              "file",
+              "or",
+              "directory",
+              "one",
+              "location",
+              "to",
+              "another",
+              "mv",
+              "destination",
+              "source"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_missing_call_count": 2,
+            "source_examples": [
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "expected_arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "archives"
+                }
+              },
+              {
+                "task_id": "multi_turn_base_24",
+                "turn_index": 1,
+                "expected_arguments": {
+                  "source": "temp_notes.txt",
+                  "destination": "notes_2024.txt"
+                }
+              }
+            ],
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_complete_call_mv.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_complete_call_mv@v2",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_avoid_extra_find",
+      "kind": "negative_rule_card",
+      "description": "Avoid unnecessary `find` calls unless the turn explicitly requires it.",
+      "body": "`find` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "find",
+        "allowed_tools": [
+          "find"
+        ],
+        "domains": [
+          "GorillaFileSystem"
+        ],
+        "injection_type": "informational",
+        "intent_keywords": [
+          "find",
+          "any",
+          "file",
+          "or",
+          "directories",
+          "under",
+          "specific",
+          "path",
+          "contain",
+          "name"
+        ],
+        "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Find any file or directories under specific path that contain name in its file name.  This method searches for files of any extension and directories within a specified path that match the given name. If no name is provided, it returns all files and directories in the specified path and its subdirectories. Note: This method performs a recursive search through all subdirectories of the given path. Response schema: {\"type\": \"dict\", \"properties\": {\"matches\": {\"type\": \"array\", \"description\": \"A list of matching file and directory paths relative to the given path.\", \"items\": {\"type\": \"string\"}}}}",
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_extra_call_count": 6,
+        "version_kind": "seed"
+      },
+      "version": 2,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_avoid_extra_find.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 1,
+        "parent_version_id": "bfcl_avoid_extra_find@v1",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_avoid_extra_find",
+          "kind": "negative_rule_card",
+          "description": "Avoid unnecessary `find` calls unless the turn explicitly requires it.",
+          "body": "`find` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "find",
+            "allowed_tools": [
+              "find"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "find",
+              "any",
+              "file",
+              "or",
+              "directories",
+              "under",
+              "specific",
+              "path",
+              "contain",
+              "name"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Find any file or directories under specific path that contain name in its file name.  This method searches for files of any extension and directories within a specified path that match the given name. If no name is provided, it returns all files and directories in the specified path and its subdirectories. Note: This method performs a recursive search through all subdirectories of the given path. Response schema: {\"type\": \"dict\", \"properties\": {\"matches\": {\"type\": \"array\", \"description\": \"A list of matching file and directory paths relative to the given path.\", \"items\": {\"type\": \"string\"}}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_extra_call_count": 6,
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_avoid_extra_find.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_avoid_extra_find@v2",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_avoid_extra_ls",
+      "kind": "negative_rule_card",
+      "description": "Avoid unnecessary `ls` calls unless the turn explicitly requires it.",
+      "body": "`ls` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "ls",
+        "allowed_tools": [
+          "ls"
+        ],
+        "domains": [
+          "GorillaFileSystem"
+        ],
+        "injection_type": "informational",
+        "intent_keywords": [
+          "list",
+          "contents",
+          "of",
+          "directory",
+          "ls",
+          "a"
+        ],
+        "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: List the contents of the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"current_directory_content\": {\"type\": \"array\", \"description\": \"A list of the contents of the specified directory.\", \"items\": {\"type\": \"string\"}}}}",
+        "source_task_ids": [
+          "multi_turn_base_24"
+        ],
+        "source_extra_call_count": 5,
+        "version_kind": "seed"
+      },
+      "version": 2,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_avoid_extra_ls.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 1,
+        "parent_version_id": "bfcl_avoid_extra_ls@v1",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_avoid_extra_ls",
+          "kind": "negative_rule_card",
+          "description": "Avoid unnecessary `ls` calls unless the turn explicitly requires it.",
+          "body": "`ls` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "tool": "ls",
+            "allowed_tools": [
+              "ls"
+            ],
+            "domains": [
+              "GorillaFileSystem"
+            ],
+            "injection_type": "informational",
+            "intent_keywords": [
+              "list",
+              "contents",
+              "of",
+              "directory",
+              "ls",
+              "a"
+            ],
+            "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: List the contents of the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"current_directory_content\": {\"type\": \"array\", \"description\": \"A list of the contents of the specified directory.\", \"items\": {\"type\": \"string\"}}}}",
+            "source_task_ids": [
+              "multi_turn_base_24"
+            ],
+            "source_extra_call_count": 4,
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_avoid_extra_ls.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_avoid_extra_ls@v2",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    },
+    {
+      "name": "bfcl_direct_action_bias",
+      "kind": "workflow_guardrail_card",
+      "description": "Prefer direct required actions over speculative lookups or status checks.",
+      "body": "Across recent train rollouts, many BFCL failures came from optional exploratory tool calls. When the current turn already gives enough information for the required action, prefer the direct action tool and skip speculative lookups or status checks.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "domains": [
+          "all"
+        ],
+        "injection_type": "workflow",
+        "intent_keywords": [
+          "action",
+          "direct",
+          "lookup",
+          "status",
+          "request"
+        ],
+        "source_extra_call_count": 12,
+        "version_kind": "seed"
+      },
+      "version": 2,
+      "usage_count": 0,
+      "success_count": 0,
+      "interface": {
+        "summary": "",
+        "usage": "",
+        "input_contract": {},
+        "output_contract": {},
+        "invocation_contract": {},
+        "compatibility_notes": ""
+      },
+      "bundle": {
+        "bundle_id": "bfcl_direct_action_bias.bundle",
+        "bundle_version": 1,
+        "positive_cases": [],
+        "negative_cases": [],
+        "integration_cases": [],
+        "fixtures": {},
+        "contrast_protocol": {
+          "with_skill": true,
+          "without_skill": true
+        },
+        "maintenance_notes": ""
+      },
+      "evidence": {
+        "source_traces": [],
+        "helpful_cases": [],
+        "harmful_cases": [],
+        "repeated_evidence": [],
+        "integration_failures": []
+      },
+      "status": "active",
+      "lineage": {
+        "parent_version": 1,
+        "parent_version_id": "bfcl_direct_action_bias@v1",
+        "version_kind": "seed",
+        "migration_reason": "",
+        "refined_from_result_ids": [],
+        "refactor_group_id": ""
+      },
+      "dependency_pins": [],
+      "dependencies": [],
+      "history": [
+        {
+          "name": "bfcl_direct_action_bias",
+          "kind": "workflow_guardrail_card",
+          "description": "Prefer direct required actions over speculative lookups or status checks.",
+          "body": "Across recent train rollouts, many BFCL failures came from optional exploratory tool calls. When the current turn already gives enough information for the required action, prefer the direct action tool and skip speculative lookups or status checks.",
+          "metadata": {
+            "source": "evolve_rollouts",
+            "domains": [
+              "all"
+            ],
+            "injection_type": "workflow",
+            "intent_keywords": [
+              "action",
+              "direct",
+              "lookup",
+              "status",
+              "request"
+            ],
+            "source_extra_call_count": 10,
+            "version_kind": "seed"
+          },
+          "version": 1,
+          "usage_count": 0,
+          "success_count": 0,
+          "interface": {
+            "summary": "",
+            "usage": "",
+            "input_contract": {},
+            "output_contract": {},
+            "invocation_contract": {},
+            "compatibility_notes": ""
+          },
+          "bundle": {
+            "bundle_id": "bfcl_direct_action_bias.bundle",
+            "bundle_version": 1,
+            "positive_cases": [],
+            "negative_cases": [],
+            "integration_cases": [],
+            "fixtures": {},
+            "contrast_protocol": {
+              "with_skill": true,
+              "without_skill": true
+            },
+            "maintenance_notes": ""
+          },
+          "evidence": {
+            "source_traces": [],
+            "helpful_cases": [],
+            "harmful_cases": [],
+            "repeated_evidence": [],
+            "integration_failures": []
+          },
+          "status": "active",
+          "lineage": {
+            "parent_version": null,
+            "parent_version_id": "",
+            "version_kind": "seed",
+            "migration_reason": "",
+            "refined_from_result_ids": [],
+            "refactor_group_id": ""
+          },
+          "dependency_pins": [],
+          "dependencies": [],
+          "history": [],
+          "stale": false
+        }
+      ],
+      "stale": false,
+      "version_id": "bfcl_direct_action_bias@v2",
+      "version_kind": "seed",
+      "dependency_versions": {}
+    }
+  ]
+}

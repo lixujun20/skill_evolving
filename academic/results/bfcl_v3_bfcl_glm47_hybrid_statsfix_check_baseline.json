@@ -1,0 +1,1183 @@
+{
+  "benchmark": "bfcl_v3",
+  "mode": "baseline",
+  "tag": "bfcl_glm47_hybrid_statsfix_check",
+  "llm_config": "bigmodel",
+  "n_train_reserved": 0,
+  "n_tasks": 2,
+  "n_runs": 2,
+  "total_success": 0,
+  "success_rate": 0.0,
+  "avg_score": 0.8081,
+  "avg_total_tokens": 61959.0,
+  "timeout_rate": 0.0,
+  "avg_elapsed_s": 87.017,
+  "max_elapsed_s": 139.307,
+  "avg_model_steps": 10.0,
+  "max_model_steps": 11,
+  "avg_at_k": 0.0,
+  "pass_at_k": 0.0,
+  "avg_call_recall": 1.0,
+  "avg_call_precision": 0.6857,
+  "avg_turn_success_rate": 0.5,
+  "avg_relaxed_turn_success_rate": 1.0,
+  "official_valid_rate": 1.0,
+  "call_error_summary": {
+    "error_type_counts": {
+      "extra_call": 4
+    },
+    "param_error_counts": {}
+  },
+  "skill_stats": {
+    "retrieved_counts": {
+      "bfcl_literal_user_text_arguments": 2,
+      "bfcl_multi_action_turn_completion": 1,
+      "bfcl_task_checklist": 1
+    },
+    "prompt_injected_counts": {
+      "bfcl_literal_user_text_arguments": 2,
+      "bfcl_multi_action_turn_completion": 1
+    },
+    "tool_injected_counts": {
+      "bfcl_task_checklist": 1
+    },
+    "used_counts": {},
+    "called_skill_tool_counts": {},
+    "domain_tool_called_counts": {
+      "add_to_watchlist": 1,
+      "authenticate_travel": 1,
+      "book_flight": 1,
+      "cancel_booking": 1,
+      "create_ticket": 1,
+      "get_flight_cost": 1,
+      "get_order_details": 1,
+      "get_order_history": 1,
+      "get_symbol_by_name": 1,
+      "get_user_id": 1,
+      "send_message": 1,
+      "view_messages_sent": 1
+    }
+  },
+  "details": [
+    {
+      "task_id": "multi_turn_base_193",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.8889,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_193",
+          "success": false,
+          "score": 0.8889,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.75,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.8,
+            "call_recall": 1.0,
+            "call_f1": 0.8889,
+            "n_expected_calls": 4,
+            "n_actual_calls": 5,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "get_flight_cost",
+                "actual_arguments": {
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_date": "2026-12-25",
+                  "travel_class": "first"
+                }
+              }
+            ],
+            "total_tokens": 62864,
+            "completion_tokens": 778,
+            "elapsed_s": 139.307,
+            "retrieved_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion"
+            ],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              2
+            ],
+            "n_model_steps": 9,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "skill_injection_mode": "hybrid",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 27,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_193",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you authenticate with your travel account using the credentials you provided. Let me set up your access for this exciting Maldives getaway!",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667430351882415818",
+                    "type": "function",
+                    "function": {
+                      "name": "authenticate_travel",
+                      "arguments": "{\"client_id\":\"my_client_id\",\"client_secret\":\"my_client_secret\",\"refresh_token\":\"my_refresh_token\",\"grant_type\":\"read_write\",\"user_first_name\":\"Michael\",\"user_last_name\":\"Thompson\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667430351882415818",
+                "content": "{\"expires_in\": 2, \"access_token\": \"251675\", \"token_type\": \"Bearer\", \"scope\": \"read_write\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! Your travel account authentication was successful, Michael. Here are your authentication details:\n\n✅ **Access Token**: 251675\n✅ **Token Type**: Bearer  \n✅ **Scope**: read_write\n✅ **Expires In**: 2 hours\n\nYour account is now ready for your Maldives getaway planning! The access token will be valid for 2 hours, giving you full read and write permissions to manage your travel bookings, check flight costs, manage credit cards, and handle all other travel arrangements. \n\nWhat would you like to plan next for your surprise trip?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667421727588087693",
+                    "type": "function",
+                    "function": {
+                      "name": "get_flight_cost",
+                      "arguments": "{\"travel_from\":\"JFK\",\"travel_to\":\"MPC\",\"travel_date\":\"2026-12-25\",\"travel_class\":\"first\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667421727588087693",
+                "content": "{\"travel_cost_list\": [4700.0]}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667438804378054074",
+                    "type": "function",
+                    "function": {
+                      "name": "book_flight",
+                      "arguments": "{\"access_token\":\"251675\",\"card_id\":\"credit_9988\",\"travel_date\":\"2026-12-25\",\"travel_from\":\"JFK\",\"travel_to\":\"MPC\",\"travel_class\":\"first\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667438804378054074",
+                "content": "{\"booking_id\": \"5431449\", \"transaction_id\": \"59784505\", \"booking_status\": true, \"booking_history\": {}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Excellent! I've successfully completed your flight booking for the Maldives getaway. Here's a summary:\n\n**Flight Cost Verification:**\n✅ Confirmed: $4,700.00 for first class travel from JFK to MPC on December 25th, 2026\n\n**Booking Details:**\n✅ **Booking ID:** 5431449\n✅ **Transaction ID:** 59784505\n✅ **Payment:** Charged to credit card credit_9988\n✅ **Status:** Successfully booked\n✅ **Route:** JFK → MPC\n✅ **Date:** December 25th, 2026\n✅ **Class:** First Class\n✅ **Cost:** $4,700.00\n\nYour idyllic Maldives escape is now secured! The booking has been confirmed and your credit card has been charged. You're all set for a magical Christmas Day journey to paradise. Would you like to make any additional arrangements for your trip, such as purchasing travel insurance or checking other travel details?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667395579827187391",
+                    "type": "function",
+                    "function": {
+                      "name": "cancel_booking",
+                      "arguments": "{\"access_token\":\"251675\",\"booking_id\":\"5431449\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667395579827187391",
+                "content": "{\"cancel_status\": true}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your booking has been successfully cancelled! The cancellation status shows as confirmed, so your flight from JFK to MPC for December 25th, 2026 has been removed from your itinerary. You should receive any applicable refunds to your credit card according to the airline's cancellation policy."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667400596348986317",
+                    "type": "function",
+                    "function": {
+                      "name": "create_ticket",
+                      "arguments": "{\"title\":\"Urgent Change in Travel Plans\",\"description\":\"An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\",\"priority\":4}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667400596348986317",
+                "content": "{\"id\": 1001, \"title\": \"Urgent Change in Travel Plans\", \"description\": \"An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\", \"status\": \"Open\", \"priority\": 4, \"created_by\": \"John\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've successfully created a ticket for you with the following details:\n\n- **Ticket ID**: 1001\n- **Title**: \"Urgent Change in Travel Plans\"\n- **Description**: \"An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\"\n- **Status**: Open\n- **Priority**: 4\n- **Created by**: John\n\nThe ticket has been queued and is now in the system for your travel agent to review. The high priority level (4) should ensure this matter gets the necessary attention given the urgent nature of your change in plans."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Imagine you've meticulously planned a surprise getaway to the Maldives, brimming with excitement to ensure each detail unfolds seamlessly. Your first step is securing your travel account access; kindly authenticate with your credentials. My access token of abc123xyz, a client ID of my_client_id, a client secret of my_client_secret, and a refresh token of my_refresh_token. The grant type should be set to read_write, and the user's first name is Michael, with the last name being Thompson"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "authenticate_travel",
+                    "arguments": {
+                      "client_id": "my_client_id",
+                      "client_secret": "my_client_secret",
+                      "refresh_token": "my_refresh_token",
+                      "grant_type": "read_write",
+                      "user_first_name": "Michael",
+                      "user_last_name": "Thompson"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667430351882415818",
+                    "result": {
+                      "expires_in": 2,
+                      "access_token": "251675",
+                      "token_type": "Bearer",
+                      "scope": "read_write"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Fantastic! Now that authentication is successfully completed, let's move forward with booking your idyllic escape. You opt for your trusted credit card, bearing the id credit_9988, to cover all logistical costs. Double check the cost of the flight and book your journey from JFK to MPC for December 25th, 2026, travelling first class, at a cost of 4700 dollars."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_flight_cost",
+                    "arguments": {
+                      "travel_from": "JFK",
+                      "travel_to": "MPC",
+                      "travel_date": "2026-12-25",
+                      "travel_class": "first"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667421727588087693",
+                    "result": {
+                      "travel_cost_list": [
+                        4700.0
+                      ]
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "book_flight",
+                    "arguments": {
+                      "access_token": "251675",
+                      "card_id": "credit_9988",
+                      "travel_date": "2026-12-25",
+                      "travel_from": "JFK",
+                      "travel_to": "MPC",
+                      "travel_class": "first"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667438804378054074",
+                    "result": {
+                      "booking_id": "5431449",
+                      "transaction_id": "59784505",
+                      "booking_status": true,
+                      "booking_history": {}
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Oh dear! Unexpected changes have arisen. Could you please cancel your recent booking as a more urgent matter needs your attention?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "cancel_booking",
+                    "arguments": {
+                      "access_token": "251675",
+                      "booking_id": "5431449"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667395579827187391",
+                    "result": {
+                      "cancel_status": true
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "In light of these new developments, you'd prefer to formally notify your travel agent about the abrupt change in your itinerary. Would you be kind enough to generate a ticket titled 'Urgent Change in Travel Plans’ with a detailed explanation outlining the necessity for these adjustments? Details write 'An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.', priority be level 4"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "create_ticket",
+                    "arguments": {
+                      "title": "Urgent Change in Travel Plans",
+                      "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                      "priority": 4
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667400596348986317",
+                    "result": {
+                      "id": 1001,
+                      "title": "Urgent Change in Travel Plans",
+                      "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                      "status": "Open",
+                      "priority": 4,
+                      "created_by": "John"
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "authenticate_travel",
+                "arguments": {
+                  "client_id": "my_client_id",
+                  "client_secret": "my_client_secret",
+                  "refresh_token": "my_refresh_token",
+                  "grant_type": "read_write",
+                  "user_first_name": "Michael",
+                  "user_last_name": "Thompson"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667430351882415818",
+                "result": {
+                  "expires_in": 2,
+                  "access_token": "251675",
+                  "token_type": "Bearer",
+                  "scope": "read_write"
+                },
+                "error": null
+              },
+              {
+                "name": "get_flight_cost",
+                "arguments": {
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_date": "2026-12-25",
+                  "travel_class": "first"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667421727588087693",
+                "result": {
+                  "travel_cost_list": [
+                    4700.0
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "book_flight",
+                "arguments": {
+                  "access_token": "251675",
+                  "card_id": "credit_9988",
+                  "travel_date": "2026-12-25",
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_class": "first"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667438804378054074",
+                "result": {
+                  "booking_id": "5431449",
+                  "transaction_id": "59784505",
+                  "booking_status": true,
+                  "booking_history": {}
+                },
+                "error": null
+              },
+              {
+                "name": "cancel_booking",
+                "arguments": {
+                  "access_token": "251675",
+                  "booking_id": "5431449"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667395579827187391",
+                "result": {
+                  "cancel_status": true
+                },
+                "error": null
+              },
+              {
+                "name": "create_ticket",
+                "arguments": {
+                  "title": "Urgent Change in Travel Plans",
+                  "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                  "priority": 4
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667400596348986317",
+                "result": {
+                  "id": 1001,
+                  "title": "Urgent Change in Travel Plans",
+                  "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                  "status": "Open",
+                  "priority": 4,
+                  "created_by": "John"
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion"
+            ],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              2
+            ],
+            "n_model_steps": 9,
+            "total_tokens": 62864,
+            "completion_tokens": 778,
+            "elapsed_s": 139.307,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_111",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.7273,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_111",
+          "success": false,
+          "score": 0.7273,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.25,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.5714,
+            "call_recall": 1.0,
+            "call_f1": 0.7273,
+            "n_expected_calls": 4,
+            "n_actual_calls": 7,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "get_symbol_by_name",
+                "actual_arguments": {
+                  "name": "Zeta Corp"
+                }
+              },
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "get_order_history",
+                "actual_arguments": {}
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "get_user_id",
+                "actual_arguments": {
+                  "user": "Jane"
+                }
+              }
+            ],
+            "total_tokens": 61054,
+            "completion_tokens": 498,
+            "elapsed_s": 34.728,
+            "retrieved_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments"
+            ],
+            "tool_injected_skills": [
+              "bfcl_task_checklist"
+            ],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              3,
+              3,
+              2
+            ],
+            "n_model_steps": 11,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "skill_injection_mode": "hybrid",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 30,
+            "available_skill_tool_count": 1
+          },
+          "trace": {
+            "task_id": "multi_turn_base_111",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you add Zeta Corp's stock to your watchlist. First, let me get the stock symbol for Zeta Corp, then add it to your watchlist.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667432138588813462",
+                    "type": "function",
+                    "function": {
+                      "name": "get_symbol_by_name",
+                      "arguments": "{\"name\":\"Zeta Corp\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667432138588813462",
+                "content": "{\"symbol\": \"ZETA\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667389669952192510",
+                    "type": "function",
+                    "function": {
+                      "name": "add_to_watchlist",
+                      "arguments": "{\"stock\":\"ZETA\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667389669952192510",
+                "content": "{\"watchlist\": [\"NVDA\", \"ZETA\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "Great! I've successfully added Zeta Corp's stock to your watchlist. The stock symbol is ZETA, and it's now included in your watchlist along with NVDA. You'll be able to track Zeta Corp's stock activities along with your other watched stocks."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667417363901309021",
+                    "type": "function",
+                    "function": {
+                      "name": "get_order_history",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667417363901309021",
+                "content": "{\"history\": [12345, \"order_type\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667393312084452883",
+                    "type": "function",
+                    "function": {
+                      "name": "get_order_details",
+                      "arguments": "{\"order_id\":12345}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667393312084452883",
+                "content": "{\"symbol\": \"AAPL\", \"price\": 210.65, \"num_shares\": 10, \"status\": \"Completed\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here are the details of your last order:\n\n- **Order ID**: 12345\n- **Stock**: AAPL (Apple)\n- **Price**: $210.65 per share\n- **Number of Shares**: 10\n- **Status**: Completed\n\nYour order for 10 shares of Apple at $210.65 per share has been completed, so the total value of the transaction was $2,106.50. This information should help you with planning your next investment move!"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667405475431840168",
+                    "type": "function",
+                    "function": {
+                      "name": "get_user_id",
+                      "arguments": "{\"user\":\"Jane\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667405475431840168",
+                "content": "{\"user_id\": \"USR002\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667408430369337558",
+                    "type": "function",
+                    "function": {
+                      "name": "send_message",
+                      "arguments": "{\"receiver_id\":\"USR002\",\"message\":\"What are the new stock inclusion and the status of my current order?\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667408430369337558",
+                "content": "{\"sent_status\": true, \"message_id\": {\"new_id\": 67410}, \"message\": \"Message sent to 'USR002' successfully.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've successfully sent your message to Jane. The message \"What are the new stock inclusion and the status of my current order?\" has been delivered to her user ID (USR002) with message ID 67410."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667409495521225463",
+                    "type": "function",
+                    "function": {
+                      "name": "view_messages_sent",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667409495521225463",
+                "content": "{\"messages\": {\"USR001\": [{}], \"USR002\": [{\"USR001\": [\"My name is John. I want to connect.\"], \"USR003\": [\"I am busy\"], \"USR004\": [\"I am on leave\"]}, \"What are the new stock inclusion and the status of my current order?\"], \"USR003\": [{\"USR002\": [\"Could you upload the file?\"]}], \"USR004\": [{\"USR002\": [\"Could you upload the file?\"]}], \"USR005\": [{\"USR001\": [\"Regarding the new stock inclusion and the status of my current order.\"]}]}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here are all the messages you've sent:\n\n**To USR002 (Jane):**\n- \"My name is John. I want to connect.\"\n- \"What are the new stock inclusion and the status of my current order?\" (most recent)\n\n**To USR003:**\n- \"Could you upload the file?\"\n\n**To USR004:**\n- \"Could you upload the file?\"\n\n**To USR005:**\n- \"Regarding the new stock inclusion and the status of my current order.\"\n\nI notice there are also some messages from other users in your conversation history, including someone mentioning they are busy and someone who is on leave. You can review these messages to see if there's any relevant follow-up or advice from your network regarding your stock and order decisions."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I want to keep track of Zeta Corp's stock activities, so it would be helpful to have its stock added to my watchlist."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_symbol_by_name",
+                    "arguments": {
+                      "name": "Zeta Corp"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667432138588813462",
+                    "result": {
+                      "symbol": "ZETA"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "add_to_watchlist",
+                    "arguments": {
+                      "stock": "ZETA"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667389669952192510",
+                    "result": {
+                      "watchlist": [
+                        "NVDA",
+                        "ZETA"
+                      ]
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I've recently placed an order but can't seem to recall the details. It would be useful if you could retrieve the specifics of my last order to aid in planning my next investment move."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_order_history",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667417363901309021",
+                    "result": {
+                      "history": [
+                        12345,
+                        "order_type"
+                      ]
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "get_order_details",
+                    "arguments": {
+                      "order_id": 12345
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667393312084452883",
+                    "result": {
+                      "symbol": "AAPL",
+                      "price": 210.65,
+                      "num_shares": 10,
+                      "status": "Completed"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Considering the latest developments, I (user id USR001) need to quickly communicate with Jane, one of my business partners, regarding the new stock inclusion and the status of my current order. Send the message 'What are the new stock inclusion and the status of my current order?'?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_user_id",
+                    "arguments": {
+                      "user": "Jane"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667405475431840168",
+                    "result": {
+                      "user_id": "USR002"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "send_message",
+                    "arguments": {
+                      "receiver_id": "USR002",
+                      "message": "What are the new stock inclusion and the status of my current order?"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667408430369337558",
+                    "result": {
+                      "sent_status": true,
+                      "message_id": {
+                        "new_id": 67410
+                      },
+                      "message": "Message sent to 'USR002' successfully."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Post sending that message to Jane, I would prefer to review all the messages I've sent, as there might be relevant follow-up or advice from my network concerning the stock and order decisions."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "view_messages_sent",
+                    "arguments": {},
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667409495521225463",
+                    "result": {
+                      "messages": {
+                        "USR001": [
+                          {}
+                        ],
+                        "USR002": [
+                          {
+                            "USR001": [
+                              "My name is John. I want to connect."
+                            ],
+                            "USR003": [
+                              "I am busy"
+                            ],
+                            "USR004": [
+                              "I am on leave"
+                            ]
+                          },
+                          "What are the new stock inclusion and the status of my current order?"
+                        ],
+                        "USR003": [
+                          {
+                            "USR002": [
+                              "Could you upload the file?"
+                            ]
+                          }
+                        ],
+                        "USR004": [
+                          {
+                            "USR002": [
+                              "Could you upload the file?"
+                            ]
+                          }
+                        ],
+                        "USR005": [
+                          {
+                            "USR001": [
+                              "Regarding the new stock inclusion and the status of my current order."
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_symbol_by_name",
+                "arguments": {
+                  "name": "Zeta Corp"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667432138588813462",
+                "result": {
+                  "symbol": "ZETA"
+                },
+                "error": null
+              },
+              {
+                "name": "add_to_watchlist",
+                "arguments": {
+                  "stock": "ZETA"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667389669952192510",
+                "result": {
+                  "watchlist": [
+                    "NVDA",
+                    "ZETA"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "get_order_history",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7667417363901309021",
+                "result": {
+                  "history": [
+                    12345,
+                    "order_type"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "get_order_details",
+                "arguments": {
+                  "order_id": 12345
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667393312084452883",
+                "result": {
+                  "symbol": "AAPL",
+                  "price": 210.65,
+                  "num_shares": 10,
+                  "status": "Completed"
+                },
+                "error": null
+              },
+              {
+                "name": "get_user_id",
+                "arguments": {
+                  "user": "Jane"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667405475431840168",
+                "result": {
+                  "user_id": "USR002"
+                },
+                "error": null
+              },
+              {
+                "name": "send_message",
+                "arguments": {
+                  "receiver_id": "USR002",
+                  "message": "What are the new stock inclusion and the status of my current order?"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667408430369337558",
+                "result": {
+                  "sent_status": true,
+                  "message_id": {
+                    "new_id": 67410
+                  },
+                  "message": "Message sent to 'USR002' successfully."
+                },
+                "error": null
+              },
+              {
+                "name": "view_messages_sent",
+                "arguments": {},
+                "turn_index": 3,
+                "tool_call_id": "call_-7667409495521225463",
+                "result": {
+                  "messages": {
+                    "USR001": [
+                      {}
+                    ],
+                    "USR002": [
+                      {
+                        "USR001": [
+                          "My name is John. I want to connect."
+                        ],
+                        "USR003": [
+                          "I am busy"
+                        ],
+                        "USR004": [
+                          "I am on leave"
+                        ]
+                      },
+                      "What are the new stock inclusion and the status of my current order?"
+                    ],
+                    "USR003": [
+                      {
+                        "USR002": [
+                          "Could you upload the file?"
+                        ]
+                      }
+                    ],
+                    "USR004": [
+                      {
+                        "USR002": [
+                          "Could you upload the file?"
+                        ]
+                      }
+                    ],
+                    "USR005": [
+                      {
+                        "USR001": [
+                          "Regarding the new stock inclusion and the status of my current order."
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments"
+            ],
+            "tool_injected_skills": [
+              "bfcl_task_checklist"
+            ],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              3,
+              3,
+              2
+            ],
+            "n_model_steps": 11,
+            "total_tokens": 61054,
+            "completion_tokens": 498,
+            "elapsed_s": 34.728,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    }
+  ],
+  "model_name": "glm-4.7",
+  "adapter_mode": "official",
+  "execution_backend": "auto",
+  "bfcl_data_source": "bfcl_eval_bundle",
+  "bfcl_prompt_style": "native",
+  "bfcl_tool_api_style": "openai",
+  "top_k_skills": 2,
+  "skill_injection_mode": "hybrid",
+  "max_steps_per_turn": 20,
+  "temperature": null,
+  "bfcl_synthetic_continue": false,
+  "bfcl_explicit_skill_tool": false,
+  "elapsed_s": 174.594
+}

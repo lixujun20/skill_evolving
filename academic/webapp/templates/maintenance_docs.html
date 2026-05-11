@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maintenance Documentation</title>
+<link rel="stylesheet" href="/static/vendor/docsify/vue.css">
+<link rel="stylesheet" href="/static/style.css?v=20260511docsify2">
+</head>
+<body class="maintenance-docs-page docsify-maintenance-page">
+<nav class="docsify-top-nav">
+  <a href="/" class="nav-link">Skill Explorer</a>
+  <a href="/maintenance" class="nav-link">Maintenance Lab</a>
+  <a href="/method-tests" class="nav-link">Method Tests</a>
+  <a href="/maintenance-docs" class="nav-link active">Maintenance Docs</a>
+</nav>
+<div id="app">Loading maintenance documentation...</div>
+
+<script>
+  window.__maintenanceMermaidCounter = 0;
+  function renderMaintenanceMermaid(code) {
+    window.__maintenanceMermaidCounter += 1;
+    const id = "maintenance-mermaid-" + window.__maintenanceMermaidCounter;
+    return '<div class="maintenance-mermaid-wrap"><div id="' + id + '" class="mermaid">' + code + '</div></div>';
+  }
+  window.$docsify = {
+    name: "Skill Repository Maintenance",
+    repo: "",
+    loadSidebar: true,
+    subMaxLevel: 3,
+    auto2top: true,
+    homepage: "README.md",
+    relativePath: true,
+    alias: {
+      "/.*/_sidebar.md": "/maintenance-docs/_sidebar.md"
+    },
+    search: false,
+    copyCode: {
+      buttonText: "Copy",
+      errorText: "Error",
+      successText: "Copied"
+    },
+    markdown: {
+      renderer: {
+        code: function(code, lang) {
+          if (String(lang || "").toLowerCase() === "mermaid") {
+            return renderMaintenanceMermaid(code);
+          }
+          return this.origin.code.apply(this, arguments);
+        }
+      }
+    },
+    plugins: [
+      function(hook) {
+        hook.doneEach(function() {
+          if (!window.mermaid) return;
+          window.mermaid.run({
+            querySelector: ".mermaid"
+          }).catch(function(err) {
+            console.error("Mermaid render failed", err);
+          });
+        });
+      }
+    ]
+  };
+</script>
+<script src="/static/vendor/mermaid/mermaid.min.js"></script>
+<script>
+  window.mermaid && window.mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "loose",
+    theme: "base",
+    themeVariables: {
+      background: "#ffffff",
+      primaryColor: "#eef6ff",
+      primaryTextColor: "#1f2937",
+      primaryBorderColor: "#60a5fa",
+      lineColor: "#64748b",
+      secondaryColor: "#f8fafc",
+      tertiaryColor: "#fff7ed",
+      fontFamily: "Source Sans Pro, Helvetica Neue, Arial, sans-serif"
+    }
+  });
+</script>
+<script src="/static/vendor/docsify/docsify.min.js"></script>
+<script src="/static/vendor/docsify/copy-code.min.js"></script>
+<script src="/static/vendor/docsify/prism-python.min.js"></script>
+<script src="/static/vendor/docsify/prism-bash.min.js"></script>
+<script src="/static/vendor/docsify/prism-json.min.js"></script>
+</body>
+</html>

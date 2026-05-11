@@ -1,0 +1,113 @@
+[
+  {
+    "name": "bfcl_observed_tool_usage_patterns",
+    "kind": "functional_workflow_card",
+    "description": "Observed BFCL tool usage patterns from train rollouts.",
+    "body": "Frequently useful tools in recent BFCL rollouts: book_flight, get_stock_info, send_message, cancel_booking, create_ticket, get_symbol_by_name. When a user asks for a state change, prefer a direct tool call over asking for confirmation.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "task_ids": [
+        "multi_turn_base_101",
+        "multi_turn_base_193"
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_get_stock_info",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed parameter names for get_stock_info.",
+    "body": "For `get_stock_info`, use these observed parameter names when applicable: symbol.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_stock_info"
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_send_message",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed parameter names for send_message.",
+    "body": "For `send_message`, use these observed parameter names when applicable: receiver_id, message.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "send_message"
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_book_flight",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed parameter names for book_flight.",
+    "body": "For `book_flight`, use these observed parameter names when applicable: access_token, card_id, travel_date, travel_from, travel_to, travel_class.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "book_flight"
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_cancel_booking",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed parameter names for cancel_booking.",
+    "body": "For `cancel_booking`, use these observed parameter names when applicable: access_token, booking_id.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cancel_booking"
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_create_ticket",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed parameter names for create_ticket.",
+    "body": "For `create_ticket`, use these observed parameter names when applicable: title, description, priority.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "create_ticket"
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_get_symbol_by_name",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed parameter names for get_symbol_by_name.",
+    "body": "For `get_symbol_by_name`, use these observed parameter names when applicable: name.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_symbol_by_name"
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_observed_error_feedback",
+    "kind": "debug_feedback_card",
+    "description": "Observed BFCL failure modes from train rollouts.",
+    "body": "Recent train rollouts showed error types: missing_call=6, argument_mismatch=2, extra_call=2. Parameter-level issues: access_token=2, booking_id=1. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "error_counts": {
+        "missing_call": 6,
+        "argument_mismatch": 2,
+        "extra_call": 2
+      }
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  }
+]

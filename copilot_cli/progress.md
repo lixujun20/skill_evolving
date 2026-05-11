@@ -241,6 +241,139 @@ Target: <$0.30/test. With current caching enabled on Claude Sonnet 4.6:
 
 ---
 
+## BFCL GLM 对齐与 skill 注入诊断 (in progress)
+
+### 目标
+- 解释为什么 GLM 在 BFCL 上早期看起来“不会用额外 skill”
+- 将 `academic` 的 BFCL 路径对齐到官方 `bfcl_eval` GLM FC 行为
+- 找到一种不会伤 baseline 的 BFCL skill format / injection 策略
+
+### 已完成
+- 核对官方 `bfcl_eval`：
+  - `GLMAPIHandler` 走标准 OpenAI-compatible `chat.completions.create(messages, tools)`
+  - 官方 API handler 没有额外的 skill-tool 协议
+- 核对同期工作 `SkillX`：
+  - BFCL 公开实现不是把 skill 暴露成额外 callable tools
+  - 而是 tool-filtered retrieval + prompt injection
+- 修改 `academic/benchmarks/bfcl.py`
+  - 新增 `openai_direct` 路径
+  - 对 `bigmodel` / `open.bigmodel.cn` 默认走直连 OpenAI-compatible FC 请求
+  - 避开通用 `ask_tool()` 中的额外包装
+- 修改 `academic/benchmarks/bfcl.py`
+  - BFCL retrieval / injection 从“整题级”改为“turn 级”
+  - `prompt_only` 每个 user turn 单独检索和注入 informational skills
+  - 混合域多轮 case 不再被前一轮 skill 污染
+- 修改 `academic/benchmarks/artifacts.py`
+  - `retrieve()` 支持 predicate 过滤
+- 修改 BFCL skill retrieval / injection
+  - 先按 task domain (`involved_classes`) 过滤
+  - `prompt_only` 只注入 `informational` skill
+  - 不再默认注入 `workflow` / `checklist`
+- 修改 `academic/benchmarks/bfcl_skills.py`
+  - 删除会稳定伤害 baseline 的默认 handwritten info skills
+  - 当前默认只保留更保守的 Ticket/Travel 参数与文本规则
+  - auto-evolve 提取也改成只产出保守的参数规则卡 / error-feedback 卡
+
+### 已验证结果
+
+5 题同一 offset 对照：
+
+- `glm47_official_realign_none`
+  - `official_valid_rate = 1.0`
+  - `avg_score = 0.7185`
+- 旧 `glm47_official_realign_prompt`
+  - `official_valid_rate = 0.8`
+  - `avg_score = 0.6828`
+  - 说明泛化 checklist/workflow 注入会伤 baseline
+- 新 `glm47_official_realign_prompt_infoonly`
+  - `official_valid_rate = 1.0`
+  - `avg_score = 0.7569`
+  - 说明 GLM 可以使用精确、低扰动、domain-specific informational skill
+
+关键 case 诊断：
+
+- `multi_turn_base_11`
+  - 整题级 skill 注入会把文件系统提示泄漏到 Twitter turn
+  - turn 级注入修复了跨轮污染
+  - 但 `bfcl_file_system_navigation` 这类规则本身仍会诱导额外 `pwd` / `posting_get_login_status`
+  - 最终从默认 prompt skill 集移除
+- `multi_turn_base_67`
+  - `bfcl_vehicle_minimal_actions` 会诱导额外或错误顺序的 Vehicle 操作
+  - 从默认 prompt skill 集移除后，`prompt_only` 与 `none` 基本拉平
+
+temperature=0 定点 A/B：
+
+- 结果文件：
+  - `academic/results/bfcl_task11_67_temp0_ablation.json`
+  - `academic/results/bfcl_task11_67_temp0_ablation_finalskills.json`
+- 结论：
+  - 移除 `bfcl_file_system_navigation` 与 `bfcl_vehicle_minimal_actions` 后
+  - `prompt_only` 在 `multi_turn_base_11 / 67` 上不再额外伤害 baseline
+
+同 split 3-case 保守版对照：
+
+- 结果文件：
+  - `academic/results/bfcl_v3_glm47_turnskill_smoke_none_fairsplit.json`
+  - `academic/results/bfcl_v3_glm47_turnskill_smoke_prompt_fairsplit.json`
+  - `academic/results/bfcl_v3_glm47_turnskill_evolve_smoke.json`
+- test 子集：`multi_turn_base_134`, `multi_turn_base_178`, `multi_turn_base_120`
+- `none`
+  - `official_valid_rate = 0.6667`
+  - `avg_score = 0.7795`
+  - `avg_total_tokens = 58408.0`
+- 保守版 `prompt_only`
+  - `official_valid_rate = 0.6667`
+  - `avg_score = 0.8091`
+  - `avg_total_tokens = 56448.0`
+  - 在这 3 个 case 上优于 `none`
+- `auto-evolve`
+  - `official_valid_rate = 0.6667`
+  - `avg_score = 0.7612`
+  - `avg_total_tokens = 60295.0`
+  - 当前 auto-extracted skills 还没有超过保守 handwritten prompt-only
+
+### 当前结论
+- 之前的问题不是 “GLM 根本不会用 skill”
+- 真正的问题是：
+  - BFCL 协议实现不够贴近官方
+  - skill 注入过于泛化，反而诱导额外调用
+  - 多轮混合域任务必须按 turn 注入 skill，不能整题级拼接
+- 当前最有效的 BFCL skill 形式：
+  - domain-specific
+  - atomic
+  - informational
+  - 低扰动
+- 当前最稳的默认策略：
+  - `openai_direct` 官方对齐
+  - turn-level `prompt_only`
+  - 只保留极少数 Ticket/Travel 参数规则卡
+- 当前 auto-evolve 还没有见到增益
+  - 但 prompt skill 侧的外围问题已经基本排干净
+  - 下一步应继续优化 auto-extracted skill 的质量，而不是回到“GLM 不会用 skill”的假设
+
+### 当前进行中
+- 在更大 BFCL 子集上继续跑：
+  - `none`
+  - 保守 handwritten `prompt_only`
+  - auto-evolve `prompt_only`
+- 优先调 auto-evolve skill 质量：
+  - 保持 tool-specific / parameter-specific
+  - 避免泛化 workflow / lint 文案
+- 已新增 BFCL 工程辅助：
+  - `academic/benchmarks/bfcl_experiment_suite.py`
+    - 固定 official-aligned GLM / Claude baseline 与 evolve 命令
+  - `academic/benchmarks/compare_bfcl_results.py`
+    - 对比两份 BFCL 结果的 aggregate / case / skill delta
+  - 汇总指标新增：
+    - `official_avg_at_k`
+    - `official_pass_at_k`
+  - evolve 输出新增：
+    - `skills`
+    - `skill_impact_summary`
+    - 用于追踪每个 skill 的来源 task、test 检索/注入次数与命中 case
+
+---
+
 ## Academic / One-shot Reintroduction & Skill Reuse Stats (in progress)
 
 ### Latest plan
@@ -411,47 +544,69 @@ Scenario C: two consecutive gardener runs assert ≥3 DB skill versions and fina
 - `python -m pytest -q academic/benchmarks/test_benchmark_adapters.py`
   - `3 passed`
 
-### Current smoke results
+### Current BFCL sanity results updated on 2026-04-29
 
-- GLM-4.7, bundle data, official class tools, native prompt, 1 held-out case:
-  - official valid: `0/1`
-  - call F1: about `0.36`
-  - tokens: about `68k`
-- Claude default, bundle data, official class tools, native prompt, 1 held-out case:
-  - official valid: `0/1`
-  - call F1: about `0.55`
-  - tokens: about `79k`
-- GLM-4.7, path-filtered + academic prompt, 5 held-out cases:
-  - official valid: `0/5`
-  - avg call F1: `0.50`
-  - avg tokens/run: about `15k`
-- GLM-4.7, handwritten skills + native prompt, 1 held-out case:
-  - official valid: `0/1`
-  - call F1: `0.50`
-  - skills are retrieved/injected, but no strict success
-- GLM-4.7, evolve smoke with 1 train + 1 test:
-  - train call F1: about `0.59`
-  - test call F1: about `0.55`
-  - test official valid: `0/1`
+- GLM-4.7 / GLM-5 / GLM-4.5-air, bundle data, official class tools, native prompt, simple `multi_turn_base_101`:
+  - all three reached official valid `1/1`
+  - call F1 `1.0`
+  - conclusion: GLM native function calling works on BFCL; the blocker is not complete tool-call inability.
+- GLM-4.7, bundle data, official class tools, native prompt, first 10 shuffled cases, per-task timeout 180s:
+  - official_valid_rate `0.6667` over non-null official checks
+  - one timeout: `multi_turn_base_187`
+  - avg call F1 `0.6396`
+  - avg tokens about `60k`
+  - dominant call-error type: extra calls
+- Claude default via native Anthropic `tool_use/tool_result`, 5-case subset from `multi_turn_base_101`:
+  - official_valid_rate `0.8`
+  - avg call F1 `0.8358`
+  - avg tokens about `56k`
+  - adapter bug fixed: Anthropic message normalization must deep-copy content blocks to avoid duplicated `tool_result`.
+- SiliconFlow quick probes:
+  - minimal one-tool probe: Qwen3-32B, Qwen3.5-35B, SiliconFlow GLM-4.7 all produced tool calls; Kimi timed out in current endpoint.
+  - Qwen3-32B path-filtered BFCL simple case: official valid `0/1`, call F1 `0.8`, about 60s.
+- GLM-4.7 + handwritten BFCL skill notes:
+  - first 5 shuffled cases, top-2 retrieved skills: official_valid_rate `0.6`, avg call F1 `0.7366`, avg tokens about `55k`.
+  - no clear gain over baseline; skill notes changed behavior in hard cases but did not fix strict official validity.
+- GLM-4.7 offset/debug runs for peripheral diagnosis:
+  - official baseline with first 3 held-out tasks: official_valid_rate `0.5` over non-timeout checks; `multi_turn_base_66` timed out.
+  - official evolve with first 2 train tasks: both train tasks timed out; no skills were generated; test subset still reached official_valid_rate `1.0`.
+  - path-filtered baseline on test-offset 3, n-test 3: no timeout, official_valid_rate `0.3333`, avg call F1 `0.7919`.
+  - path-filtered evolve with train-offset 2/test-offset 3: train official_valid_rate `0.0`, extracted 8 skill cards from failed traces, test official_valid_rate `0.5` over non-timeout checks; no reliable gain.
 
 ### Key findings
 
 - HF `BFCL_v3` data and current `bfcl-eval` bundle differ on some cases/docs. Example: `multi_turn_base_187` in HF v3 hides the concrete booking id, while bundle v4 exposes `insurance_12345` and adds `get_booking_history`.
-- Current BFCL failures are mostly parameter-exactness failures, not total tool-call absence:
+- Current BFCL failures are mostly strict state/parameter/action-set failures, not total tool-call absence:
   - `contact_customer_support.message` is expanded instead of preserving concise expected text.
   - `create_ticket.description` is expanded.
   - `high-priority` is mapped to `priority=5` while golden answer uses `priority=4`.
   - optional `insurance_id` may be passed where golden uses only `booking_id`.
-- SiliconFlow Qwen/Kimi/GLM probes with BFCL tool schemas were too slow for quick debugging in the current endpoint setup.
+- First-10 GLM-4.7 baseline shows many extra calls; official checker can still pass some extra-call cases if final state matches, so `official_valid` is the primary metric and `call_f1` is diagnostic.
+- Tool space is a real environmental factor: `path_filtered` reduced timeout relative to full official class tools on the same task band, but it did not solve strict validity.
+- The current old evolve/extraction loop can extract skill cards from failed traces; those cards are not reliable enough for BFCL yet and may add latency or behavioral bias.
+- SiliconFlow Qwen/Kimi/GLM with BFCL long tool schemas remains slow; minimal tool-call probes confirm API-level tool calling works.
 - Direct official `bfcl-eval` GLM handler import currently hits `tree_sitter` dependency/API incompatibility in the shared Python 3.13 environment; should be retried in an isolated pinned environment.
 
-### Current blocker
+### Implementation changes in this round
 
-BFCL baseline has not reached SkillX-style reported GLM-4.6 No Memory level. Evolve has not shown reliable BFCL gain. The immediate blocker is baseline/model/tool-call alignment, not skill extraction mechanics.
+- Added provider protocol selection:
+  - `--bfcl-tool-api-style auto|openai|openai_stream|anthropic_direct`
+  - `auto` maps Claude to Anthropic native tools and Qwen-like models to streaming OpenAI-compatible path.
+- Added `anthropic>=0.45.0` dependency.
+- Added direct Anthropic tool-call implementation with correct `tool_use/tool_result` history.
+- Added streaming OpenAI-compatible tool-call implementation for Qwen/SiliconFlow probes.
+- Added `--top-k-skills` to control skill-note prompt cost.
+- Added `--partial-output` and `--max-task-seconds` to make long BFCL runs observable and interrupt-safe.
+- Added `--train-offset` and `--test-offset` to select deterministic sub-bands of the shuffled split without editing data files.
+- Evolve now propagates partial-output and per-task timeout into both train and test phases, writing phase-specific partial files.
+- Verified:
+  - `python -m py_compile academic/benchmarks/bfcl.py academic/benchmarks/run.py academic/benchmarks/bfcl_skills.py`
+  - `python -m pytest -q academic/benchmarks/test_benchmark_adapters.py`
 
 ### Next recommended steps
 
-- Build an isolated Python environment for `bfcl-eval` official handler and run the same `multi_turn_base_187` case directly through GLM/Qwen/Kimi handlers.
-- If official handler gives much higher scores, patch our wrapper to match its provider-specific message/tool-result formatting.
-- If official handler also fails similarly, switch model or choose a BFCL subcategory/subset where the selected model reaches a reasonable no-memory baseline before testing evolve.
-- Only after baseline is credible, run 50 train / 150 test with `n_runs=4` and compare baseline vs evolve.
+- Use first-10 GLM-4.7 baseline as a bounded diagnostic set, not as final paper result.
+- Before larger evolve, compress skill notes and make retrieval more selective; full official tools + skills currently increases latency and has no clear gain.
+- Treat the current phase as peripheral debugging, not algorithm innovation: environment, model schema, and skill format must be controlled before interpreting evolve results.
+- Build an isolated Python environment for `bfcl-eval` official handler to compare official GLM/Qwen/Kimi handler behavior against this runner.
+- Select a no-timeout, non-saturated BFCL subset for baseline vs evolve; do not expand to 50/150 until cost and timeout behavior are controlled.

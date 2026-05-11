@@ -1,0 +1,2457 @@
+[
+  {
+    "name": "bfcl_params_cd",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for cd.",
+    "body": "For `cd`, prefer these observed schema parameter names when applicable: folder.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cd",
+      "allowed_tools": [
+        "cd"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "change",
+        "working",
+        "directory",
+        "to",
+        "specified",
+        "folder",
+        "cd"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder. Response schema: {\"type\": \"dict\", \"properties\": {\"current_working_directory\": {\"type\": \"string\", \"description\": \"The new current working directory path.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_12",
+        "multi_turn_base_13",
+        "multi_turn_base_3",
+        "multi_turn_base_36",
+        "multi_turn_base_37",
+        "multi_turn_base_44",
+        "multi_turn_base_5"
+      ],
+      "source_tool_count": 15,
+      "source_param_counts": {
+        "folder": 15
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_13",
+          "turn_index": 0,
+          "arguments": {
+            "folder": "documents"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 0,
+          "arguments": {
+            "folder": "documents"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_3",
+          "turn_index": 1,
+          "arguments": {
+            "folder": "projects"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_complete_call_cd",
+    "kind": "planning_card",
+    "description": "Do not stop before completing the `cd` call when it is needed.",
+    "body": "Train failures often ended the turn before issuing `cd`. If the current user turn implies this operation, continue calling tools until this action is actually completed before ending the turn. Common required arguments for `cd` include: folder.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cd",
+      "allowed_tools": [
+        "cd"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "workflow",
+      "intent_keywords": [
+        "change",
+        "working",
+        "directory",
+        "to",
+        "specified",
+        "folder",
+        "cd"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder. Response schema: {\"type\": \"dict\", \"properties\": {\"current_working_directory\": {\"type\": \"string\", \"description\": \"The new current working directory path.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_45"
+      ],
+      "source_missing_call_count": 2,
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_45",
+          "turn_index": 1,
+          "expected_arguments": {
+            "folder": "ResearchDocs"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_10",
+          "turn_index": 0,
+          "expected_arguments": {
+            "folder": "workspace"
+          }
+        }
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_startEngine",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for startEngine.",
+    "body": "For `startEngine`, prefer these observed schema parameter names when applicable: ignitionMode.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "startEngine",
+      "allowed_tools": [
+        "startEngine"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "starts",
+        "engine",
+        "of",
+        "vehicle",
+        "start",
+        "ignitionmode"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Starts the engine of the vehicle. Response schema: {\"type\": \"dict\", \"properties\": {\"engineState\": {\"type\": \"string\", \"description\": \"The state of the engine. [Enum]: [\\\"running\\\", \\\"stopped\\\"]\"}, \"fuelLevel\": {\"type\": \"float\", \"description\": \"The fuel level of the vehicle in gallons.\"}, \"batteryVoltage\": {\"type\": \"float\", \"description\": \"The battery voltage of the vehicle in volts.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_52",
+        "multi_turn_base_60",
+        "multi_turn_base_69",
+        "multi_turn_base_76"
+      ],
+      "source_tool_count": 14,
+      "source_param_counts": {
+        "ignitionMode": 14
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_76",
+          "turn_index": 0,
+          "arguments": {
+            "ignitionMode": "START"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_76",
+          "turn_index": 0,
+          "arguments": {
+            "ignitionMode": "START"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_76",
+          "turn_index": 0,
+          "arguments": {
+            "ignitionMode": "START"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_create_ticket",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for create_ticket.",
+    "body": "For `create_ticket`, prefer these observed schema parameter names when applicable: title, priority, description.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "create_ticket",
+      "allowed_tools": [
+        "create_ticket"
+      ],
+      "domains": [
+        "TicketAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "ticket",
+        "support",
+        "issue",
+        "help",
+        "priority",
+        "in",
+        "queue",
+        "it",
+        "create",
+        "description",
+        "title"
+      ],
+      "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Create a ticket in the system and queue it. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"Unique identifier of the ticket.\"}, \"title\": {\"type\": \"string\", \"description\": \"Title of the ticket.\"}, \"description\": {\"type\": \"string\", \"description\": \"Description of the ticket.\"}, \"status\": {\"type\": \"string\", \"description\": \"Current status of the ticket.\"}, \"priority\": {\"type\": \"integer\", \"description\": \"Priority level of the ticket.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_193",
+        "multi_turn_base_60"
+      ],
+      "source_tool_count": 2,
+      "source_param_counts": {
+        "title": 2,
+        "description": 1,
+        "priority": 2
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_193",
+          "turn_index": 3,
+          "arguments": {
+            "title": "Urgent Change in Travel Plans",
+            "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+            "priority": 4
+          }
+        },
+        {
+          "task_id": "multi_turn_base_60",
+          "turn_index": 2,
+          "arguments": {
+            "title": "Tire Pressure Issue",
+            "priority": 5
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_literal_text_create_ticket",
+    "kind": "literal_text_rule_card",
+    "description": "Keep `create_ticket` text arguments literal and concise.",
+    "body": "For `create_ticket`, keep text fields `description` close to the user-provided wording. Do not add explanations, politeness, extra facts, or paraphrases unless the user explicitly asks for them.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "create_ticket",
+      "allowed_tools": [
+        "create_ticket"
+      ],
+      "domains": [
+        "TicketAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "ticket",
+        "support",
+        "issue",
+        "help",
+        "priority",
+        "in",
+        "queue",
+        "it",
+        "create",
+        "description",
+        "title"
+      ],
+      "tool_description": "This tool belongs to the ticketing system that is part of a company, which allows users to create, view, and manage support business tickets. Tool description: Create a ticket in the system and queue it. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"Unique identifier of the ticket.\"}, \"title\": {\"type\": \"string\", \"description\": \"Title of the ticket.\"}, \"description\": {\"type\": \"string\", \"description\": \"Description of the ticket.\"}, \"status\": {\"type\": \"string\", \"description\": \"Current status of the ticket.\"}, \"priority\": {\"type\": \"integer\", \"description\": \"Priority level of the ticket.\"}}}",
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_187",
+          "field": "description",
+          "expected": "Feedback from customer support was unsatisfactory regarding discrepancies in travel costs.",
+          "actual": "I contacted customer support regarding discrepancies in my travel-related costs for booking ID insurance_12345. The customer support response was less than satisfactory. I had purchased comprehensive travel insurance for $1,500 using credit card card_4893, but when I retrieved my invoice, it showed a travel cost of $9,500.00, which doesn't match my expectations. There appears to be an error in how my trip expenses are being recorded or displayed. The customer support acknowledgment stated: \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This generic response does not address the specific financial discrepancy I'm experiencing."
+        },
+        {
+          "task_id": "multi_turn_base_110",
+          "field": "description",
+          "expected": "There is an issue with a recent transaction involving a canceled buy order for 100 shares of AAPL and I am requesting confirmation of the cancellation along with an account summary.",
+          "actual": "There is an issue with a recent transaction involving a canceled buy order for 100 shares of AAPL and I am requesting confirmation of the cancellation along with an account summary. My username is user123 and password is 12345 for the ticket login."
+        }
+      ],
+      "source_task_ids": [
+        "multi_turn_base_110",
+        "multi_turn_base_187"
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_echo",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for echo.",
+    "body": "For `echo`, prefer these observed schema parameter names when applicable: content, file_name.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "echo",
+      "allowed_tools": [
+        "echo"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "write",
+        "content",
+        "to",
+        "file",
+        "at",
+        "directory",
+        "or",
+        "display",
+        "it",
+        "in",
+        "echo",
+        "file_name"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Write content to a file at current directory or display it in the terminal. Response schema: {\"type\": \"dict\", \"properties\": {\"terminal_output\": {\"type\": \"string\", \"description\": \"The content if no file name is provided, or None if written to file.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_12",
+        "multi_turn_base_32",
+        "multi_turn_base_37",
+        "multi_turn_base_42",
+        "multi_turn_base_44",
+        "multi_turn_base_5"
+      ],
+      "source_tool_count": 8,
+      "source_param_counts": {
+        "content": 8,
+        "file_name": 7
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 0,
+          "arguments": {
+            "content": "Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000",
+            "file_name": "annual_report.txt"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 2,
+          "arguments": {
+            "content": "6500",
+            "file_name": "MeanRevenue.txt"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 2,
+          "arguments": {
+            "content": "6500",
+            "file_name": "MeanRevenue.txt"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_literal_text_echo",
+    "kind": "literal_text_rule_card",
+    "description": "Keep `echo` text arguments literal and concise.",
+    "body": "For `echo`, keep text fields `content` close to the user-provided wording. Do not add explanations, politeness, extra facts, or paraphrases unless the user explicitly asks for them.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "echo",
+      "allowed_tools": [
+        "echo"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "write",
+        "content",
+        "to",
+        "file",
+        "at",
+        "directory",
+        "or",
+        "display",
+        "it",
+        "in",
+        "echo",
+        "file_name"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Write content to a file at current directory or display it in the terminal. Response schema: {\"type\": \"dict\", \"properties\": {\"terminal_output\": {\"type\": \"string\", \"description\": \"The content if no file name is provided, or None if written to file.\"}}}",
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_2",
+          "field": "content",
+          "expected": "Collaboration leads to success. Innovation ignites growth.",
+          "actual": "\nSimona's Insights:\n- Collaboration leads to success. Innovation ignites growth."
+        },
+        {
+          "task_id": "multi_turn_base_15",
+          "field": "content",
+          "expected": "Student | Math | Computer Science\nAlice | 5 | 9\nBob | 10 | 7",
+          "actual": "Student,Math,Computer Science\nAlice,5,9\nBob,10,7"
+        }
+      ],
+      "source_task_ids": [
+        "multi_turn_base_15",
+        "multi_turn_base_2"
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_contact_customer_support",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for contact_customer_support.",
+    "body": "For `contact_customer_support`, prefer these observed schema parameter names when applicable: booking_id, message.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "contact_customer_support",
+      "allowed_tools": [
+        "contact_customer_support"
+      ],
+      "domains": [
+        "TravelAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "support",
+        "assist",
+        "help",
+        "issue",
+        "contact",
+        "travel",
+        "booking",
+        "customer",
+        "immediate",
+        "on",
+        "an",
+        "online"
+      ],
+      "tool_description": "This tool belongs to the travel system, which allows users to book flights, manage credit cards, and view budget information. Tool description: Contact travel booking customer support, get immediate support on an issue with an online call. Response schema: {\"type\": \"dict\", \"properties\": {\"customer_support_message\": {\"type\": \"string\", \"description\": \"The message from customer support\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_170",
+        "multi_turn_base_186"
+      ],
+      "source_tool_count": 2,
+      "source_param_counts": {
+        "booking_id": 2,
+        "message": 2
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_170",
+          "turn_index": 2,
+          "arguments": {
+            "booking_id": "3426812",
+            "message": "I'm contacting customer support regarding my confirmed booking (ID: 3426812) for my flight from San Francisco to Los Angeles on November 15, 2026. I need assistance with my itinerary."
+          }
+        },
+        {
+          "task_id": "multi_turn_base_186",
+          "turn_index": 3,
+          "arguments": {
+            "booking_id": "3426812",
+            "message": "High-ranking government official requiring immediate assistance with booking ID 3426812. Previously reached out to support without receiving any feedback. Requesting priority attention to ensure smooth facilitation of travel arrangements for official business. Please address the outstanding issues with this first-class booking from RMS to JFK on December 15, 2026, to prevent any disruption to official travel plans. Immediate response required due to the sensitive nature of this government travel."
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_literal_text_contact_customer_support",
+    "kind": "literal_text_rule_card",
+    "description": "Keep `contact_customer_support` text arguments literal and concise.",
+    "body": "For `contact_customer_support`, keep text fields `message` close to the user-provided wording. Do not add explanations, politeness, extra facts, or paraphrases unless the user explicitly asks for them.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "contact_customer_support",
+      "allowed_tools": [
+        "contact_customer_support"
+      ],
+      "domains": [
+        "TravelAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "support",
+        "assist",
+        "help",
+        "issue",
+        "contact",
+        "travel",
+        "booking",
+        "customer",
+        "immediate",
+        "on",
+        "an",
+        "online"
+      ],
+      "tool_description": "This tool belongs to the travel system, which allows users to book flights, manage credit cards, and view budget information. Tool description: Contact travel booking customer support, get immediate support on an issue with an online call. Response schema: {\"type\": \"dict\", \"properties\": {\"customer_support_message\": {\"type\": \"string\", \"description\": \"The message from customer support\"}}}",
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_187",
+          "field": "message",
+          "expected": "There are discrepancies in my travel-related costs. Please assist.",
+          "actual": "I am writing to report discrepancies in my travel-related costs for booking ID insurance_12345. I recently purchased comprehensive travel insurance for $1,500 using my credit card (card_4893), but when I retrieved my invoice, it shows a travel cost of $9,500.00, which doesn't match my expectations. There appears to be an error in how my trip expenses are being recorded or displayed. Could you please investigate this discrepancy and provide clarification on the correct breakdown of costs for this booking? Thank you for your assistance in resolving this matter."
+        },
+        {
+          "task_id": "multi_turn_base_170",
+          "field": "message",
+          "expected": "Please assist with my confirmed booking.",
+          "actual": "I'm contacting customer support regarding my confirmed booking (ID: 3426812) for my flight from San Francisco to Los Angeles on November 15, 2026. I need assistance with my itinerary."
+        },
+        {
+          "task_id": "multi_turn_base_186",
+          "field": "message",
+          "expected": "No feedback yet on my inquiry regarding my flight arrangements. Please expedite the process.",
+          "actual": "High-ranking government official requiring immediate assistance with booking ID 3426812. Previously reached out to support without receiving any feedback. Requesting priority attention to ensure smooth facilitation of travel arrangements for official business. Please address the outstanding issues with this first-class booking from RMS to JFK on December 15, 2026, to prevent any disruption to official travel plans. Immediate response required due to the sensitive nature of this government travel."
+        }
+      ],
+      "source_task_ids": [
+        "multi_turn_base_170",
+        "multi_turn_base_186",
+        "multi_turn_base_187"
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_find",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for find.",
+    "body": "For `find`, prefer these observed schema parameter names when applicable: name, path.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "find",
+      "allowed_tools": [
+        "find"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "find",
+        "any",
+        "file",
+        "or",
+        "directories",
+        "under",
+        "specific",
+        "path",
+        "contain",
+        "name"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Find any file or directories under specific path that contain name in its file name.  This method searches for files of any extension and directories within a specified path that match the given name. If no name is provided, it returns all files and directories in the specified path and its subdirectories. Note: This method performs a recursive search through all subdirectories of the given path. Response schema: {\"type\": \"dict\", \"properties\": {\"matches\": {\"type\": \"array\", \"description\": \"A list of matching file and directory paths relative to the given path.\", \"items\": {\"type\": \"string\"}}}}",
+      "source_task_ids": [
+        "multi_turn_base_3",
+        "multi_turn_base_37",
+        "multi_turn_base_44",
+        "multi_turn_base_47",
+        "multi_turn_base_5"
+      ],
+      "source_tool_count": 5,
+      "source_param_counts": {
+        "name": 5,
+        "path": 1
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 0,
+          "arguments": {
+            "name": "annual_report.txt"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_3",
+          "turn_index": 0,
+          "arguments": {
+            "name": "test",
+            "path": "."
+          }
+        },
+        {
+          "task_id": "multi_turn_base_47",
+          "turn_index": 0,
+          "arguments": {
+            "name": "student"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_literal_value_purchase_insurance",
+    "kind": "literal_value_rule_card",
+    "description": "Preserve explicit user-provided values for `purchase_insurance`.",
+    "body": "For `purchase_insurance`, keep fields `insurance_type` aligned with the explicit value provided by the user or prior tool result. Avoid silent normalization, substitution, or paraphrase unless the schema or environment requires it.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "purchase_insurance",
+      "allowed_tools": [
+        "purchase_insurance"
+      ],
+      "domains": [
+        "TravelAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "insurance",
+        "coverage",
+        "purchase",
+        "access_token",
+        "booking_id",
+        "card_id",
+        "insurance_cost",
+        "insurance_type"
+      ],
+      "tool_description": "This tool belongs to the travel system, which allows users to book flights, manage credit cards, and view budget information. Tool description: Purchase insurance Response schema: {\"type\": \"dict\", \"properties\": {\"insurance_id\": {\"type\": \"string\", \"description\": \"The ID of the insurance\"}, \"insurance_status\": {\"type\": \"boolean\", \"description\": \"The status of the insurance purchase, True if successful, False if failed\"}}}",
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_187",
+          "field": "insurance_type",
+          "expected": "comprehensive",
+          "actual": "comprehensive travel insurance"
+        },
+        {
+          "task_id": "multi_turn_base_194",
+          "field": "insurance_type",
+          "expected": "comprehensive",
+          "actual": "comprehensive travel insurance"
+        },
+        {
+          "task_id": "multi_turn_base_171",
+          "field": "insurance_type",
+          "expected": "comprehensive",
+          "actual": "travel"
+        }
+      ],
+      "source_task_ids": [
+        "multi_turn_base_171",
+        "multi_turn_base_187",
+        "multi_turn_base_194"
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_get_nearest_airport_by_city",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for get_nearest_airport_by_city.",
+    "body": "For `get_nearest_airport_by_city`, prefer these observed schema parameter names when applicable: location.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_nearest_airport_by_city",
+      "allowed_tools": [
+        "get_nearest_airport_by_city"
+      ],
+      "domains": [
+        "TravelAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "nearest",
+        "airport",
+        "to",
+        "location",
+        "by",
+        "city"
+      ],
+      "tool_description": "This tool belongs to the travel system, which allows users to book flights, manage credit cards, and view budget information. Tool description: Get the nearest airport to the given location Response schema: {\"type\": \"dict\", \"properties\": {\"nearest_airport\": {\"type\": \"string\", \"description\": \"The nearest airport to the given location\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_153",
+        "multi_turn_base_167",
+        "multi_turn_base_170",
+        "multi_turn_base_186",
+        "multi_turn_base_195"
+      ],
+      "source_tool_count": 8,
+      "source_param_counts": {
+        "location": 8
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_170",
+          "turn_index": 0,
+          "arguments": {
+            "location": "San Francisco"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_170",
+          "turn_index": 0,
+          "arguments": {
+            "location": "Los Angeles"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_167",
+          "turn_index": 0,
+          "arguments": {
+            "location": "Rivermist"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_cat",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for cat.",
+    "body": "For `cat`, prefer these observed schema parameter names when applicable: file_name.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cat",
+      "allowed_tools": [
+        "cat"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "display",
+        "contents",
+        "of",
+        "file",
+        "any",
+        "extension",
+        "currrent",
+        "directory",
+        "cat",
+        "file_name"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory. Response schema: {\"type\": \"dict\", \"properties\": {\"file_content\": {\"type\": \"string\", \"description\": \"The content of the file.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_12",
+        "multi_turn_base_32",
+        "multi_turn_base_36",
+        "multi_turn_base_42",
+        "multi_turn_base_44",
+        "multi_turn_base_47",
+        "multi_turn_base_5"
+      ],
+      "source_tool_count": 8,
+      "source_param_counts": {
+        "file_name": 8
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 0,
+          "arguments": {
+            "file_name": "annual_report.txt"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 2,
+          "arguments": {
+            "file_name": "MeanRevenue.txt"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_42",
+          "turn_index": 1,
+          "arguments": {
+            "file_name": "Notes2023.txt"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_mv",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for mv.",
+    "body": "For `mv`, prefer these observed schema parameter names when applicable: source, destination.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "mv",
+      "allowed_tools": [
+        "mv"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "move",
+        "file",
+        "or",
+        "directory",
+        "one",
+        "location",
+        "to",
+        "another",
+        "mv",
+        "destination",
+        "source"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_36",
+        "multi_turn_base_5"
+      ],
+      "source_tool_count": 2,
+      "source_param_counts": {
+        "source": 2,
+        "destination": 2
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_5",
+          "turn_index": 0,
+          "arguments": {
+            "source": "analysis_report.csv",
+            "destination": "archive"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_36",
+          "turn_index": 1,
+          "arguments": {
+            "source": "project_summary.txt",
+            "destination": "summary_2024.txt"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_literal_value_mv",
+    "kind": "literal_value_rule_card",
+    "description": "Preserve explicit user-provided values for `mv`.",
+    "body": "For `mv`, keep fields `destination` aligned with the explicit value provided by the user or prior tool result. Avoid silent normalization, substitution, or paraphrase unless the schema or environment requires it.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "mv",
+      "allowed_tools": [
+        "mv"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "move",
+        "file",
+        "or",
+        "directory",
+        "one",
+        "location",
+        "to",
+        "another",
+        "mv",
+        "destination",
+        "source"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Move a file or directory from one location to another. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the move operation.\"}}}",
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_10",
+          "field": "destination",
+          "expected": "Projects",
+          "actual": "../Projects/final_proposal_2024"
+        },
+        {
+          "task_id": "multi_turn_base_10",
+          "field": "destination",
+          "expected": "final_proposal_2024",
+          "actual": "../Projects"
+        }
+      ],
+      "source_task_ids": [
+        "multi_turn_base_10"
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_pressBrakePedal",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for pressBrakePedal.",
+    "body": "For `pressBrakePedal`, prefer these observed schema parameter names when applicable: pedalPosition.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "pressBrakePedal",
+      "allowed_tools": [
+        "pressBrakePedal"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "presses",
+        "brake",
+        "pedal",
+        "on",
+        "position",
+        "be",
+        "kept",
+        "pressed",
+        "until",
+        "released",
+        "press",
+        "pedalposition"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Presses the brake pedal based on pedal position. The brake pedal will be kept pressed until released. Response schema: {\"type\": \"dict\", \"properties\": {\"brakePedalStatus\": {\"type\": \"string\", \"description\": \"The status of the brake pedal. [Enum]: [\\\"pressed\\\", \\\"released\\\"]\"}, \"brakePedalForce\": {\"type\": \"float\", \"description\": \"The force applied to the brake pedal in Newtons.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_52",
+        "multi_turn_base_60",
+        "multi_turn_base_69",
+        "multi_turn_base_76"
+      ],
+      "source_tool_count": 8,
+      "source_param_counts": {
+        "pedalPosition": 8
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_76",
+          "turn_index": 0,
+          "arguments": {
+            "pedalPosition": 0.5
+          }
+        },
+        {
+          "task_id": "multi_turn_base_76",
+          "turn_index": 0,
+          "arguments": {
+            "pedalPosition": 1
+          }
+        },
+        {
+          "task_id": "multi_turn_base_69",
+          "turn_index": 1,
+          "arguments": {
+            "pedalPosition": 0.5
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_retrieve_invoice",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for retrieve_invoice.",
+    "body": "For `retrieve_invoice`, prefer these observed schema parameter names when applicable: access_token, booking_id.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "retrieve_invoice",
+      "allowed_tools": [
+        "retrieve_invoice"
+      ],
+      "domains": [
+        "TravelAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "invoice",
+        "receipt",
+        "booking",
+        "retrieve",
+        "access_token",
+        "booking_id",
+        "insurance_id"
+      ],
+      "tool_description": "This tool belongs to the travel system, which allows users to book flights, manage credit cards, and view budget information. Tool description: Retrieve the invoice for a booking. Response schema: {\"type\": \"dict\", \"properties\": {\"invoice\": {\"type\": \"dict\", \"description\": \"The invoice for the booking\", \"properties\": {\"booking_id\": {\"type\": \"string\", \"description\": \"The ID of the booking\"}, \"travel_date\": {\"type\": \"string\", \"description\": \"The date of the travel\"}, \"travel_from\": {\"type\": \"string\", \"description\": \"The location the travel is from\"}, \"travel_to\": {\"type\": \"string\", \"description\": \"The location the travel is to\"}, \"travel_class\": {\"type\": \"string\", \"description\": \"The class of the travel\"}, \"travel_cost\": {\"type\": \"float\", \"description\": \"The cost of the travel\"}, \"transaction_id\": {\"type\": \"string\", \"description\": \"The ID of the transaction\"}}}}}",
+      "source_task_ids": [
+        "multi_turn_base_153",
+        "multi_turn_base_167",
+        "multi_turn_base_170",
+        "multi_turn_base_186"
+      ],
+      "source_tool_count": 4,
+      "source_param_counts": {
+        "access_token": 4,
+        "booking_id": 4
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_170",
+          "turn_index": 1,
+          "arguments": {
+            "access_token": "access_token_abc123",
+            "booking_id": "3426812"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_167",
+          "turn_index": 4,
+          "arguments": {
+            "access_token": "abc123xyz456",
+            "booking_id": "3426812"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_186",
+          "turn_index": 2,
+          "arguments": {
+            "access_token": "secure_access_token_987654321",
+            "booking_id": "3426812"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_exact_args_retrieve_invoice",
+    "kind": "negative_rule_card",
+    "description": "Exact schema-argument rule for retrieve_invoice.",
+    "body": "For `retrieve_invoice`, do not invent alias or extra parameters such as: insurance_id.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "retrieve_invoice",
+      "allowed_tools": [
+        "retrieve_invoice"
+      ],
+      "domains": [
+        "TravelAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "invoice",
+        "receipt",
+        "booking",
+        "retrieve",
+        "access_token",
+        "booking_id",
+        "insurance_id"
+      ],
+      "tool_description": "This tool belongs to the travel system, which allows users to book flights, manage credit cards, and view budget information. Tool description: Retrieve the invoice for a booking. Response schema: {\"type\": \"dict\", \"properties\": {\"invoice\": {\"type\": \"dict\", \"description\": \"The invoice for the booking\", \"properties\": {\"booking_id\": {\"type\": \"string\", \"description\": \"The ID of the booking\"}, \"travel_date\": {\"type\": \"string\", \"description\": \"The date of the travel\"}, \"travel_from\": {\"type\": \"string\", \"description\": \"The location the travel is from\"}, \"travel_to\": {\"type\": \"string\", \"description\": \"The location the travel is to\"}, \"travel_class\": {\"type\": \"string\", \"description\": \"The class of the travel\"}, \"travel_cost\": {\"type\": \"float\", \"description\": \"The cost of the travel\"}, \"transaction_id\": {\"type\": \"string\", \"description\": \"The ID of the transaction\"}}}}}",
+      "source_task_ids": [
+        "multi_turn_base_153",
+        "multi_turn_base_167",
+        "multi_turn_base_170",
+        "multi_turn_base_186",
+        "multi_turn_base_187",
+        "multi_turn_base_194"
+      ],
+      "source_error_counts": {
+        "argument_mismatch": 2,
+        "unexpected:insurance_id": 2
+      }
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_post_tweet",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for post_tweet.",
+    "body": "For `post_tweet`, prefer these observed schema parameter names when applicable: content, tags, mentions.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "post_tweet",
+      "allowed_tools": [
+        "post_tweet"
+      ],
+      "domains": [
+        "TwitterAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "tweet",
+        "post",
+        "twitter",
+        "authenticated",
+        "user",
+        "content",
+        "mentions",
+        "tags"
+      ],
+      "tool_description": "This tool belongs to the TwitterAPI, which provides core functionality for posting tweets, retweeting, commenting, and following users on Twitter. Tool description: Post a tweet for the authenticated user. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"ID of the posted tweet.\"}, \"username\": {\"type\": \"string\", \"description\": \"Username of the poster.\"}, \"content\": {\"type\": \"string\", \"description\": \"Content of the tweet.\"}, \"tags\": {\"type\": \"array\", \"description\": \"List of tags associated with the tweet.\", \"items\": {\"type\": \"string\"}}, \"mentions\": {\"type\": \"array\", \"description\": \"List of users mentioned in the tweet.\", \"items\": {\"type\": \"string\"}}}}",
+      "source_task_ids": [
+        "multi_turn_base_170",
+        "multi_turn_base_186",
+        "multi_turn_base_195",
+        "multi_turn_base_5",
+        "multi_turn_base_52",
+        "multi_turn_base_69",
+        "multi_turn_base_76"
+      ],
+      "source_tool_count": 7,
+      "source_param_counts": {
+        "content": 7,
+        "tags": 6,
+        "mentions": 4
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_170",
+          "turn_index": 4,
+          "arguments": {
+            "content": "Exploring the world, one city at a time!",
+            "tags": [
+              "#Travel",
+              "#Adventure"
+            ]
+          }
+        },
+        {
+          "task_id": "multi_turn_base_76",
+          "turn_index": 1,
+          "arguments": {
+            "content": "Tire pressure is perfect!",
+            "mentions": [
+              "@mike53"
+            ],
+            "tags": [
+              "#CarCare",
+              "#TireHealth"
+            ]
+          }
+        },
+        {
+          "task_id": "multi_turn_base_186",
+          "turn_index": 5,
+          "arguments": {
+            "content": "Postponing my plans.",
+            "mentions": [
+              "@AirlineSupport"
+            ],
+            "tags": [
+              "#Travel",
+              "#PlansChanged"
+            ]
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_get_zipcode_based_on_city",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for get_zipcode_based_on_city.",
+    "body": "For `get_zipcode_based_on_city`, prefer these observed schema parameter names when applicable: city.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_zipcode_based_on_city",
+      "allowed_tools": [
+        "get_zipcode_based_on_city"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "gets",
+        "zipcode",
+        "on",
+        "city",
+        "based"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Gets the zipcode based on the city. Response schema: {\"type\": \"dict\", \"properties\": {\"zipcode\": {\"type\": \"string\", \"description\": \"The zipcode of the city.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_69"
+      ],
+      "source_tool_count": 2,
+      "source_param_counts": {
+        "city": 2
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_69",
+          "turn_index": 0,
+          "arguments": {
+            "city": "San Francisco"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_69",
+          "turn_index": 0,
+          "arguments": {
+            "city": "Rivermist"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_displayCarStatus",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for displayCarStatus.",
+    "body": "For `displayCarStatus`, prefer these observed schema parameter names when applicable: option.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "displayCarStatus",
+      "allowed_tools": [
+        "displayCarStatus"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "displays",
+        "status",
+        "of",
+        "vehicle",
+        "on",
+        "provided",
+        "display",
+        "option",
+        "car"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Displays the status of the vehicle based on the provided display option. Response schema: {\"type\": \"dict\", \"properties\": {\"status\": {\"type\": \"dict\", \"description\": \"The status of the vehicle based on the option.\", \"properties\": {\"fuelLevel\": {\"type\": \"float\", \"description\": \"[Optional] The fuel level of the vehicle in gallons.\"}, \"batteryVoltage\": {\"type\": \"float\", \"description\": \"[Optional] The battery voltage of the vehicle in volts.\"}, \"doorStatus\": {\"type\": \"dict\", \"description\": \"[Optional] The status of the doors.\", \"properties\": {\"driver\": {\"type\": \"string\", \"description\": \"The status of the driver door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}, \"passenger\": {\"type\": \"string\", \"description\": \"The status of the passenger door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}, \"rear_left\": {\"type\": \"string\", \"description\": \"The status of the rear left door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}, \"rear_right\": {\"type\": \"string\", \"description\": \"The status of the rear right door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}}}, \"currentACTemperature\": {\"type\": \"float\", \"description\": \"[Optional] The current temperature set in degree Celsius.\"}, \"fanSpeed\": {\"type\": \"integer\", \"description\": \"[Optional] The fan speed set from 0 to 100.\"}, \"climateMode\": {\"type\": \"string\", \"description\": \"[Optional] The climate mode set. [Enum]: [\\\"auto\\\", \\\"cool\\\", \\\"heat\\\", \\\"defrost\\\"]\"}, \"humidityLevel\": {\"type\": \"float\", \"description\": \"[Optional] The humidity level in percentage.\"}, \"headlightStatus\": {\"type\": \"string\", \"description\": \"[Optional] The status of the headlights. [Enum]: [\\\"on\\\", \\\"off\\\"]\"}, \"parkingBrakeStatus\": {\"type\": \"string\", \"description\": \"[Optional] The status of the brake. [Enum]: [\\\"engaged\\\", \\\"released\\\"]\"}, \"parkingBrakeForce\": {\"type\": \"float\", \"description\": \"[Optional] The force applied to the brake in Newtons.\"}, \"slopeAngle\": {\"type\": \"float\", \"description\": \"[Optional] The slope angle in degrees.\"}, \"brakePedalStatus\": {\"type\": \"string\", \"description\": \"[Optional] The status of the brake pedal. [Enum]: [\\\"pressed\\\", \\\"released\\\"]\"}, \"brakePedalForce\": {\"type\": \"float\", \"description\": \"[Optional] The force applied to the brake pedal in Newtons.\"}, \"engineState\": {\"type\": \"string\", \"description\": \"[Optional] The state of the engine. [Enum]: [\\\"running\\\", \\\"stopped\\\"]\"}, \"metadata\": {\"type\": \"string\", \"description\": \"[Optional] The metadata of the car.\"}}}}}",
+      "source_task_ids": [
+        "multi_turn_base_52"
+      ],
+      "source_tool_count": 2,
+      "source_param_counts": {
+        "option": 2
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_52",
+          "turn_index": 0,
+          "arguments": {
+            "option": "fuel"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_52",
+          "turn_index": 0,
+          "arguments": {
+            "option": "battery"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_mean",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for mean.",
+    "body": "For `mean`, prefer these observed schema parameter names when applicable: numbers.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "mean",
+      "allowed_tools": [
+        "mean"
+      ],
+      "domains": [
+        "MathAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "calculate",
+        "mean",
+        "of",
+        "list",
+        "numbers"
+      ],
+      "tool_description": "This tool belongs to the Math API, which provides various mathematical operations. Tool description: Calculate the mean of a list of numbers. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"float\", \"description\": \"Mean of the numbers.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_144",
+        "multi_turn_base_44",
+        "multi_turn_base_47"
+      ],
+      "source_tool_count": 3,
+      "source_param_counts": {
+        "numbers": 3
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_44",
+          "turn_index": 1,
+          "arguments": {
+            "numbers": [
+              5000,
+              7000,
+              6000,
+              8000
+            ]
+          }
+        },
+        {
+          "task_id": "multi_turn_base_47",
+          "turn_index": 1,
+          "arguments": {
+            "numbers": [
+              100,
+              95,
+              85,
+              90,
+              88,
+              92
+            ]
+          }
+        },
+        {
+          "task_id": "multi_turn_base_144",
+          "turn_index": 1,
+          "arguments": {
+            "numbers": [
+              227.16,
+              2.552,
+              227.11,
+              227.09
+            ]
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_diff",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for diff.",
+    "body": "For `diff`, prefer these observed schema parameter names when applicable: file_name1, file_name2.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "diff",
+      "allowed_tools": [
+        "diff"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "compare",
+        "two",
+        "files",
+        "of",
+        "any",
+        "extension",
+        "line",
+        "by",
+        "at",
+        "directory",
+        "diff",
+        "file_name1"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Compare two files of any extension line by line at the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"diff_lines\": {\"type\": \"string\", \"description\": \"The differences between the two files.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_13"
+      ],
+      "source_tool_count": 1,
+      "source_param_counts": {
+        "file_name1": 1,
+        "file_name2": 1
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_13",
+          "turn_index": 1,
+          "arguments": {
+            "file_name1": "report.txt",
+            "file_name2": "summary.txt"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_fillFuelTank",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for fillFuelTank.",
+    "body": "For `fillFuelTank`, prefer these observed schema parameter names when applicable: fuelAmount.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "fillFuelTank",
+      "allowed_tools": [
+        "fillFuelTank"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "fills",
+        "fuel",
+        "tank",
+        "of",
+        "vehicle",
+        "can",
+        "hold",
+        "up",
+        "to",
+        "gallons",
+        "fill",
+        "fuelamount"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Fills the fuel tank of the vehicle. The fuel tank can hold up to 50 gallons. Response schema: {\"type\": \"dict\", \"properties\": {\"fuelLevel\": {\"type\": \"float\", \"description\": \"The fuel level of the vehicle in gallons.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_69"
+      ],
+      "source_tool_count": 1,
+      "source_param_counts": {
+        "fuelAmount": 1
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_69",
+          "turn_index": 0,
+          "arguments": {
+            "fuelAmount": 10.57
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_get_stock_info",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for get_stock_info.",
+    "body": "For `get_stock_info`, prefer these observed schema parameter names when applicable: symbol.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_stock_info",
+      "allowed_tools": [
+        "get_stock_info"
+      ],
+      "domains": [
+        "TradingBot"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "details",
+        "of",
+        "stock",
+        "info",
+        "symbol"
+      ],
+      "tool_description": "This tool belongs to the trading system, which allows users to trade stocks, manage their account, and view stock information. Tool description: Get the details of a stock. Response schema: {\"type\": \"dict\", \"properties\": {\"price\": {\"type\": \"float\", \"description\": \"Current price of the stock.\"}, \"percent_change\": {\"type\": \"float\", \"description\": \"Percentage change in stock price.\"}, \"volume\": {\"type\": \"float\", \"description\": \"Trading volume of the stock.\"}, \"MA(5)\": {\"type\": \"float\", \"description\": \"5-day Moving Average of the stock.\"}, \"MA(20)\": {\"type\": \"float\", \"description\": \"20-day Moving Average of the stock.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_101",
+        "multi_turn_base_106",
+        "multi_turn_base_113",
+        "multi_turn_base_125",
+        "multi_turn_base_126",
+        "multi_turn_base_128",
+        "multi_turn_base_136",
+        "multi_turn_base_144"
+      ],
+      "source_tool_count": 10,
+      "source_param_counts": {
+        "symbol": 10
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_101",
+          "turn_index": 0,
+          "arguments": {
+            "symbol": "XTC"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_136",
+          "turn_index": 0,
+          "arguments": {
+            "symbol": "ZETA"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_128",
+          "turn_index": 1,
+          "arguments": {
+            "symbol": "MSFT"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_cp",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for cp.",
+    "body": "For `cp`, prefer these observed schema parameter names when applicable: source, destination.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cp",
+      "allowed_tools": [
+        "cp"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "copy",
+        "file",
+        "or",
+        "directory",
+        "one",
+        "location",
+        "to",
+        "another",
+        "if",
+        "destination",
+        "cp",
+        "source"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Copy a file or directory from one location to another.  If the destination is a directory, the source file or directory will be copied into the destination directory.  Both source and destination must be local to the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the copy operation or an error message if the operation fails.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_3",
+        "multi_turn_base_36"
+      ],
+      "source_tool_count": 4,
+      "source_param_counts": {
+        "source": 4,
+        "destination": 4
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_3",
+          "turn_index": 1,
+          "arguments": {
+            "source": "test_image1.jpg",
+            "destination": "backup_tests"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_3",
+          "turn_index": 1,
+          "arguments": {
+            "source": "test_document.txt",
+            "destination": "backup_tests"
+          }
+        },
+        {
+          "task_id": "multi_turn_base_36",
+          "turn_index": 1,
+          "arguments": {
+            "source": "project_summary.txt",
+            "destination": "archive/summary_2024.txt"
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_params_get_order_details",
+    "kind": "atomic_tool_rule_card",
+    "description": "Observed high-confidence parameter names for get_order_details.",
+    "body": "For `get_order_details`, prefer these observed schema parameter names when applicable: order_id.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_order_details",
+      "allowed_tools": [
+        "get_order_details"
+      ],
+      "domains": [
+        "TradingBot"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "details",
+        "of",
+        "an",
+        "order",
+        "order_id"
+      ],
+      "tool_description": "This tool belongs to the trading system, which allows users to trade stocks, manage their account, and view stock information. Tool description: Get the details of an order. Response schema: {\"type\": \"dict\", \"properties\": {\"id\": {\"type\": \"integer\", \"description\": \"ID of the order.\"}, \"order_type\": {\"type\": \"string\", \"description\": \"Type of the order.\"}, \"symbol\": {\"type\": \"string\", \"description\": \"Symbol of the stock in the order.\"}, \"price\": {\"type\": \"float\", \"description\": \"Price at which the order was placed.\"}, \"amount\": {\"type\": \"integer\", \"description\": \"Number of shares in the order.\"}, \"status\": {\"type\": \"string\", \"description\": \"Current status of the order. [Enum]: [\\\"Open\\\", \\\"Pending\\\", \\\"Completed\\\", \\\"Cancelled\\\"]\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_106",
+        "multi_turn_base_111",
+        "multi_turn_base_122",
+        "multi_turn_base_125",
+        "multi_turn_base_126",
+        "multi_turn_base_128",
+        "multi_turn_base_130",
+        "multi_turn_base_136"
+      ],
+      "source_tool_count": 9,
+      "source_param_counts": {
+        "order_id": 9
+      },
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_111",
+          "turn_index": 1,
+          "arguments": {
+            "order_id": 12345
+          }
+        },
+        {
+          "task_id": "multi_turn_base_136",
+          "turn_index": 1,
+          "arguments": {
+            "order_id": 12446
+          }
+        },
+        {
+          "task_id": "multi_turn_base_128",
+          "turn_index": 1,
+          "arguments": {
+            "order_id": 12446
+          }
+        }
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_ls",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `ls` calls unless the turn explicitly requires it.",
+    "body": "`ls` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "ls",
+      "allowed_tools": [
+        "ls"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "list",
+        "contents",
+        "of",
+        "directory",
+        "ls",
+        "a"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: List the contents of the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"current_directory_content\": {\"type\": \"array\", \"description\": \"A list of the contents of the specified directory.\", \"items\": {\"type\": \"string\"}}}}",
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_12",
+        "multi_turn_base_13",
+        "multi_turn_base_2",
+        "multi_turn_base_3",
+        "multi_turn_base_30",
+        "multi_turn_base_36",
+        "multi_turn_base_37",
+        "multi_turn_base_42",
+        "multi_turn_base_45",
+        "multi_turn_base_47",
+        "multi_turn_base_5"
+      ],
+      "source_extra_call_count": 33
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_cd",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `cd` calls unless the turn explicitly requires it.",
+    "body": "`cd` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cd",
+      "allowed_tools": [
+        "cd"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "change",
+        "working",
+        "directory",
+        "to",
+        "specified",
+        "folder",
+        "cd"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Change the current working directory to the specified folder. Response schema: {\"type\": \"dict\", \"properties\": {\"current_working_directory\": {\"type\": \"string\", \"description\": \"The new current working directory path.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_2",
+        "multi_turn_base_3",
+        "multi_turn_base_30",
+        "multi_turn_base_37",
+        "multi_turn_base_45",
+        "multi_turn_base_5"
+      ],
+      "source_extra_call_count": 24
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_startEngine",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `startEngine` calls unless the turn explicitly requires it.",
+    "body": "`startEngine` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "startEngine",
+      "allowed_tools": [
+        "startEngine"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "starts",
+        "engine",
+        "of",
+        "vehicle",
+        "start",
+        "ignitionmode"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Starts the engine of the vehicle. Response schema: {\"type\": \"dict\", \"properties\": {\"engineState\": {\"type\": \"string\", \"description\": \"The state of the engine. [Enum]: [\\\"running\\\", \\\"stopped\\\"]\"}, \"fuelLevel\": {\"type\": \"float\", \"description\": \"The fuel level of the vehicle in gallons.\"}, \"batteryVoltage\": {\"type\": \"float\", \"description\": \"The battery voltage of the vehicle in volts.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_52",
+        "multi_turn_base_60",
+        "multi_turn_base_61",
+        "multi_turn_base_64",
+        "multi_turn_base_66",
+        "multi_turn_base_69",
+        "multi_turn_base_73",
+        "multi_turn_base_76"
+      ],
+      "source_extra_call_count": 21
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_get_nearest_airport_by_city",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `get_nearest_airport_by_city` calls unless the turn explicitly requires it.",
+    "body": "`get_nearest_airport_by_city` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_nearest_airport_by_city",
+      "allowed_tools": [
+        "get_nearest_airport_by_city"
+      ],
+      "domains": [
+        "TravelAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "nearest",
+        "airport",
+        "to",
+        "location",
+        "by",
+        "city"
+      ],
+      "tool_description": "This tool belongs to the travel system, which allows users to book flights, manage credit cards, and view budget information. Tool description: Get the nearest airport to the given location Response schema: {\"type\": \"dict\", \"properties\": {\"nearest_airport\": {\"type\": \"string\", \"description\": \"The nearest airport to the given location\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_153",
+        "multi_turn_base_158",
+        "multi_turn_base_167",
+        "multi_turn_base_170",
+        "multi_turn_base_171",
+        "multi_turn_base_186",
+        "multi_turn_base_195"
+      ],
+      "source_extra_call_count": 11
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_pwd",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `pwd` calls unless the turn explicitly requires it.",
+    "body": "`pwd` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "pwd",
+      "allowed_tools": [
+        "pwd"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "working",
+        "directory",
+        "path",
+        "pwd"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Return the current working directory path. Response schema: {\"type\": \"dict\", \"properties\": {\"current_working_directory\": {\"type\": \"string\", \"description\": \"The current working directory path.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_12",
+        "multi_turn_base_13",
+        "multi_turn_base_36",
+        "multi_turn_base_37",
+        "multi_turn_base_42",
+        "multi_turn_base_44",
+        "multi_turn_base_5"
+      ],
+      "source_extra_call_count": 9
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_cat",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `cat` calls unless the turn explicitly requires it.",
+    "body": "`cat` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cat",
+      "allowed_tools": [
+        "cat"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "display",
+        "contents",
+        "of",
+        "file",
+        "any",
+        "extension",
+        "currrent",
+        "directory",
+        "cat",
+        "file_name"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Display the contents of a file of any extension from currrent directory. Response schema: {\"type\": \"dict\", \"properties\": {\"file_content\": {\"type\": \"string\", \"description\": \"The content of the file.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_12",
+        "multi_turn_base_2",
+        "multi_turn_base_36",
+        "multi_turn_base_42",
+        "multi_turn_base_44",
+        "multi_turn_base_45"
+      ],
+      "source_extra_call_count": 9
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_pressBrakePedal",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `pressBrakePedal` calls unless the turn explicitly requires it.",
+    "body": "`pressBrakePedal` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "pressBrakePedal",
+      "allowed_tools": [
+        "pressBrakePedal"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "presses",
+        "brake",
+        "pedal",
+        "on",
+        "position",
+        "be",
+        "kept",
+        "pressed",
+        "until",
+        "released",
+        "press",
+        "pedalposition"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Presses the brake pedal based on pedal position. The brake pedal will be kept pressed until released. Response schema: {\"type\": \"dict\", \"properties\": {\"brakePedalStatus\": {\"type\": \"string\", \"description\": \"The status of the brake pedal. [Enum]: [\\\"pressed\\\", \\\"released\\\"]\"}, \"brakePedalForce\": {\"type\": \"float\", \"description\": \"The force applied to the brake pedal in Newtons.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_52",
+        "multi_turn_base_60",
+        "multi_turn_base_61",
+        "multi_turn_base_64",
+        "multi_turn_base_66",
+        "multi_turn_base_69",
+        "multi_turn_base_73",
+        "multi_turn_base_76"
+      ],
+      "source_extra_call_count": 8
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_displayCarStatus",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `displayCarStatus` calls unless the turn explicitly requires it.",
+    "body": "`displayCarStatus` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "displayCarStatus",
+      "allowed_tools": [
+        "displayCarStatus"
+      ],
+      "domains": [
+        "VehicleControlAPI"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "displays",
+        "status",
+        "of",
+        "vehicle",
+        "on",
+        "provided",
+        "display",
+        "option",
+        "car"
+      ],
+      "tool_description": "This tool belongs to the vehicle control system, which allows users to control various aspects of the car such as engine, doors, climate control, lights, and more. Tool description: Displays the status of the vehicle based on the provided display option. Response schema: {\"type\": \"dict\", \"properties\": {\"status\": {\"type\": \"dict\", \"description\": \"The status of the vehicle based on the option.\", \"properties\": {\"fuelLevel\": {\"type\": \"float\", \"description\": \"[Optional] The fuel level of the vehicle in gallons.\"}, \"batteryVoltage\": {\"type\": \"float\", \"description\": \"[Optional] The battery voltage of the vehicle in volts.\"}, \"doorStatus\": {\"type\": \"dict\", \"description\": \"[Optional] The status of the doors.\", \"properties\": {\"driver\": {\"type\": \"string\", \"description\": \"The status of the driver door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}, \"passenger\": {\"type\": \"string\", \"description\": \"The status of the passenger door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}, \"rear_left\": {\"type\": \"string\", \"description\": \"The status of the rear left door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}, \"rear_right\": {\"type\": \"string\", \"description\": \"The status of the rear right door. [Enum]: [\\\"locked\\\", \\\"unlocked\\\"]\"}}}, \"currentACTemperature\": {\"type\": \"float\", \"description\": \"[Optional] The current temperature set in degree Celsius.\"}, \"fanSpeed\": {\"type\": \"integer\", \"description\": \"[Optional] The fan speed set from 0 to 100.\"}, \"climateMode\": {\"type\": \"string\", \"description\": \"[Optional] The climate mode set. [Enum]: [\\\"auto\\\", \\\"cool\\\", \\\"heat\\\", \\\"defrost\\\"]\"}, \"humidityLevel\": {\"type\": \"float\", \"description\": \"[Optional] The humidity level in percentage.\"}, \"headlightStatus\": {\"type\": \"string\", \"description\": \"[Optional] The status of the headlights. [Enum]: [\\\"on\\\", \\\"off\\\"]\"}, \"parkingBrakeStatus\": {\"type\": \"string\", \"description\": \"[Optional] The status of the brake. [Enum]: [\\\"engaged\\\", \\\"released\\\"]\"}, \"parkingBrakeForce\": {\"type\": \"float\", \"description\": \"[Optional] The force applied to the brake in Newtons.\"}, \"slopeAngle\": {\"type\": \"float\", \"description\": \"[Optional] The slope angle in degrees.\"}, \"brakePedalStatus\": {\"type\": \"string\", \"description\": \"[Optional] The status of the brake pedal. [Enum]: [\\\"pressed\\\", \\\"released\\\"]\"}, \"brakePedalForce\": {\"type\": \"float\", \"description\": \"[Optional] The force applied to the brake pedal in Newtons.\"}, \"engineState\": {\"type\": \"string\", \"description\": \"[Optional] The state of the engine. [Enum]: [\\\"running\\\", \\\"stopped\\\"]\"}, \"metadata\": {\"type\": \"string\", \"description\": \"[Optional] The metadata of the car.\"}}}}}",
+      "source_task_ids": [
+        "multi_turn_base_52",
+        "multi_turn_base_61",
+        "multi_turn_base_64",
+        "multi_turn_base_73"
+      ],
+      "source_extra_call_count": 8
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_echo",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `echo` calls unless the turn explicitly requires it.",
+    "body": "`echo` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "echo",
+      "allowed_tools": [
+        "echo"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "write",
+        "content",
+        "to",
+        "file",
+        "at",
+        "directory",
+        "or",
+        "display",
+        "it",
+        "in",
+        "echo",
+        "file_name"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Write content to a file at current directory or display it in the terminal. Response schema: {\"type\": \"dict\", \"properties\": {\"terminal_output\": {\"type\": \"string\", \"description\": \"The content if no file name is provided, or None if written to file.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_2",
+        "multi_turn_base_44",
+        "multi_turn_base_5"
+      ],
+      "source_extra_call_count": 4
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_find",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `find` calls unless the turn explicitly requires it.",
+    "body": "`find` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "find",
+      "allowed_tools": [
+        "find"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "find",
+        "any",
+        "file",
+        "or",
+        "directories",
+        "under",
+        "specific",
+        "path",
+        "contain",
+        "name"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Find any file or directories under specific path that contain name in its file name.  This method searches for files of any extension and directories within a specified path that match the given name. If no name is provided, it returns all files and directories in the specified path and its subdirectories. Note: This method performs a recursive search through all subdirectories of the given path. Response schema: {\"type\": \"dict\", \"properties\": {\"matches\": {\"type\": \"array\", \"description\": \"A list of matching file and directory paths relative to the given path.\", \"items\": {\"type\": \"string\"}}}}",
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_37",
+        "multi_turn_base_44",
+        "multi_turn_base_5"
+      ],
+      "source_extra_call_count": 4
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_cp",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `cp` calls unless the turn explicitly requires it.",
+    "body": "`cp` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "cp",
+      "allowed_tools": [
+        "cp"
+      ],
+      "domains": [
+        "GorillaFileSystem"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "copy",
+        "file",
+        "or",
+        "directory",
+        "one",
+        "location",
+        "to",
+        "another",
+        "if",
+        "destination",
+        "cp",
+        "source"
+      ],
+      "tool_description": "This tool belongs to the Gorilla file system. It is a simple file system that allows users to perform basic file operations such as navigating directories, creating files and directories, reading and writing to files, etc. Tool description: Copy a file or directory from one location to another.  If the destination is a directory, the source file or directory will be copied into the destination directory.  Both source and destination must be local to the current directory. Response schema: {\"type\": \"dict\", \"properties\": {\"result\": {\"type\": \"string\", \"description\": \"The result of the copy operation or an error message if the operation fails.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_36"
+      ],
+      "source_extra_call_count": 4
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_avoid_extra_get_symbol_by_name",
+    "kind": "negative_rule_card",
+    "description": "Avoid unnecessary `get_symbol_by_name` calls unless the turn explicitly requires it.",
+    "body": "`get_symbol_by_name` appeared as an unnecessary extra call in multiple train traces. Do not use it as a speculative lookup or status check when the user already provided enough information for the required action.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "tool": "get_symbol_by_name",
+      "allowed_tools": [
+        "get_symbol_by_name"
+      ],
+      "domains": [
+        "TradingBot"
+      ],
+      "injection_type": "informational",
+      "intent_keywords": [
+        "symbol",
+        "of",
+        "stock",
+        "by",
+        "company",
+        "name"
+      ],
+      "tool_description": "This tool belongs to the trading system, which allows users to trade stocks, manage their account, and view stock information. Tool description: Get the symbol of a stock by company name. Response schema: {\"type\": \"dict\", \"properties\": {\"symbol\": {\"type\": \"string\", \"description\": \"Symbol of the stock or \\\"Stock not found\\\" if not available.\"}}}",
+      "source_task_ids": [
+        "multi_turn_base_111",
+        "multi_turn_base_113",
+        "multi_turn_base_136"
+      ],
+      "source_extra_call_count": 3
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_direct_action_bias",
+    "kind": "workflow_guardrail_card",
+    "description": "Prefer direct required actions over speculative lookups or status checks.",
+    "body": "Across recent train rollouts, many BFCL failures came from optional exploratory tool calls. When the current turn already gives enough information for the required action, prefer the direct action tool and skip speculative lookups or status checks.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "domains": [
+        "all"
+      ],
+      "injection_type": "workflow",
+      "intent_keywords": [
+        "action",
+        "direct",
+        "lookup",
+        "status",
+        "request"
+      ],
+      "source_extra_call_count": 166
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_turn_followthrough",
+    "kind": "workflow_guardrail_card",
+    "description": "Re-check whether the current turn still needs another tool call before stopping.",
+    "body": "Recent train rollouts frequently ended a turn after a partial solution. After each tool result, re-check whether the user asked for an additional state change or lookup in the same turn, and continue until every requested action is done.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "domains": [
+        "all"
+      ],
+      "injection_type": "workflow",
+      "intent_keywords": [
+        "turn",
+        "action",
+        "request",
+        "continue",
+        "complete"
+      ],
+      "source_missing_call_count": 13
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  },
+  {
+    "name": "bfcl_observed_error_feedback",
+    "kind": "debug_feedback_card",
+    "description": "Observed BFCL failure modes from train rollouts.",
+    "body": "Recent train rollouts showed error types: extra_call=166, argument_mismatch=31, missing_call=13. Parameter-level issues: insurance_type=3, message=3, content=3, unexpected:insurance_id=2, description=2, destination=2, fuelAmount=1, priority=1, path=1, missing:lines=1, numbers=1, missing:path=1. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+    "metadata": {
+      "source": "evolve_rollouts",
+      "error_counts": {
+        "argument_mismatch": 31,
+        "extra_call": 166,
+        "missing_call": 13
+      },
+      "source_error_task_ids": {
+        "argument_mismatch": [
+          "multi_turn_base_10",
+          "multi_turn_base_110",
+          "multi_turn_base_144",
+          "multi_turn_base_15",
+          "multi_turn_base_170",
+          "multi_turn_base_171",
+          "multi_turn_base_172",
+          "multi_turn_base_186",
+          "multi_turn_base_187",
+          "multi_turn_base_194",
+          "multi_turn_base_2",
+          "multi_turn_base_30",
+          "multi_turn_base_32",
+          "multi_turn_base_45",
+          "multi_turn_base_47",
+          "multi_turn_base_52",
+          "multi_turn_base_60",
+          "multi_turn_base_61",
+          "multi_turn_base_66",
+          "multi_turn_base_69"
+        ],
+        "extra_call": [
+          "multi_turn_base_10",
+          "multi_turn_base_106",
+          "multi_turn_base_110",
+          "multi_turn_base_111",
+          "multi_turn_base_113",
+          "multi_turn_base_12",
+          "multi_turn_base_125",
+          "multi_turn_base_128",
+          "multi_turn_base_13",
+          "multi_turn_base_136",
+          "multi_turn_base_144",
+          "multi_turn_base_15",
+          "multi_turn_base_153",
+          "multi_turn_base_158",
+          "multi_turn_base_160",
+          "multi_turn_base_167",
+          "multi_turn_base_170",
+          "multi_turn_base_171",
+          "multi_turn_base_186",
+          "multi_turn_base_193",
+          "multi_turn_base_195",
+          "multi_turn_base_2",
+          "multi_turn_base_3",
+          "multi_turn_base_30",
+          "multi_turn_base_36",
+          "multi_turn_base_37",
+          "multi_turn_base_42",
+          "multi_turn_base_44",
+          "multi_turn_base_45",
+          "multi_turn_base_47",
+          "multi_turn_base_5",
+          "multi_turn_base_52",
+          "multi_turn_base_60",
+          "multi_turn_base_61",
+          "multi_turn_base_64",
+          "multi_turn_base_66",
+          "multi_turn_base_69",
+          "multi_turn_base_73",
+          "multi_turn_base_76"
+        ],
+        "missing_call": [
+          "multi_turn_base_10",
+          "multi_turn_base_113",
+          "multi_turn_base_121",
+          "multi_turn_base_158",
+          "multi_turn_base_159",
+          "multi_turn_base_162",
+          "multi_turn_base_171",
+          "multi_turn_base_194",
+          "multi_turn_base_45",
+          "multi_turn_base_61"
+        ]
+      },
+      "source_param_task_ids": {
+        "card_number": [
+          "multi_turn_base_172"
+        ],
+        "content": [
+          "multi_turn_base_15",
+          "multi_turn_base_2",
+          "multi_turn_base_30"
+        ],
+        "description": [
+          "multi_turn_base_110",
+          "multi_turn_base_187"
+        ],
+        "destination": [
+          "multi_turn_base_10"
+        ],
+        "distance": [
+          "multi_turn_base_61"
+        ],
+        "file_name1": [
+          "multi_turn_base_10"
+        ],
+        "file_name2": [
+          "multi_turn_base_10"
+        ],
+        "fuelAmount": [
+          "multi_turn_base_66"
+        ],
+        "insurance_type": [
+          "multi_turn_base_171",
+          "multi_turn_base_187",
+          "multi_turn_base_194"
+        ],
+        "message": [
+          "multi_turn_base_170",
+          "multi_turn_base_186",
+          "multi_turn_base_187"
+        ],
+        "missing:description": [
+          "multi_turn_base_60"
+        ],
+        "missing:lines": [
+          "multi_turn_base_15"
+        ],
+        "missing:path": [
+          "multi_turn_base_47"
+        ],
+        "numbers": [
+          "multi_turn_base_15"
+        ],
+        "path": [
+          "multi_turn_base_45"
+        ],
+        "priority": [
+          "multi_turn_base_187"
+        ],
+        "unexpected:insurance_id": [
+          "multi_turn_base_187",
+          "multi_turn_base_194"
+        ],
+        "unexpected:name": [
+          "multi_turn_base_47"
+        ]
+      },
+      "source_task_ids": [
+        "multi_turn_base_10",
+        "multi_turn_base_106",
+        "multi_turn_base_110",
+        "multi_turn_base_111",
+        "multi_turn_base_113",
+        "multi_turn_base_12",
+        "multi_turn_base_121",
+        "multi_turn_base_125",
+        "multi_turn_base_128",
+        "multi_turn_base_13",
+        "multi_turn_base_136",
+        "multi_turn_base_144",
+        "multi_turn_base_15",
+        "multi_turn_base_153",
+        "multi_turn_base_158",
+        "multi_turn_base_159",
+        "multi_turn_base_160",
+        "multi_turn_base_162",
+        "multi_turn_base_167",
+        "multi_turn_base_170",
+        "multi_turn_base_171",
+        "multi_turn_base_172",
+        "multi_turn_base_186",
+        "multi_turn_base_187",
+        "multi_turn_base_193",
+        "multi_turn_base_194",
+        "multi_turn_base_195",
+        "multi_turn_base_2",
+        "multi_turn_base_3",
+        "multi_turn_base_30",
+        "multi_turn_base_32",
+        "multi_turn_base_36",
+        "multi_turn_base_37",
+        "multi_turn_base_42",
+        "multi_turn_base_44",
+        "multi_turn_base_45",
+        "multi_turn_base_47",
+        "multi_turn_base_5",
+        "multi_turn_base_52",
+        "multi_turn_base_60",
+        "multi_turn_base_61",
+        "multi_turn_base_64",
+        "multi_turn_base_66",
+        "multi_turn_base_69",
+        "multi_turn_base_73",
+        "multi_turn_base_76"
+      ],
+      "source_train_total_runs": 50,
+      "source_train_positive_runs": 32,
+      "domains": [
+        "all"
+      ],
+      "injection_type": "workflow",
+      "intent_keywords": [
+        "schema",
+        "argument",
+        "literal",
+        "tool",
+        "call"
+      ]
+    },
+    "version": 1,
+    "usage_count": 0,
+    "success_count": 0
+  }
+]

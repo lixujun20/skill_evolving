@@ -6,6 +6,9 @@
 
 ### 主入口
 
+- `copilot_cli/HANDOFF_FULL_CONTEXT.md`
+  - 面向下一任 agent 的完整上下文压缩文件
+  - 汇总项目目标、进度、计划、未完成事项、关键结果与路由
 - `copilot_cli/academic_doc.md`
   - `academic` 主线总览
   - 维护跨子系统引用关系
@@ -64,6 +67,167 @@
 - `academic/benchmarks/`
   - BFCL / Spreadsheet 等 agentic benchmark adapter
   - `academic/benchmarks/README.md` 是该子系统使用文档和当前 smoke 结果入口
+
+## BFCL 近期结论
+
+### 1. 当前已确认的根因
+
+针对 “GLM 在 BFCL 上无法知悉并调用额外工具/skill” 这个问题，当前已经得到更精确的结论：
+
+- 问题不在 `glm-4.7` 完全不会使用额外信息
+- 问题也不在我们没有直连官方 `BigModel` 接口
+- 主要问题分成两层：
+  - 我们早期 BFCL adapter 的 tool-call 请求路径与官方 `bfcl_eval` 的 GLM FC handler 不够对齐
+  - 我们早期给 BFCL 注入的 skill 过于泛化，尤其是 checklist / workflow 型提示，会诱导 GLM 产生多余工具调用或错误参数组织
+
+### 2. 当前工程修正
+
+已经在 `academic/benchmarks/bfcl.py` 中完成两类关键修正：
+
+- `bigmodel` / `open.bigmodel.cn` 路径默认走 `openai_direct`
+  - 直接使用 OpenAI-compatible `chat.completions.create(messages, tools, store=False)`
+  - 不再经过通用 `app.llm.ask_tool()` 中的额外包装逻辑
+  - 这样更接近 BFCL 官方 `OpenAICompletionsHandler` / `GLMAPIHandler`
+- skill retrieval / injection 改成 BFCL-specific 低扰动策略
+  - 先按 `involved_classes` / task domain 过滤 skill
+  - `prompt_only` 只注入 `informational` skill
+  - 不再把 `workflow` / `checklist` 默认塞进 BFCL inference prompt
+  - skill retrieval 从“整题级”改成“turn 级”
+  - 每个 user turn 单独做检索和注入，避免混合域多轮 case 被跨轮污染
+
+### 3. 当前 BFCL skill 设计原则
+
+对 BFCL，当前有效的 skill 形式不是“额外可调用工具”，也不是“笼统工作流总结”，而是：
+
+- 域内、原子、低扰动的信息型规则
+- 典型内容：
+  - 参数名和字段组织约束
+  - 文本字段 vs tag/metadata 字段的区分
+  - 避免无关状态检查和多余 API 调用
+
+当前的经验更保守：
+
+- 有些看似合理的信息型规则也会稳定伤害 baseline
+- 目前确认应从默认 prompt skill 集移除的例子包括：
+  - `bfcl_file_system_navigation`
+  - `bfcl_vehicle_minimal_actions`
+- 当前更稳的默认 handwritten prompt skills 只保留：
+  - `bfcl_schema_parameter_names`
+  - `bfcl_literal_user_text_arguments`
+  - 并且它们只在 Ticket/Travel 域命中时才注入
+
+### 4. 当前小样本对齐结果
+
+在同一批 5 个 BFCL-v3 题目上：
+
+- `official_realign_none`
+  - `official_valid_rate = 1.0`
+  - `avg_score = 0.7185`
+  - `avg_call_precision = 0.5773`
+  - `avg_total_tokens = 64205.2`
+- 早期 `prompt_only`（泛化 checklist / workflow 注入）
+  - `official_valid_rate = 0.8`
+  - `avg_score = 0.6828`
+  - 会伤 baseline
+- 当前 `prompt_only`（info-only, domain-filtered）
+  - `official_valid_rate = 1.0`
+  - `avg_score = 0.7569`
+  - `avg_call_precision = 0.6244`
+  - `avg_total_tokens = 63235.6`
+
+因此，当前最合理的解释是：
+
+- GLM 可以在 BFCL 上使用 prompt 注入的 skill
+- 但 skill 必须非常精确，并且尽量是 domain-specific informational rule
+- “是否能用 skill” 不是 blocker
+- “skill 写成什么样、怎么筛进 prompt” 才是关键
+
+### 4.1 最新定点诊断
+
+关键结果文件：
+
+- `academic/results/bfcl_task11_67_temp0_ablation.json`
+- `academic/results/bfcl_task11_67_temp0_ablation_finalskills.json`
+
+诊断结论：
+
+- `multi_turn_base_11`
+  - 原先的问题既有跨轮污染，也有规则本身的副作用
+  - turn-level injection 修复了“文件系统 skill 泄漏到 Twitter turn”
+  - 但 `bfcl_file_system_navigation` 仍会诱导额外 `pwd` / `posting_get_login_status`
+  - 因此最终从默认 prompt skill 集删除
+- `multi_turn_base_67`
+  - `bfcl_vehicle_minimal_actions` 会诱导额外或错误顺序的 Vehicle 调用
+  - 从默认 prompt skill 集删除后，`prompt_only` 与 `none` 基本拉平
+
+### 4.2 当前最可靠的小规模 BFCL 对照
+
+同 split 3-case 子集：
+
+- `none`
+  - `official_valid_rate = 0.6667`
+  - `avg_score = 0.7795`
+  - `avg_total_tokens = 58408.0`
+- 保守 handwritten `prompt_only`
+  - `official_valid_rate = 0.6667`
+  - `avg_score = 0.8091`
+  - `avg_total_tokens = 56448.0`
+- `auto-evolve prompt_only`
+  - `official_valid_rate = 0.6667`
+  - `avg_score = 0.7612`
+  - `avg_total_tokens = 60295.0`
+
+当前解读：
+
+- prompt skill 这条外围链路已经基本打通
+- 保守 handwritten prompt-only 可以在不降低 `official_valid_rate` 的前提下带来小幅收益
+- 当前 auto-evolved BFCL skills 还没有超过 handwritten prompt-only
+
+### 5. 当前推荐 BFCL 配置
+
+在 `academic` 里，当前 BFCL 推荐配置为：
+
+- `bfcl_data_source = bfcl_eval_bundle`
+- `bfcl_adapter_mode = official`
+- `bfcl_execution_backend = official`
+- `bfcl_prompt_style = native`
+- `bfcl_tool_api_style = auto`
+  - 对 `bigmodel` 会解析到 `openai_direct`
+- `skill_injection_mode = prompt_only`
+  - 但实际只注入 `informational` skill
+  - 并且按 turn 检索、按 turn 注入
+- skill 库优先使用 BFCL-specific handwritten atomic rules
+  - 当前默认只保留更保守的 Ticket/Travel 参数与文本规则
+- 当目标是正式 baseline 时，仍应以 `skill_injection_mode = none` 为主
+- 当目标是 skill-format / evolve 诊断时，优先使用当前保守版 `prompt_only`
+- 当前 BFCL 工程辅助脚本：
+  - `academic/benchmarks/bfcl_experiment_suite.py`
+    - 固定 official-aligned 50/150 与 evolve 命令，避免手工拼参
+  - `academic/benchmarks/compare_bfcl_results.py`
+    - 对比两份 BFCL 结果，输出 aggregate delta、case delta 与 skill delta
+- 当前 BFCL 汇总建议优先查看：
+  - `official_valid_rate`
+  - `official_avg_at_k`
+  - `official_pass_at_k`
+  - `avg_score` / `call_f1` 仅作为辅助诊断
+- 当前 BFCL evolve 结果新增：
+  - `skills`
+    - 保存最终 skill 列表及其 source metadata
+  - `skill_impact_summary`
+    - 记录每个 skill 的来源 task、test 检索/注入次数、命中的 test case ids
+
+### 6. 当前不再采用的假设
+
+以下假设目前已被否定或弱化：
+
+- “GLM 不会使用 prompt 里的额外 skill”
+- “要让 GLM 复用 BFCL skill，必须把 skill 暴露成额外 callable tools”
+- “只要把一些通用 workflow/checklist 提示拼到 prompt 里，就能稳定提升 BFCL”
+
+更接近事实的是：
+
+- BFCL 这类函数调用 benchmark 上，额外 skill 需要像 schema-sensitive lint rule，而不是通用计划建议
+- 并且需要按 turn 暴露，而不是整题级拼接
 
 ## 2. 当前主张
 
@@ -249,21 +413,26 @@
 - BFCL adapter 支持 `official / path_filtered / debug_hints / full_tools` 四种工具暴露模式。
 - BFCL 默认使用 `bfcl_eval_bundle` 数据源，与 `/tmp/bfcl_pkg/unpack` 中的官方 backend/docs 保持版本一致；`hf_v3` 保留为 SkillX 论文 setting 的对照入口，但不能和当前 v4 bundle backend 混用。
 - BFCL execution backend 默认 `auto`，会优先调用 `bfcl-eval` official executable backend；scorer 同时报 `call_f1` 诊断指标和 `official_valid` state/response checker。
-- BFCL skills 现在是 tool rule / workflow / debug feedback card，默认作为 system notes 注入，不再默认新增 `use_skill` 工具，避免改变正式工具空间。
+- BFCL skills 现在按注入方式分为 `functional / informational / workflow`：功能类 skill 可暴露为 callable tool；信息类和流程类 skill 默认作为短 prompt notes；`use_skill` 统计工具仍默认关闭，避免改变正式工具空间。
 - Spreadsheet adapter 当前是 openpyxl scaffold，用于验证 spreadsheet-style skill package 的输入输出与 verifier，不作为最终完整 spreadsheet agent 结论。
 
 当前 BFCL 关键观察：
 
-- GLM-4.7、GLM-5、GLM-4.5-air、Claude 在 1-case BFCL bundle smoke 上都能产生 native tool calls，但 strict `official_valid` 仍为 0。
-- 失败主要来自参数精确性，而不是工具调用完全缺失：文本字段被扩写、`high-priority` 被映射为 5 而 golden 为 4、可选 `insurance_id` 被额外传入。
-- path-filtered ablation 能降低 token，但不是正式 BFCL baseline；5-case GLM-4.7 path-filtered smoke 的 avg call F1 约 0.50，official valid 仍为 0/5。
-- 1 train + 1 test 的 evolve smoke 可以生成并注入技能，但 test official valid 仍为 0/1，尚不能证明 BFCL evolve 有效。
+- GLM-4.7、GLM-5、GLM-4.5-air 在简单 BFCL case 上都能产生正确 native tool calls，并达到 official valid `1/1`。
+- Claude 需要走 Anthropic native `tool_use/tool_result` 协议；OpenAI-style tool role 会低估 Claude。当前 runner 已加入 `anthropic_direct`。
+- Qwen/SiliconFlow 类模型可用 streaming OpenAI-compatible tool-call path 测试；最小工具调用 probe 可用，但 BFCL 长 schema 下延迟较高。
+- GLM-4.7 first-10 shuffled baseline：official_valid_rate `0.6667`（1 个 timeout），avg call F1 `0.6396`，avg tokens about `60k`。
+- GLM-4.7 + handwritten top-2 skill notes first-5：official_valid_rate `0.6`，没有稳定增益；当前 skill notes 更像行为提示，可能增加 token/延迟并改变 action tendency。
+- 失败主要来自 strict state/parameter/action-set：文本字段被扩写、`high-priority` 被映射为 5 而 golden 为 4、可选 `insurance_id` 被额外传入、以及 extra calls。
+- 当前 runner 支持 `--skill-injection-mode none|prompt_only|tool_only|hybrid` 和 `--max-steps-per-turn`。正式 baseline 优先用 `none`；诊断 skill format 时用 `hybrid` 对照。
+- wall-clock `--max-task-seconds` 保留为可选防挂 guard；BFCL 对齐口径优先看 step budget，并在 summary 里报告 timeout/latency。
 
 下一步优先级：
 
-- 用隔离环境跑官方 `bfcl-eval` handler，确认当前 wrapper 与官方 handler 的差距。
-- 找一个在 BFCL native tool calling 上达到合理 baseline 的模型，再跑 50/150 split。
-- 在 strict text parameter 子集上先验证 skill 能否减少参数错误，再扩大到完整 evolve。
+- 主指标使用 `official_valid`；`call_f1` 只作为诊断，因为 extra calls 不总是导致 official failure。
+- 先压缩 skill notes / tool schema，并选择无 timeout、baseline 非饱和的 BFCL 子集，再做 evolve。
+- 用隔离环境跑官方 `bfcl-eval` handler，确认当前 runner 与官方 reported setting 的剩余差距。
+- 不要在 full official tools + 长 skill notes 上直接扩大 50/150 split；当前吞吐和 timeout 还不适合。
 - 当前 replay annotation 已加入 plain-text JSON fallback
 - 仍需继续观察：
   - fallback 路径在当前 `tool_maker` 配置下是否稳定

@@ -1,0 +1,841 @@
+{
+  "benchmark": "bfcl_v3",
+  "mode": "probe",
+  "tag": "glm47_official_2_from101_handwritten",
+  "llm_config": "bigmodel",
+  "n_train_reserved": 2,
+  "n_tasks": 2,
+  "n_runs": 2,
+  "total_success": 1,
+  "success_rate": 0.5,
+  "avg_score": 0.9445,
+  "avg_total_tokens": 50099.5,
+  "avg_at_k": 0.5,
+  "pass_at_k": 0.5,
+  "avg_call_recall": 1.0,
+  "avg_call_precision": 0.9,
+  "avg_turn_success_rate": 0.875,
+  "avg_relaxed_turn_success_rate": 1.0,
+  "official_valid_rate": 1.0,
+  "call_error_summary": {
+    "error_type_counts": {
+      "extra_call": 1
+    },
+    "param_error_counts": {}
+  },
+  "skill_stats": {
+    "retrieved_counts": {
+      "bfcl_file_system_navigation": 2,
+      "bfcl_literal_user_text_arguments": 2,
+      "bfcl_multi_action_turn_completion": 2,
+      "bfcl_schema_parameter_names": 2,
+      "bfcl_state_id_reuse": 2
+    },
+    "used_counts": {
+      "bfcl_file_system_navigation": 2,
+      "bfcl_literal_user_text_arguments": 2,
+      "bfcl_multi_action_turn_completion": 2,
+      "bfcl_schema_parameter_names": 2,
+      "bfcl_state_id_reuse": 2
+    },
+    "domain_tool_called_counts": {
+      "authenticate_travel": 1,
+      "book_flight": 1,
+      "cancel_booking": 1,
+      "create_ticket": 1,
+      "get_flight_cost": 1,
+      "get_stock_info": 1,
+      "send_message": 1,
+      "view_messages_sent": 1
+    }
+  },
+  "details": [
+    {
+      "task_id": "multi_turn_base_101",
+      "n_runs": 1,
+      "n_success": 1,
+      "avg_score": 1.0,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_101",
+          "success": true,
+          "score": 1.0,
+          "metrics": {
+            "task_success": true,
+            "relaxed_task_success": true,
+            "turn_success_rate": 1.0,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 1.0,
+            "call_recall": 1.0,
+            "call_f1": 1.0,
+            "n_expected_calls": 3,
+            "n_actual_calls": 3,
+            "n_matched_calls": 3,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [],
+            "total_tokens": 34716,
+            "completion_tokens": 348,
+            "elapsed_s": 51.235,
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_literal_user_text_arguments",
+              "bfcl_state_id_reuse",
+              "bfcl_file_system_navigation",
+              "bfcl_schema_parameter_names"
+            ],
+            "used_skills": [
+              "bfcl_file_system_navigation",
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion",
+              "bfcl_schema_parameter_names",
+              "bfcl_state_id_reuse"
+            ],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 30
+          },
+          "trace": {
+            "task_id": "multi_turn_base_101",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll retrieve the detailed information for stock symbol 'XTC' for you, including its current price and historical performance indicators.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667610122033557288",
+                    "type": "function",
+                    "function": {
+                      "name": "get_stock_info",
+                      "arguments": "{\"symbol\":\"XTC\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667610122033557288",
+                "content": "{\"price\": 150.75, \"percent_change\": 0.05, \"volume\": 1.5, \"MA(5)\": 150.5, \"MA(20)\": 150.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here's the detailed information for stock 'XTC':\n\n**Current Price:** $150.75\n\n**Performance Indicators:**\n- **Percent Change:** +0.05% (positive movement)\n- **Volume:** 1.5M shares\n- **5-Day Moving Average (MA5):** $150.50\n- **20-Day Moving Average (MA20):** $150.00\n\n**Analysis:**\nThe stock is currently trading above both its 5-day and 20-day moving averages, which suggests a positive short-term trend. The current price of $150.75 is $0.25 above the 5-day MA and $0.75 above the 20-day MA, indicating some upward momentum. The stock is up 0.05% with moderate trading volume at 1.5 million shares."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667598199204347015",
+                    "type": "function",
+                    "function": {
+                      "name": "send_message",
+                      "arguments": "{\"receiver_id\":\"USR003\",\"message\":\"The latest stock price of XTC is $150.75.\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667598199204347015",
+                "content": "{\"sent_status\": true, \"message_id\": {\"new_id\": 67410}, \"message\": \"Message sent to 'USR003' successfully.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "The message \"The latest stock price of XTC is $150.75.\" has been successfully sent to your colleague with user ID 'USR003'. The message was assigned ID 67410."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667588681556814695",
+                    "type": "function",
+                    "function": {
+                      "name": "view_messages_sent",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667588681556814695",
+                "content": "{\"messages\": {\"USR003\": [\"The latest stock price of XTC is $150.75.\"]}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here are all the messages you have sent recently:\n\n**To USR003:**\n- \"The latest stock price of XTC is $150.75.\"\n\nThis shows that you have sent one message to your colleague (USR003) containing the stock price information for XTC."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I've been keeping a keen eye on the stock under the symbol 'XTC'. It'd be tremendously helpful to have a detailed view of its present price along with its historical performance indicators. Could you retrieve this information?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_stock_info",
+                    "arguments": {
+                      "symbol": "XTC"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667610122033557288",
+                    "result": {
+                      "price": 150.75,
+                      "percent_change": 0.05,
+                      "volume": 1.5,
+                      "MA(5)": 150.5,
+                      "MA(20)": 150.0
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Could you kindly dispatch the message 'The latest stock price of XTC is $150.75.' to my colleague, who's recognized by the user ID 'USR003'?  Your user id is 'USR001'."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "send_message",
+                    "arguments": {
+                      "receiver_id": "USR003",
+                      "message": "The latest stock price of XTC is $150.75."
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667598199204347015",
+                    "result": {
+                      "sent_status": true,
+                      "message_id": {
+                        "new_id": 67410
+                      },
+                      "message": "Message sent to 'USR003' successfully."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Would it be possible for you to view all the messages that I have sent recently? I'm on the lookout for some crucial updates."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "view_messages_sent",
+                    "arguments": {},
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667588681556814695",
+                    "result": {
+                      "messages": {
+                        "USR003": [
+                          "The latest stock price of XTC is $150.75."
+                        ]
+                      }
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_stock_info",
+                "arguments": {
+                  "symbol": "XTC"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667610122033557288",
+                "result": {
+                  "price": 150.75,
+                  "percent_change": 0.05,
+                  "volume": 1.5,
+                  "MA(5)": 150.5,
+                  "MA(20)": 150.0
+                },
+                "error": null
+              },
+              {
+                "name": "send_message",
+                "arguments": {
+                  "receiver_id": "USR003",
+                  "message": "The latest stock price of XTC is $150.75."
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667598199204347015",
+                "result": {
+                  "sent_status": true,
+                  "message_id": {
+                    "new_id": 67410
+                  },
+                  "message": "Message sent to 'USR003' successfully."
+                },
+                "error": null
+              },
+              {
+                "name": "view_messages_sent",
+                "arguments": {},
+                "turn_index": 2,
+                "tool_call_id": "call_-7667588681556814695",
+                "result": {
+                  "messages": {
+                    "USR003": [
+                      "The latest stock price of XTC is $150.75."
+                    ]
+                  }
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_literal_user_text_arguments",
+              "bfcl_state_id_reuse",
+              "bfcl_file_system_navigation",
+              "bfcl_schema_parameter_names"
+            ],
+            "total_tokens": 34716,
+            "completion_tokens": 348,
+            "elapsed_s": 51.235,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_193",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.8889,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_193",
+          "success": false,
+          "score": 0.8889,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.75,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.8,
+            "call_recall": 1.0,
+            "call_f1": 0.8889,
+            "n_expected_calls": 4,
+            "n_actual_calls": 5,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "get_flight_cost",
+                "actual_arguments": {
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_date": "2026-12-25",
+                  "travel_class": "first"
+                }
+              }
+            ],
+            "total_tokens": 65483,
+            "completion_tokens": 866,
+            "elapsed_s": 117.829,
+            "retrieved_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion",
+              "bfcl_state_id_reuse",
+              "bfcl_file_system_navigation",
+              "bfcl_schema_parameter_names"
+            ],
+            "used_skills": [
+              "bfcl_file_system_navigation",
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion",
+              "bfcl_schema_parameter_names",
+              "bfcl_state_id_reuse"
+            ],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 27
+          },
+          "trace": {
+            "task_id": "multi_turn_base_193",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you authenticate with your travel account to kickstart your surprise Maldives getaway planning! Let me use your credentials to get you set up.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667610465630945048",
+                    "type": "function",
+                    "function": {
+                      "name": "authenticate_travel",
+                      "arguments": "{\"client_id\":\"my_client_id\",\"client_secret\":\"my_client_secret\",\"refresh_token\":\"my_refresh_token\",\"grant_type\":\"read_write\",\"user_first_name\":\"Michael\",\"user_last_name\":\"Thompson\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667610465630945048",
+                "content": "{\"expires_in\": 2, \"access_token\": \"251675\", \"token_type\": \"Bearer\", \"scope\": \"read_write\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! Your travel account authentication was successful, Michael. 🏝️\n\nHere are your authentication details:\n- **Access Token**: 251675\n- **Token Type**: Bearer\n- **Scope**: read_write (full access for your Maldives planning)\n- **Expires In**: 2 hours\n\nYour travel account is now active and ready for your surprise getaway planning to the Maldives! With read_write access, you can book flights, manage credit cards, set budgets, and handle all the travel arrangements to make this surprise trip absolutely perfect.\n\nWhat would you like to do next? Perhaps check available flights to the Maldives, set up your travel budget, or register a payment method for your bookings?"
+              },
+              {
+                "role": "assistant",
+                "content": "I'll help you check the flight cost and then book your journey to the Maldives. Let me start by checking the cost from JFK to MPC for your specified travel details.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667643038662917820",
+                    "type": "function",
+                    "function": {
+                      "name": "get_flight_cost",
+                      "arguments": "{\"travel_from\":\"JFK\",\"travel_to\":\"MPC\",\"travel_date\":\"2026-12-25\",\"travel_class\":\"first\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667643038662917820",
+                "content": "{\"travel_cost_list\": [4700.0]}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667597958686172334",
+                    "type": "function",
+                    "function": {
+                      "name": "book_flight",
+                      "arguments": "{\"access_token\":\"251675\",\"card_id\":\"credit_9988\",\"travel_date\":\"2026-12-25\",\"travel_from\":\"JFK\",\"travel_to\":\"MPC\",\"travel_class\":\"first\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667597958686172334",
+                "content": "{\"booking_id\": \"5431449\", \"transaction_id\": \"59784505\", \"booking_status\": true, \"booking_history\": {}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Excellent news, Michael! 🎉 Your Maldives getaway is now officially booked!\n\n**Flight Cost Confirmation**: \n- ✅ Cost verified at **$4,700.00** (exactly as expected)\n- Route: JFK to MPC\n- Date: December 25th, 2026\n- Class: First Class\n\n**Booking Details**:\n- **Booking ID**: 5431449\n- **Transaction ID**: 59784505\n- **Status**: ✅ Successfully booked\n- **Payment**: Charged to your trusted credit card (credit_9988)\n\nYour surprise escape to paradise is secured! The first-class treatment from JFK to the beautiful Maldives will make for an absolutely unforgettable Christmas Day arrival. \n\nIs there anything else you'd like to arrange for your special getaway, such as purchasing travel insurance or setting any budget limits for the trip?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667604246518296835",
+                    "type": "function",
+                    "function": {
+                      "name": "cancel_booking",
+                      "arguments": "{\"access_token\":\"251675\",\"booking_id\":\"5431449\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667604246518296835",
+                "content": "{\"cancel_status\": true}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your booking has been successfully cancelled. Your reservation (ID: 5431449) for the first-class flight from JFK to MPC on December 25th, 2026 has been cancelled, and the charge of $4,700.00 to your credit card (credit_9988) should be reversed.\n\nI understand that unexpected situations come up - I hope you're able to handle whatever urgent matter has arisen. Is there anything else I can help you with regarding your travel plans or the cancellation?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667589231312627494",
+                    "type": "function",
+                    "function": {
+                      "name": "create_ticket",
+                      "arguments": "{\"title\":\"Urgent Change in Travel Plans\",\"description\":\"An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\",\"priority\":4}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667589231312627494",
+                "content": "{\"id\": 1001, \"title\": \"Urgent Change in Travel Plans\", \"description\": \"An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\", \"status\": \"Open\", \"priority\": 4, \"created_by\": \"John\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've successfully created your support ticket with the following details:\n\n**Ticket Created:**\n- **Ticket ID:** 1001\n- **Title:** Urgent Change in Travel Plans\n- **Description:** An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\n- **Priority:** 4 (High Priority)\n- **Status:** Open\n- **Created by:** John\n\nYour travel agent will be notified about this urgent change in your itinerary. The ticket has been properly documented and queued for their attention. Is there anything else you'd like me to help you with regarding this situation or any other travel matters?"
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Imagine you've meticulously planned a surprise getaway to the Maldives, brimming with excitement to ensure each detail unfolds seamlessly. Your first step is securing your travel account access; kindly authenticate with your credentials. My access token of abc123xyz, a client ID of my_client_id, a client secret of my_client_secret, and a refresh token of my_refresh_token. The grant type should be set to read_write, and the user's first name is Michael, with the last name being Thompson"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "authenticate_travel",
+                    "arguments": {
+                      "client_id": "my_client_id",
+                      "client_secret": "my_client_secret",
+                      "refresh_token": "my_refresh_token",
+                      "grant_type": "read_write",
+                      "user_first_name": "Michael",
+                      "user_last_name": "Thompson"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667610465630945048",
+                    "result": {
+                      "expires_in": 2,
+                      "access_token": "251675",
+                      "token_type": "Bearer",
+                      "scope": "read_write"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Fantastic! Now that authentication is successfully completed, let's move forward with booking your idyllic escape. You opt for your trusted credit card, bearing the id credit_9988, to cover all logistical costs. Double check the cost of the flight and book your journey from JFK to MPC for December 25th, 2026, travelling first class, at a cost of 4700 dollars."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_flight_cost",
+                    "arguments": {
+                      "travel_from": "JFK",
+                      "travel_to": "MPC",
+                      "travel_date": "2026-12-25",
+                      "travel_class": "first"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667643038662917820",
+                    "result": {
+                      "travel_cost_list": [
+                        4700.0
+                      ]
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "book_flight",
+                    "arguments": {
+                      "access_token": "251675",
+                      "card_id": "credit_9988",
+                      "travel_date": "2026-12-25",
+                      "travel_from": "JFK",
+                      "travel_to": "MPC",
+                      "travel_class": "first"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667597958686172334",
+                    "result": {
+                      "booking_id": "5431449",
+                      "transaction_id": "59784505",
+                      "booking_status": true,
+                      "booking_history": {}
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Oh dear! Unexpected changes have arisen. Could you please cancel your recent booking as a more urgent matter needs your attention?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "cancel_booking",
+                    "arguments": {
+                      "access_token": "251675",
+                      "booking_id": "5431449"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667604246518296835",
+                    "result": {
+                      "cancel_status": true
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "In light of these new developments, you'd prefer to formally notify your travel agent about the abrupt change in your itinerary. Would you be kind enough to generate a ticket titled 'Urgent Change in Travel Plans’ with a detailed explanation outlining the necessity for these adjustments? Details write 'An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.', priority be level 4"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "create_ticket",
+                    "arguments": {
+                      "title": "Urgent Change in Travel Plans",
+                      "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                      "priority": 4
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667589231312627494",
+                    "result": {
+                      "id": 1001,
+                      "title": "Urgent Change in Travel Plans",
+                      "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                      "status": "Open",
+                      "priority": 4,
+                      "created_by": "John"
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "authenticate_travel",
+                "arguments": {
+                  "client_id": "my_client_id",
+                  "client_secret": "my_client_secret",
+                  "refresh_token": "my_refresh_token",
+                  "grant_type": "read_write",
+                  "user_first_name": "Michael",
+                  "user_last_name": "Thompson"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667610465630945048",
+                "result": {
+                  "expires_in": 2,
+                  "access_token": "251675",
+                  "token_type": "Bearer",
+                  "scope": "read_write"
+                },
+                "error": null
+              },
+              {
+                "name": "get_flight_cost",
+                "arguments": {
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_date": "2026-12-25",
+                  "travel_class": "first"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667643038662917820",
+                "result": {
+                  "travel_cost_list": [
+                    4700.0
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "book_flight",
+                "arguments": {
+                  "access_token": "251675",
+                  "card_id": "credit_9988",
+                  "travel_date": "2026-12-25",
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_class": "first"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667597958686172334",
+                "result": {
+                  "booking_id": "5431449",
+                  "transaction_id": "59784505",
+                  "booking_status": true,
+                  "booking_history": {}
+                },
+                "error": null
+              },
+              {
+                "name": "cancel_booking",
+                "arguments": {
+                  "access_token": "251675",
+                  "booking_id": "5431449"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667604246518296835",
+                "result": {
+                  "cancel_status": true
+                },
+                "error": null
+              },
+              {
+                "name": "create_ticket",
+                "arguments": {
+                  "title": "Urgent Change in Travel Plans",
+                  "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                  "priority": 4
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7667589231312627494",
+                "result": {
+                  "id": 1001,
+                  "title": "Urgent Change in Travel Plans",
+                  "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                  "status": "Open",
+                  "priority": 4,
+                  "created_by": "John"
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion",
+              "bfcl_state_id_reuse",
+              "bfcl_file_system_navigation",
+              "bfcl_schema_parameter_names"
+            ],
+            "total_tokens": 65483,
+            "completion_tokens": 866,
+            "elapsed_s": 117.829,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    }
+  ],
+  "model_name": "glm-4.7",
+  "adapter_mode": "official",
+  "execution_backend": "auto",
+  "bfcl_data_source": "bfcl_eval_bundle",
+  "bfcl_prompt_style": "native",
+  "bfcl_tool_api_style": "openai",
+  "temperature": null,
+  "bfcl_synthetic_continue": false,
+  "bfcl_explicit_skill_tool": false,
+  "elapsed_s": 169.608
+}

@@ -20,7 +20,14 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
+
+from academic.skill_repository.maintenance_runner import build_runner_trace_from_debug_events
+from academic.skill_repository.maintenance_state_machine import (
+    build_player_trace,
+    build_player_trace_from_pages,
+    compact_debug_event_for_player,
+)
 
 app = Flask(
     __name__,
@@ -152,6 +159,21 @@ def _dump_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
 
+def _load_jsonl(path: Path) -> List[Any]:
+    rows: List[Any] = []
+    if not path.exists():
+        return rows
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except Exception as exc:
+            rows.append({"error": f"Failed to parse JSONL row: {exc}", "raw": raw_line})
+    return rows
+
+
 def _load_case_container(path: Path) -> Tuple[Any, List[Dict[str, Any]]]:
     payload = _load_json(path)
     if isinstance(payload, list):
@@ -195,6 +217,1883 @@ def _now_ts() -> float:
 
 def _iso_now() -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+
+
+MAINTENANCE_RESULTS_PREFIX = "bfcl_real_glm_maintenance_"
+MAINTENANCE_AUDIT_PREFIX = "real_glm_maintenance_"
+METHOD_VALIDATION_DIR = REPO_ROOT / "academic" / "results" / "method_validation"
+MAINTENANCE_DETAIL_TRACE_LIMIT = 12
+MAINTENANCE_DETAIL_RAW_EVENT_LIMIT = 1200
+
+
+def _json_text(payload: Any) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _artifact_raw_debug_snapshot(skill: Dict[str, Any]) -> Dict[str, Any]:
+    """Small debug snapshot; full fields are sent separately on the card."""
+
+    return {
+        "name": skill.get("name", ""),
+        "kind": skill.get("kind", ""),
+        "description": skill.get("description", ""),
+        "status": skill.get("status", ""),
+        "version": skill.get("version", 1),
+        "version_kind": skill.get("version_kind", ""),
+        "stale": bool(skill.get("stale", False)),
+        "dependencies": copy.deepcopy(skill.get("dependencies") or []),
+        "dependency_pins": copy.deepcopy(skill.get("dependency_pins") or []),
+        "metadata": copy.deepcopy(skill.get("metadata") or {}),
+        "lineage": copy.deepcopy(skill.get("lineage") or {}),
+        "bundle_counts": {
+            "positive": len(((skill.get("bundle") or {}).get("positive_cases") or [])),
+            "negative": len(((skill.get("bundle") or {}).get("negative_cases") or [])),
+            "integration": len(((skill.get("bundle") or {}).get("integration_cases") or [])),
+        },
+    }
+
+
+def _read_text_if_exists(raw_path: str | None) -> str:
+    if not raw_path:
+        return ""
+    path = Path(raw_path)
+    if not path.exists():
+        return ""
+    return path.read_text()
+
+
+def _first_json_file(path: Path) -> Optional[Path]:
+    items = sorted(path.glob("*.json"))
+    if not items:
+        return None
+    for exact_name in ("result.json", "evolve.json"):
+        for item in items:
+            if item.name == exact_name:
+                return item
+    for marker in ("_evolve", "loopboard_v2", "retry2"):
+        for item in items:
+            if marker in item.name:
+                return item
+    for item in items:
+        if not item.name.startswith("partial_") and item.name != "skills.json":
+            return item
+    for item in items:
+        return item
+    return None
+
+
+def _maintenance_kind_from_names(*names: str) -> str:
+    combined = " ".join(name.lower() for name in names if name)
+    if "method_validation" in combined or "sta_" in combined:
+        return "method_validation"
+    for key in ("exp1", "exp2", "exp3", "medium"):
+        if key in combined:
+            return key
+    return Path(names[0]).stem if names else "unknown"
+
+
+def _maintenance_suite_dirs() -> List[Path]:
+    results_root = REPO_ROOT / "academic" / "results"
+    return sorted(
+        [
+            path
+            for path in results_root.glob(f"{MAINTENANCE_RESULTS_PREFIX}*")
+            if path.is_dir()
+        ],
+        reverse=True,
+    )
+
+
+def _method_validation_experiment_meta() -> List[Dict[str, Any]]:
+    if not METHOD_VALIDATION_DIR.exists():
+        return []
+    experiments: List[Dict[str, Any]] = []
+    for raw_json in sorted(METHOD_VALIDATION_DIR.glob("*.json"), reverse=True):
+        if raw_json.name.endswith(".audit.json"):
+            continue
+        audit_log = raw_json.with_suffix(".audit.jsonl")
+        experiment_id = f"method_validation__{raw_json.stem}"
+        experiments.append(
+            {
+                "id": experiment_id,
+                "suite_id": "method_validation",
+                "suite_label": "Method Validation",
+                "title": raw_json.stem.replace("_", " ").title(),
+                "folder_name": raw_json.name,
+                "kind": "method_validation",
+                "folder_path": str(METHOD_VALIDATION_DIR),
+                "result_path": str(raw_json),
+                "readme_path": "",
+                "suite_readme_path": "",
+                "role_log_path": str(audit_log) if audit_log.exists() else "",
+                "role_log_exists": audit_log.exists(),
+                "role_log_count": len(_load_jsonl(audit_log)) if audit_log.exists() else 0,
+            }
+        )
+    return experiments
+
+
+def _maintenance_experiment_meta() -> List[Dict[str, Any]]:
+    experiments: List[Dict[str, Any]] = []
+    for suite_dir in _maintenance_suite_dirs():
+        date_token = suite_dir.name.replace(MAINTENANCE_RESULTS_PREFIX, "", 1)
+        audit_root = REPO_ROOT / "academic" / "results" / f"{MAINTENANCE_AUDIT_PREFIX}{date_token}"
+        full_logs_dir = audit_root / "full_logs"
+        suite_readme = suite_dir / "README.md"
+        for child in sorted([item for item in suite_dir.iterdir() if item.is_dir()]):
+            raw_json = _first_json_file(child)
+            if not raw_json:
+                continue
+            kind = _maintenance_kind_from_names(child.name, raw_json.name)
+            role_log = full_logs_dir / f"{kind}_roles.jsonl" if kind.startswith("exp") else None
+            role_log_exists = bool(role_log and role_log.exists())
+            experiment_id = f"{suite_dir.name}__{child.name}"
+            experiments.append(
+                {
+                    "id": experiment_id,
+                    "suite_id": suite_dir.name,
+                    "suite_label": suite_dir.name.replace("_", " "),
+                    "title": child.name.replace("_", " ").title(),
+                    "folder_name": child.name,
+                    "kind": kind,
+                    "folder_path": str(child),
+                    "result_path": str(raw_json),
+                    "readme_path": str(child / "README.md") if (child / "README.md").exists() else "",
+                    "suite_readme_path": str(suite_readme) if suite_readme.exists() else "",
+                    "role_log_path": str(role_log) if role_log else "",
+                    "role_log_exists": role_log_exists,
+                    "role_log_count": len(_load_jsonl(role_log)) if role_log_exists else 0,
+                }
+            )
+    experiments.extend(_method_validation_experiment_meta())
+    return experiments
+
+
+def _maintenance_lookup(experiment_id: str) -> Dict[str, Any]:
+    for item in _maintenance_experiment_meta():
+        if item["id"] == experiment_id:
+            return item
+    raise FileNotFoundError(f"Unknown maintenance experiment: {experiment_id}")
+
+
+def _maintenance_docs(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    skill_repo_dir = REPO_ROOT / "academic" / "skill_repository"
+    candidates = [
+        {
+            "id": "experiment_readme",
+            "title": "Experiment README",
+            "kind": "experiment",
+            "path": meta.get("readme_path", ""),
+        },
+        {
+            "id": "suite_readme",
+            "title": "Suite README",
+            "kind": "suite",
+            "path": meta.get("suite_readme_path", ""),
+        },
+        {
+            "id": "maintenance_repo_readme",
+            "title": "Maintenance Repo README",
+            "kind": "reference",
+            "path": str(skill_repo_dir / "README.md"),
+        },
+        {
+            "id": "maintenance_architecture",
+            "title": "Maintenance Architecture",
+            "kind": "reference",
+            "path": str(skill_repo_dir / "MAINTENANCE_ARCHITECTURE.md"),
+        },
+        {
+            "id": "maintenance_api_reference",
+            "title": "Maintenance API Reference",
+            "kind": "reference",
+            "path": str(skill_repo_dir / "MAINTENANCE_API_REFERENCE.md"),
+        },
+    ]
+    docs: List[Dict[str, Any]] = []
+    for item in candidates:
+        text = _read_text_if_exists(item["path"])
+        if not text.strip():
+            continue
+        docs.append({**item, "text": text})
+    return docs
+
+
+def _maintenance_reference_docs() -> List[Dict[str, Any]]:
+    skill_repo_dir = REPO_ROOT / "academic" / "skill_repository"
+    candidates = [
+        {
+            "id": "overview",
+            "title": "Overview",
+            "kind": "reference",
+            "path": str(skill_repo_dir / "README.md"),
+        },
+        {
+            "id": "architecture",
+            "title": "Architecture",
+            "kind": "reference",
+            "path": str(skill_repo_dir / "MAINTENANCE_ARCHITECTURE.md"),
+        },
+        {
+            "id": "api_reference",
+            "title": "API Reference",
+            "kind": "reference",
+            "path": str(skill_repo_dir / "MAINTENANCE_API_REFERENCE.md"),
+        },
+        {
+            "id": "method_validation_plan",
+            "title": "Method Validation Plan",
+            "kind": "test_plan",
+            "path": str(skill_repo_dir / "METHOD_VALIDATION_TEST_PLAN.md"),
+        },
+    ]
+    docs: List[Dict[str, Any]] = []
+    for item in candidates:
+        text = _read_text_if_exists(item["path"])
+        if text.strip():
+            docs.append({**item, "text": text})
+    return docs
+
+
+MAINTENANCE_DOC_FILES: Dict[str, Path] = {
+    "README.md": REPO_ROOT / "academic" / "skill_repository" / "README.md",
+    "MAINTENANCE_ARCHITECTURE.md": REPO_ROOT / "academic" / "skill_repository" / "MAINTENANCE_ARCHITECTURE.md",
+    "MAINTENANCE_API_REFERENCE.md": REPO_ROOT / "academic" / "skill_repository" / "MAINTENANCE_API_REFERENCE.md",
+    "METHOD_VALIDATION_TEST_PLAN.md": REPO_ROOT / "academic" / "skill_repository" / "METHOD_VALIDATION_TEST_PLAN.md",
+}
+
+
+def _maintenance_docs_sidebar() -> str:
+    return "\n".join(
+        [
+            "* [Overview](README.md)",
+            "* [Architecture](MAINTENANCE_ARCHITECTURE.md)",
+            "* [API Reference](MAINTENANCE_API_REFERENCE.md)",
+            "* [Method Validation Plan](METHOD_VALIDATION_TEST_PLAN.md)",
+            "",
+        ]
+    )
+
+
+def _run_tone(run: Optional[Dict[str, Any]]) -> str:
+    run = _run_summary(run)
+    if not isinstance(run, dict):
+        return "neutral"
+    if run.get("official_valid") is False:
+        return "danger"
+    if run.get("official_valid") is True:
+        return "success"
+    if run.get("success") is True:
+        return "success"
+    if run.get("success") is False:
+        return "warning"
+    return "accent"
+
+
+def _run_pills(run: Optional[Dict[str, Any]]) -> List[str]:
+    run = _run_summary(run)
+    if not isinstance(run, dict):
+        return []
+    pills: List[str] = []
+    task_id = run.get("task_id")
+    if task_id:
+        pills.append(str(task_id))
+    if "official_valid" in run:
+        pills.append(f"official_valid={run.get('official_valid')}")
+    if "call_f1" in run and run.get("call_f1") is not None:
+        pills.append(f"call_f1={run.get('call_f1')}")
+    if "total_tokens" in run and run.get("total_tokens") is not None:
+        pills.append(f"tokens={run.get('total_tokens')}")
+    if "n_model_steps" in run and run.get("n_model_steps") is not None:
+        pills.append(f"steps={run.get('n_model_steps')}")
+    return pills
+
+
+def _run_metrics(run: Dict[str, Any]) -> Dict[str, Any]:
+    run = _run_summary(run)
+    keys = [
+        "task_id",
+        "success",
+        "score",
+        "official_valid",
+        "call_f1",
+        "total_tokens",
+        "elapsed_s",
+        "n_model_steps",
+    ]
+    return {key: run.get(key) for key in keys if key in run}
+
+
+def _task_label(task_id: str | None) -> str:
+    return str(task_id or "").strip() or "unknown_task"
+
+
+def _run_summary(run: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(run, dict):
+        return {}
+    summary = run.get("summary")
+    if isinstance(summary, dict):
+        return summary
+    return run
+
+
+def _coerce_run_wrapper(run: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(run, dict):
+        return {}
+    summary = _run_summary(run)
+    detail = _run_detail(run)
+    if summary is run and not detail:
+        return {"summary": summary, "detail": {}}
+    return {"summary": summary, "detail": detail}
+
+
+def _run_detail(run: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(run, dict):
+        return {}
+    detail = run.get("detail")
+    if isinstance(detail, dict):
+        return detail
+    if "runs" in run and isinstance(run.get("runs"), list):
+        return run
+    return {}
+
+
+def _run_result_payload(run: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    detail = _run_detail(run)
+    runs = detail.get("runs") or []
+    if runs and isinstance(runs[0], dict):
+        return runs[0]
+    return {}
+
+
+def _call_error_summary_items(run: Dict[str, Any]) -> List[Dict[str, Any]]:
+    run = _run_summary(run)
+    items: List[Dict[str, Any]] = []
+    for err in run.get("call_errors") or []:
+        error_type = err.get("type", "unknown")
+        label = error_type
+        detail = ""
+        if error_type == "extra_call":
+            label = f"Extra {err.get('actual_name', '')}".strip()
+            detail = f"turn {err.get('turn_index', '?')}"
+        elif error_type == "missing_call":
+            label = f"Missing {err.get('expected_name', '')}".strip()
+            detail = f"turn {err.get('turn_index', '?')}"
+        elif error_type == "argument_mismatch":
+            label = f"Arg mismatch {err.get('name', '')}".strip()
+            detail = f"turn {err.get('turn_index', '?')}"
+        else:
+            detail = f"turn {err.get('turn_index', '?')}"
+        items.append({"label": label, "detail": detail, "raw": err})
+    return items
+
+
+def _metric_help_text(label: str) -> str:
+    docs = {
+        "Official": "BFCL official checker 的真假值。True 表示最终工具调用序列和状态更新满足官方验证器。",
+        "Call F1": "基于 expected calls 与 actual calls 的调用级 F1，用来分析工具选择和参数匹配质量。",
+        "Tokens": "整轮执行消耗的总 token 数，通常是 input + completion。",
+        "Elapsed": "该轮执行的端到端 wall-clock 时间，单位秒。",
+        "Steps": "模型在该轮执行中一共响应了多少步，通常对应 tool-calling loop 的迭代次数。",
+        "Errors": "当前运行中被 scorer 标记出的调用错误数量。",
+        "Baseline Valid": "注入故障前，baseline 是否通过 BFCL official checker。",
+        "Broken Valid": "注入故障后，该轮是否仍通过 BFCL official checker。",
+        "Verify Valid": "维护或修复后重新执行时，是否通过 BFCL official checker。",
+        "Maint Tests": "该页关联的 maintenance test result 数量。",
+        "Refine Actions": "该页发生的 refiner/store-level 决策数量。",
+        "New Skills": "这一轮 extract/store update 后新增的 skill 数量。",
+        "Final Skills": "实验结束时 skill store 中可见的 skill 数量。",
+        "Warmups": "相关任务预热轮数，用于观察技能积累。",
+        "Fault Skill": "手工注入的故障 skill 名称。",
+        "Success Rate": "聚合实验中 success=True 的比例。",
+        "Official Valid": "聚合实验中 official_valid=True 的比例。",
+        "Avg Call F1": "聚合实验中调用级 F1 的平均值。",
+        "Avg Precision": "聚合实验中调用级 precision 平均值。",
+        "Avg Recall": "聚合实验中调用级 recall 平均值。",
+        "Micro Refactors": "当前输出中记录到的 micro-refactor 候选数量。",
+        "Integration Cases": "由 integration failure 沉淀回 bundle 的样例数量。",
+        "Model": "运行该实验的模型标识。",
+        "Skills": "当前实验结果中可见的技能条目数量。",
+        "Disabled": "当前被标记为 disabled 的技能数量。",
+        "Test Valid": "测试集上的 official_valid_rate。",
+        "Experiment": "实验类型标识。",
+        "Audit Rows": "该实验加载到的 role-level audit log 行数。",
+        "Passed": "探针实验自身定义的通过条件是否满足。",
+        "Rounds": "实验包含多少轮/页。",
+        "cases": "本次 maintenance test 实际执行的 bundle case 数量。",
+        "comparable": "可以做 with-skill / without-skill 对照的 case 数量。",
+        "improved": "加入 skill 后指标改善的 case 数量。",
+        "regressed": "加入 skill 后指标退化的 case 数量。",
+        "pass_all": "当前 bundle 回归是否全部通过。",
+        "delta_acc": "with-skill 相对 without-skill 的局部 utility 精度差值。",
+        "delta_tokens": "with-skill 相对 without-skill 的 token 开销差值。",
+        "delta_steps": "with-skill 相对 without-skill 的 step 开销差值。",
+        "Before": "refine/store update 前的 skill version。",
+        "After": "refine/store update 后的 skill version。",
+        "Regressions": "该决策摘要中记录的回归计数。",
+        "Helped": "该决策摘要中记录的帮助计数。",
+        "Counterfactual": "是否或如何使用了 with/without 对照证据。",
+        "Positive": "bundle 中正例 case 数量。",
+        "Negative": "bundle 中反例 case 数量。",
+        "Integration": "bundle 中 integration-derived case 数量。",
+        "Source Runs": "bundle builder 看到的 source result 数量。",
+        "Replay Runs": "bundle builder 看到的 replay result 数量。",
+        "Failures": "bundle builder 输入里的 integration failure 数量。",
+        "Total": "总数量。",
+        "Integration Failures": "带 skill 运行后仍失败、被记录为 integration failure 的样例数。",
+    }
+    return docs.get(label, f"{label} 指标的具体语义需要结合当前卡片上下文理解。")
+
+
+def _metric_item(label: str, value: Any, tone: str = "accent") -> Dict[str, Any]:
+    return {
+        "label": label,
+        "value": value,
+        "tone": tone,
+        "help": _metric_help_text(label),
+    }
+
+
+def _preview_text(value: Any, limit: int = 280) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "...[truncated]"
+
+
+def _safe_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def _compact_list(items: List[Any], limit: int = MAINTENANCE_DETAIL_TRACE_LIMIT) -> List[Any]:
+    if len(items) <= limit:
+        return items
+    return [*items[:limit], {"_truncated_items": len(items) - limit}]
+
+
+def _compact_debug_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    compact = compact_debug_event_for_player(event)
+    output = compact.get("output") if isinstance(compact.get("output"), dict) else {}
+    input_payload = compact.get("input") if isinstance(compact.get("input"), dict) else {}
+    return {
+        "event_id": compact.get("event_id", ""),
+        "event_type": compact.get("event_type", ""),
+        "experiment": compact.get("experiment", ""),
+        "loop_index": compact.get("loop_index"),
+        "turn_index": compact.get("turn_index"),
+        "step_index": compact.get("step_index"),
+        "task_id": compact.get("task_id", ""),
+        "phase": compact.get("phase", ""),
+        "input_summary": _summarize_mapping(input_payload),
+        "output_summary": _debug_output_summary(str(compact.get("event_type") or ""), output),
+        "metrics": compact.get("metrics") or {},
+    }
+
+
+def _debug_output_summary(event_type: str, output: Dict[str, Any]) -> Dict[str, Any]:
+    if not output:
+        return {}
+    if event_type in {"unit_test_done", "post_refine_test_done"}:
+        return {
+            "result_id": output.get("result_id"),
+            "skill_name": output.get("skill_name"),
+            "skill_version": output.get("skill_version"),
+            "bundle_version": output.get("bundle_version"),
+            "aggregate": output.get("aggregate") or {},
+            "n_unit_case_runs": len(output.get("unit_case_runs") or []),
+            "n_integration_failures": len(output.get("integration_failures") or []),
+        }
+    if event_type == "refiner_done":
+        return {
+            "decisions": [
+                {
+                    "skill_name": item.get("skill_name"),
+                    "action": item.get("action"),
+                    "version_kind": item.get("version_kind"),
+                    "reason": _preview_text(item.get("reason", ""), 260),
+                }
+                for item in (output.get("decisions") or [])[:8]
+            ],
+            "store_after": _store_summary_only(output.get("store_after") or {}),
+        }
+    if event_type in {"refine_cycle_done", "refine_cycle_round_done"}:
+        return {
+            "maintenance_targets": output.get("maintenance_targets") or [],
+            "n_maintenance_rounds": len(output.get("maintenance_rounds") or []),
+            "n_maintenance_test_results": len(output.get("maintenance_test_results") or []),
+            "n_post_refine_test_results": len(output.get("post_refine_test_results") or []),
+            "n_refine_decisions": len(output.get("refine_decisions") or []),
+            "integration_cases_appended": output.get("integration_cases_appended"),
+            "n_runner_frames": len(output.get("runner_frames") or []),
+            "store_after": _store_summary_only(output.get("store_after") or output.get("skills_after_refine") or {}),
+        }
+    if "store_after" in output:
+        return {**_summarize_mapping({k: v for k, v in output.items() if k != "store_after"}), "store_after": _store_summary_only(output.get("store_after") or {})}
+    return _summarize_mapping(output)
+
+
+def _store_summary_only(store_payload: Dict[str, Any] | List[Any]) -> Dict[str, Any]:
+    if isinstance(store_payload, list):
+        return {"n_total": len(store_payload), "skill_names": [item.get("name", "") for item in store_payload[:20] if isinstance(item, dict)]}
+    if not isinstance(store_payload, dict):
+        return {}
+    skills = store_payload.get("skills") or []
+    return {
+        "n_total": store_payload.get("n_total", len(skills)),
+        "n_active": store_payload.get("n_active"),
+        "n_stale": store_payload.get("n_stale"),
+        "n_disabled": store_payload.get("n_disabled"),
+        "skill_names": [item.get("name", "") for item in skills[:20] if isinstance(item, dict)],
+    }
+
+
+def _summarize_mapping(payload: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for key, value in list(payload.items())[:12]:
+        out[str(key)] = _summary_value(value)
+    return out
+
+
+def _summary_value(value: Any, *, depth: int = 0) -> Any:
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    if isinstance(value, str):
+        return _preview_text(value, 300 if depth == 0 else 180)
+    if isinstance(value, tuple):
+        value = list(value)
+    if isinstance(value, list):
+        preview = [_summary_value(item, depth=depth + 1) for item in value[:3]]
+        return {"type": "list", "length": len(value), "preview": preview}
+    if isinstance(value, dict):
+        if depth >= 1:
+            return {
+                "type": "object",
+                "field_count": len(value),
+                "keys": [str(key) for key in list(value.keys())[:12]],
+            }
+        return {
+            "type": "object",
+            "field_count": len(value),
+            "keys": [str(key) for key in list(value.keys())[:12]],
+            "preview": {
+                str(k): _summary_value(v, depth=depth + 1)
+                for k, v in list(value.items())[:4]
+            },
+        }
+    return str(type(value).__name__)
+
+
+def _executor_detail_block(run: Dict[str, Any]) -> Dict[str, Any]:
+    detail = _run_detail(run)
+    result_payload = _run_result_payload(run)
+    trace = result_payload.get("trace") or {}
+    turns = trace.get("turns") or []
+    tool_calls = trace.get("tool_calls") or []
+    messages = trace.get("messages") or []
+    return {
+        "available": bool(trace),
+        "summary": {
+            "n_turns": len(turns),
+            "n_tool_calls": len(tool_calls),
+            "n_messages": len(messages),
+            "n_skill_events": len(trace.get("skill_events") or []),
+            "truncated": len(turns) > MAINTENANCE_DETAIL_TRACE_LIMIT
+            or len(tool_calls) > MAINTENANCE_DETAIL_TRACE_LIMIT
+            or len(messages) > MAINTENANCE_DETAIL_TRACE_LIMIT,
+        },
+        "turns": _compact_list(turns),
+        "tool_calls": _compact_list(tool_calls),
+        "messages": _compact_list(messages),
+        "skill_events": _compact_list(trace.get("skill_events") or []),
+        "task": detail.get("task") or {},
+        "raw_trace": "",
+        "raw_trace_note": "Full raw trace is available in the source result JSON and state player debug events.",
+    }
+
+
+def _skill_context_summary(run: Dict[str, Any]) -> Dict[str, Any]:
+    run = _run_summary(run)
+    return {
+        "retrieved_skills": run.get("retrieved_skills", []),
+        "prompt_injected_skills": run.get("prompt_injected_skills", []),
+        "used_skills": run.get("used_skills", []),
+    }
+
+
+def _compact_run_card(run: Dict[str, Any]) -> Dict[str, Any]:
+    summary = _run_summary(run)
+    return {
+        "task_id": summary.get("task_id", ""),
+        "official_valid": summary.get("official_valid"),
+        "call_f1": summary.get("call_f1"),
+        "total_tokens": summary.get("total_tokens"),
+        "elapsed_s": summary.get("elapsed_s"),
+        "n_model_steps": summary.get("n_model_steps"),
+        "retrieved_skills": summary.get("retrieved_skills", []),
+        "prompt_injected_skills": summary.get("prompt_injected_skills", []),
+        "used_skills": summary.get("used_skills", []),
+        "call_errors": _call_error_summary_items(summary),
+        "detail": _executor_detail_block(run),
+    }
+
+
+def _aggregate_breakdown(aggregate: Dict[str, Any]) -> List[Dict[str, Any]]:
+    report = aggregate.get("unit_utility_report") or {}
+    return [
+        _metric_item("cases", aggregate.get("n_cases", 0)),
+        _metric_item("comparable", aggregate.get("n_comparable_cases", 0)),
+        _metric_item("improved", aggregate.get("n_improved", 0), "success"),
+        _metric_item("regressed", aggregate.get("n_regressed", 0), "danger"),
+        _metric_item("pass_all", aggregate.get("pass_all_tests"), "success" if aggregate.get("pass_all_tests") else "warning"),
+        _metric_item("delta_acc", report.get("delta_accuracy")),
+        _metric_item("delta_tokens", report.get("delta_tokens")),
+        _metric_item("delta_steps", report.get("delta_steps")),
+    ]
+
+
+def _artifact_card(skill: Dict[str, Any]) -> Dict[str, Any]:
+    bundle = skill.get("bundle") or {}
+    interface = skill.get("interface") or {}
+    return {
+        "name": skill.get("name", ""),
+        "kind": skill.get("kind", ""),
+        "description": skill.get("description", ""),
+        "status": skill.get("status", "unknown"),
+        "version": skill.get("version", 1),
+        "version_kind": skill.get("version_kind", ""),
+        "stale": bool(skill.get("stale", False)),
+        "dependencies": skill.get("dependencies", []),
+        "bundle_id": bundle.get("bundle_id", ""),
+        "bundle_version": bundle.get("bundle_version"),
+        "body": skill.get("body", ""),
+        "metadata": copy.deepcopy(skill.get("metadata") or {}),
+        "interface": copy.deepcopy(interface),
+        "bundle": copy.deepcopy(bundle),
+        "evidence": copy.deepcopy(skill.get("evidence") or {}),
+        "lineage": copy.deepcopy(skill.get("lineage") or {}),
+        "dependency_pins": copy.deepcopy(skill.get("dependency_pins") or []),
+        "history": copy.deepcopy(skill.get("history") or []),
+        "usage_count": skill.get("usage_count", 0),
+        "success_count": skill.get("success_count", 0),
+        "bundle_counts": {
+            "positive": len(bundle.get("positive_cases") or []),
+            "negative": len(bundle.get("negative_cases") or []),
+            "integration": len(bundle.get("integration_cases") or []),
+        },
+        "interface_summary": interface.get("summary", ""),
+        "raw": _json_text(_artifact_raw_debug_snapshot(skill)),
+    }
+
+
+def _flow_run_card(title: str, run: Dict[str, Any], *, subtitle: str = "") -> Dict[str, Any]:
+    summary = _run_summary(run)
+    return {
+        "type": "run",
+        "title": title,
+        "subtitle": subtitle,
+        "tone": _run_tone(run),
+        "pills": _run_pills(run),
+        "run": _compact_run_card(run),
+        "detail": {
+            "input": {
+                "retrieved_skills": summary.get("retrieved_skills", []),
+                "prompt_injected_skills": summary.get("prompt_injected_skills", []),
+                "used_skills": summary.get("used_skills", []),
+            },
+            "output": {
+                "call_errors": _call_error_summary_items(summary),
+                "trace": _executor_detail_block(run),
+            },
+        },
+    }
+
+
+def _flow_bundle_card(role_audit: Dict[str, Any], *, artifact_name: str = "") -> Dict[str, Any]:
+    parsed = role_audit.get("parsed_response_data") or {}
+    positive_cases = parsed.get("positive_cases") or []
+    negative_cases = parsed.get("negative_cases") or []
+    integration_cases = parsed.get("integration_cases") or []
+    return {
+        "type": "role_bundle_builder",
+        "title": "Bundle Builder",
+        "subtitle": artifact_name or role_audit.get("metadata", {}).get("artifact_name", ""),
+        "tone": "accent",
+        "role": role_audit.get("role", "bundle_builder"),
+        "metadata": role_audit.get("metadata", {}),
+        "maintenance_notes": parsed.get("maintenance_notes", ""),
+        "counts": {
+            "positive": len(positive_cases),
+            "negative": len(negative_cases),
+            "integration": len(integration_cases),
+        },
+        "cases": {
+            "positive": positive_cases,
+            "negative": negative_cases,
+            "integration": integration_cases,
+        },
+        "user_preview": role_audit.get("user_preview", ""),
+        "system": role_audit.get("system", ""),
+        "user": role_audit.get("user", ""),
+        "raw_response": role_audit.get("raw_response", ""),
+        "detail": {
+            "input": {
+                "metadata": role_audit.get("metadata", {}),
+                "system": role_audit.get("system", ""),
+                "user": role_audit.get("user", ""),
+            },
+            "output": {
+                "maintenance_notes": parsed.get("maintenance_notes", ""),
+                "positive_cases": positive_cases,
+                "negative_cases": negative_cases,
+                "integration_cases": integration_cases,
+                "raw_response": role_audit.get("raw_response", ""),
+                "parsed_response": parsed,
+            },
+        },
+    }
+
+
+def _flow_extractor_card(role_audit: Dict[str, Any]) -> Dict[str, Any]:
+    parsed = role_audit.get("parsed_response_data") or {}
+    artifacts = parsed.get("artifacts") or []
+    first = artifacts[0] if artifacts else {}
+    return {
+        "type": "role_extractor",
+        "title": "Extractor",
+        "subtitle": first.get("name", ""),
+        "tone": "accent",
+        "role": role_audit.get("role", "extractor"),
+        "metadata": role_audit.get("metadata", {}),
+        "artifact_count": len(artifacts),
+        "artifact_preview": {
+            "name": first.get("name", ""),
+            "kind": first.get("kind", ""),
+            "description": first.get("description", ""),
+            "version_kind": first.get("version_kind", ""),
+            "dependencies": first.get("dependencies", []),
+        },
+        "user_preview": role_audit.get("user_preview", ""),
+        "system": role_audit.get("system", ""),
+        "user": role_audit.get("user", ""),
+        "raw_response": role_audit.get("raw_response", ""),
+        "detail": {
+            "input": {
+                "metadata": role_audit.get("metadata", {}),
+                "system": role_audit.get("system", ""),
+                "user": role_audit.get("user", ""),
+            },
+            "output": {
+                "artifact_count": len(artifacts),
+                "artifacts": artifacts,
+                "raw_response": role_audit.get("raw_response", ""),
+                "parsed_response": parsed,
+            },
+        },
+    }
+
+
+def _flow_refiner_card(role_audit: Dict[str, Any], decision: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    parsed = role_audit.get("parsed_response_data") or {}
+    decision_payload = parsed.get("decision") or decision or {}
+    artifact = parsed.get("artifact") or {}
+    bundle = parsed.get("bundle") or {}
+    return {
+        "type": "role_refiner",
+        "title": "Refiner",
+        "subtitle": artifact.get("name", ""),
+        "tone": "warning" if decision_payload.get("action") == "disable" else "accent",
+        "role": role_audit.get("role", "refiner"),
+        "metadata": role_audit.get("metadata", {}),
+        "decision": {
+            "action": decision_payload.get("action", ""),
+            "reason": decision_payload.get("reason", ""),
+            "version_kind": decision_payload.get("version_kind", ""),
+            "migration_reason": decision_payload.get("migration_reason", ""),
+            "pinned_dependencies": decision_payload.get("pinned_dependencies", []),
+        },
+        "artifact_preview": {
+            "name": artifact.get("name", ""),
+            "description": artifact.get("description", ""),
+            "dependencies": artifact.get("dependencies", []),
+        },
+        "bundle_preview": {
+            "positive": len(bundle.get("positive_cases") or []),
+            "negative": len(bundle.get("negative_cases") or []),
+            "integration": len(bundle.get("integration_cases") or []),
+        },
+        "user_preview": role_audit.get("user_preview", ""),
+        "system": role_audit.get("system", ""),
+        "user": role_audit.get("user", ""),
+        "raw_response": role_audit.get("raw_response", ""),
+        "detail": {
+            "input": {
+                "metadata": role_audit.get("metadata", {}),
+                "system": role_audit.get("system", ""),
+                "user": role_audit.get("user", ""),
+            },
+            "output": {
+                "decision": decision_payload,
+                "artifact": artifact,
+                "bundle": bundle,
+                "raw_response": role_audit.get("raw_response", ""),
+                "parsed_response": parsed,
+            },
+        },
+    }
+
+
+def _maintenance_test_card(result: Dict[str, Any]) -> Dict[str, Any]:
+    aggregate = result.get("aggregate") or {}
+    unit_case_runs = [_normalize_unit_case_run(item) for item in _compact_list(result.get("unit_case_runs") or [])]
+    integration_failures = _compact_list(result.get("integration_failures") or [])
+    return {
+        "type": "maintenance_test",
+        "title": "Unit Test",
+        "subtitle": result.get("skill_name", ""),
+        "tone": "success" if aggregate.get("pass_all_tests") else "warning",
+        "aggregate": aggregate,
+        "breakdown": _aggregate_breakdown(aggregate),
+        "counterfactual": result.get("counterfactual") or {},
+        "unit_case_runs": unit_case_runs,
+        "integration_failures": integration_failures,
+        "skill_name": result.get("skill_name", ""),
+        "skill_version": result.get("skill_version"),
+        "bundle_version": result.get("bundle_version"),
+        "detail": {
+            "aggregate": aggregate,
+            "counterfactual": result.get("counterfactual") or {},
+            "unit_case_runs": unit_case_runs,
+            "integration_failures": integration_failures,
+            "raw_result": {
+                "result_id": result.get("result_id"),
+                "skill_name": result.get("skill_name"),
+                "skill_version": result.get("skill_version"),
+                "bundle_id": result.get("bundle_id"),
+                "bundle_version": result.get("bundle_version"),
+                "aggregate": aggregate,
+                "counterfactual": result.get("counterfactual") or {},
+                "raw_note": "Large per-case traces are compacted in /api/maintenance/experiment; use player/debug source JSON for full trace.",
+            },
+        },
+    }
+
+
+def _summary_from_benchmark_runs(details: List[Dict[str, Any]], *, limit: int = 8) -> Dict[str, Any]:
+    """Compact the persisted benchmark run details into monitor-friendly I/O."""
+    tasks: List[Dict[str, Any]] = []
+    for item in (details or [])[:limit]:
+        task = item.get("task") or {}
+        run = (item.get("runs") or [{}])[0] or {}
+        summary = _run_summary(run)
+        questions = task.get("question") or []
+        first_question = ""
+        for turn in questions:
+            if isinstance(turn, list) and turn:
+                first_question = str((turn[0] or {}).get("content", ""))
+                break
+        tasks.append(
+            {
+                "task_id": item.get("task_id") or task.get("task_id"),
+                "turns": len(questions),
+                "first_user_message": _preview_text(first_question, 220),
+                "expected_calls": task.get("expected") or [],
+                "official_valid": summary.get("official_valid"),
+                "call_f1": summary.get("call_f1"),
+                "total_tokens": summary.get("total_tokens"),
+                "retrieved_skills": summary.get("retrieved_skills", []),
+                "prompt_injected_skills": summary.get("prompt_injected_skills", []),
+                "call_errors": _call_error_summary_items(summary),
+            }
+        )
+    return {
+        "n_details": len(details or []),
+        "shown": len(tasks),
+        "tasks": tasks,
+    }
+
+
+def _skill_algorithm_preview(skill: Dict[str, Any]) -> Dict[str, Any]:
+    bundle = skill.get("bundle") or {}
+    return {
+        "name": skill.get("name", ""),
+        "description": skill.get("description", ""),
+        "kind": skill.get("kind", ""),
+        "status": skill.get("status", "unknown"),
+        "version": skill.get("version", 1),
+        "body": skill.get("body", ""),
+        "interface_summary": (skill.get("interface") or {}).get("summary", ""),
+        "intent_keywords": (skill.get("metadata") or {}).get("intent_keywords", []),
+        "source_task_ids": (skill.get("metadata") or {}).get("source_task_ids", []),
+        "dependencies": skill.get("dependencies", []),
+        "bundle_id": bundle.get("bundle_id", ""),
+        "bundle_version": bundle.get("bundle_version"),
+        "bundle_counts": {
+            "positive": len(bundle.get("positive_cases") or []),
+            "negative": len(bundle.get("negative_cases") or []),
+            "integration": len(bundle.get("integration_cases") or []),
+        },
+    }
+
+
+def _bundle_case_preview(case: Dict[str, Any]) -> Dict[str, Any]:
+    expected = case.get("expected") or {}
+    context = case.get("context") or {}
+    fragment = context.get("task_fragment") or {}
+    return {
+        "case_id": case.get("case_id", ""),
+        "source": case.get("source", ""),
+        "prompt": _preview_text(case.get("prompt") or _extract_prompt_from_fragment(fragment), 240),
+        "polarity": case.get("polarity") or case.get("metadata", {}).get("polarity", ""),
+        "expected_tool_calls": expected.get("tool_calls") or expected.get("expected_calls") or fragment.get("expected") or [],
+        "contrast_protocol": case.get("contrast_protocol") or {},
+        "source_task_id": context.get("source_task_id") or context.get("task_id") or "",
+    }
+
+
+def _extract_prompt_from_fragment(fragment: Dict[str, Any]) -> str:
+    question = fragment.get("question") or []
+    for turn in question:
+        if isinstance(turn, list) and turn:
+            return str((turn[0] or {}).get("content", ""))
+    return ""
+
+
+def _bundle_algorithm_preview(name: str, bundle: Dict[str, Any]) -> Dict[str, Any]:
+    positive = bundle.get("positive_cases") or []
+    negative = bundle.get("negative_cases") or []
+    integration = bundle.get("integration_cases") or []
+    return {
+        "skill_name": name,
+        "bundle_id": bundle.get("bundle_id", ""),
+        "bundle_version": bundle.get("bundle_version"),
+        "counts": {
+            "positive": len(positive),
+            "negative": len(negative),
+            "integration": len(integration),
+        },
+        "positive_cases": [_bundle_case_preview(item) for item in positive[:4]],
+        "negative_cases": [_bundle_case_preview(item) for item in negative[:4]],
+        "integration_cases": [_bundle_case_preview(item) for item in integration[:4]],
+        "contrast_protocol": bundle.get("contrast_protocol") or {
+            "with_skill": True,
+            "without_skill": True,
+        },
+    }
+
+
+def _algorithm_card(
+    *,
+    card_type: str,
+    title: str,
+    role: str,
+    subtitle: str,
+    tone: str,
+    input_summary: str,
+    output_summary: str,
+    metrics: List[Dict[str, Any]],
+    input_payload: Dict[str, Any],
+    output_payload: Dict[str, Any],
+    debug_payload: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    return {
+        "type": card_type,
+        "title": title,
+        "role": role,
+        "subtitle": subtitle,
+        "tone": tone,
+        "input_summary": input_summary,
+        "output_summary": output_summary,
+        "metrics": metrics,
+        "detail": {
+            "input": input_payload,
+            "output": output_payload,
+            "debug_raw": debug_payload or {},
+        },
+    }
+
+
+def _algorithm_monitor_cards(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    skills = payload.get("skills") or []
+    bundles = payload.get("skill_bundles") or {}
+    train_summary = payload.get("train_summary") or {}
+    replay_summary = payload.get("refine_summary_before") or {}
+    test_results = payload.get("maintenance_test_results") or []
+    refine_decisions = payload.get("refine_decisions") or []
+    skill_previews = [_skill_algorithm_preview(skill) for skill in skills]
+    bundle_previews = [
+        _bundle_algorithm_preview(name, bundle)
+        for name, bundle in bundles.items()
+        if isinstance(bundle, dict)
+    ]
+    cards: List[Dict[str, Any]] = [
+        _algorithm_card(
+            card_type="algorithm_executor",
+            title="Train Executor",
+            role="Executor",
+            subtitle="run train tasks from the current skill store",
+            tone="accent",
+            input_summary=f"{payload.get('n_train', train_summary.get('n_tasks', 0))} train tasks, top_k={payload.get('top_k_skills', '—')}",
+            output_summary=(
+                f"official_valid={train_summary.get('official_valid_rate')}, "
+                f"avg_f1={_avg_call_quality(train_summary)}"
+            ),
+            metrics=[
+                _metric_item("Tasks", train_summary.get("n_tasks", payload.get("n_train")), "accent"),
+                _metric_item("Official", train_summary.get("official_valid_rate"), "success"),
+                _metric_item("Avg F1", _avg_call_quality(train_summary), "accent"),
+                _metric_item("Avg Tokens", train_summary.get("avg_total_tokens"), "warning"),
+            ],
+            input_payload={
+                "benchmark": payload.get("benchmark"),
+                "model_name": payload.get("model_name"),
+                "execution_backend": payload.get("execution_backend"),
+                "skill_store_before": {
+                    "n_seed_skills": payload.get("n_skills_seed"),
+                    "top_k_skills": payload.get("top_k_skills"),
+                    "skill_injection_mode": payload.get("skill_injection_mode"),
+                },
+                "tasks": _summary_from_benchmark_runs(payload.get("train_details") or []),
+            },
+            output_payload={
+                "train_summary": train_summary,
+                "train_run_details": _summary_from_benchmark_runs(payload.get("train_details") or []),
+            },
+            debug_payload={"raw_train_summary": train_summary},
+        ),
+        _algorithm_card(
+            card_type="algorithm_extractor",
+            title="Skill Extractor",
+            role="Extractor",
+            subtitle="reconstructed from persisted skill artifacts",
+            tone="success" if skills else "warning",
+            input_summary="Consumes train traces and failure/success evidence.",
+            output_summary=f"produced {len(skills)} skill artifacts",
+            metrics=[
+                _metric_item("Skills", len(skills), "success"),
+                _metric_item("Audit Rows", 0, "warning"),
+            ],
+            input_payload={
+                "trace_scope": _summary_from_benchmark_runs(payload.get("train_details") or [], limit=10),
+                "audit_note": (
+                    "This run did not persist extractor prompt/response audit rows; "
+                    "the card reconstructs extractor output from result.json skills."
+                ),
+            },
+            output_payload={"skills": skill_previews},
+            debug_payload={"raw_skills": skills},
+        ),
+        _algorithm_card(
+            card_type="algorithm_bundle_builder",
+            title="Bundle Builder",
+            role="Bundle Builder",
+            subtitle="build unittest-like with/without skill cases",
+            tone="accent" if bundle_previews else "warning",
+            input_summary=f"Consumes {len(skills)} skill artifacts and their evidence.",
+            output_summary=f"built {len(bundle_previews)} bundles",
+            metrics=[
+                _metric_item("Bundles", len(bundle_previews), "accent"),
+                _metric_item("Positive", sum(item["counts"]["positive"] for item in bundle_previews), "success"),
+                _metric_item("Negative", sum(item["counts"]["negative"] for item in bundle_previews), "warning"),
+                _metric_item("Integration", sum(item["counts"]["integration"] for item in bundle_previews), "accent"),
+            ],
+            input_payload={
+                "skills": skill_previews,
+                "integration_cases_appended": payload.get("integration_cases_appended", 0),
+                "audit_note": (
+                    "This run did not persist bundle-builder prompt/response audit rows; "
+                    "the card shows persisted bundle artifacts."
+                ),
+            },
+            output_payload={"bundles": bundle_previews},
+            debug_payload={"raw_skill_bundles": bundles},
+        ),
+        _algorithm_card(
+            card_type="algorithm_replay",
+            title="Integration Replay",
+            role="Executor",
+            subtitle="rerun train tasks with evolved skills",
+            tone="success" if replay_summary.get("official_valid_rate", 0) >= train_summary.get("official_valid_rate", 0) else "warning",
+            input_summary=f"{len(skills)} evolved skills injected/retrieved on train replay.",
+            output_summary=(
+                f"official_valid={replay_summary.get('official_valid_rate')}, "
+                f"avg_f1={_avg_call_quality(replay_summary)}"
+            ),
+            metrics=[
+                _metric_item("Replay Official", replay_summary.get("official_valid_rate"), "success"),
+                _metric_item("Replay F1", _avg_call_quality(replay_summary), "accent"),
+                _metric_item("Replay Tokens", replay_summary.get("avg_total_tokens"), "warning"),
+                _metric_item("Delta Official", _numeric_delta(replay_summary.get("official_valid_rate"), train_summary.get("official_valid_rate")), "accent"),
+            ],
+            input_payload={
+                "skill_store": skill_previews,
+                "replay_tasks": _summary_from_benchmark_runs(payload.get("refine_details") or [], limit=10),
+            },
+            output_payload={
+                "replay_summary": replay_summary,
+                "replay_run_details": _summary_from_benchmark_runs(payload.get("refine_details") or [], limit=10),
+            },
+            debug_payload={"raw_refine_summary_before": replay_summary},
+        ),
+    ]
+    cards.extend(_maintenance_test_card(item) for item in test_results)
+    if refine_decisions:
+        cards.append(
+            _algorithm_card(
+                card_type="algorithm_refiner",
+                title="Refiner",
+                role="Refiner",
+                subtitle="decide whether each skill needs modification",
+                tone="warning",
+                input_summary=f"Consumes {len(test_results)} unit utility reports.",
+                output_summary=", ".join(
+                    f"{item.get('skill_name')}:{item.get('action')}" for item in refine_decisions[:4]
+                ),
+                metrics=[
+                    _metric_item("Decisions", len(refine_decisions), "warning"),
+                    _metric_item("Keep", sum(1 for item in refine_decisions if item.get("action") == "keep"), "success"),
+                    _metric_item("Modify", sum(1 for item in refine_decisions if item.get("action") not in ("keep", None)), "warning"),
+                ],
+                input_payload={
+                    "maintenance_test_results": [
+                        {
+                            "skill_name": item.get("skill_name"),
+                            "skill_version": item.get("skill_version"),
+                            "bundle_version": item.get("bundle_version"),
+                            "aggregate": item.get("aggregate"),
+                        }
+                        for item in test_results
+                    ],
+                    "audit_note": (
+                        "This run did not persist refiner prompt/response audit rows; "
+                        "the card shows persisted refine decisions."
+                    ),
+                },
+                output_payload={"refine_decisions": refine_decisions},
+                debug_payload={"raw_refine_decisions": refine_decisions},
+            )
+        )
+    cards.append(
+        _algorithm_card(
+            card_type="algorithm_store",
+            title="Skill Store",
+            role="Skill Store",
+            subtitle="final repository state after maintenance",
+            tone="success",
+            input_summary="Consumes accepted skill and refine outputs.",
+            output_summary=f"{len(skills)} active artifacts in the final store",
+            metrics=[
+                _metric_item("Final Skills", len(skills), "success"),
+                _metric_item("Disabled", sum(1 for item in skills if item.get("status") == "disabled"), "warning"),
+                _metric_item("Bundles", len(bundle_previews), "accent"),
+            ],
+            input_payload={
+                "accepted_skills": [item.get("name") for item in skills],
+                "refine_decisions": refine_decisions,
+            },
+            output_payload={"final_skills": skill_previews, "bundles": bundle_previews},
+            debug_payload={"raw_skills": skills, "raw_bundles": bundles},
+        )
+    )
+    return cards
+
+
+def _numeric_delta(new_value: Any, old_value: Any) -> Any:
+    try:
+        return round(float(new_value) - float(old_value), 4)
+    except Exception:
+        return None
+
+
+def _avg_call_quality(summary: Dict[str, Any]) -> Any:
+    return summary.get("avg_call_f1", summary.get("avg_score"))
+
+
+def _normalize_unit_case_run(run: Any) -> Any:
+    if not isinstance(run, dict):
+        return run
+    row = copy.deepcopy(run)
+    has_io_payload = any(row.get(key) for key in ("input_payload", "expected_behavior", "actual_output", "tool_calls", "trace_summary"))
+    row["io_available"] = bool(has_io_payload)
+    if not has_io_payload:
+        row["io_unavailable_reason"] = (
+            "This historical test result only persisted pass/fail metrics. "
+            "Rerun the experiment with the current logger to capture per-case role input/output."
+        )
+    return row
+
+
+def _method_case_card(payload: Dict[str, Any], role_audit: List[Dict[str, Any]]) -> Dict[str, Any]:
+    role_calls = payload.get("role_calls") or {}
+    stale_call = (role_calls.get("stale_resolver") or {})
+    post = payload.get("post_resolution") or {}
+    assertions = payload.get("assertions") or {}
+    retrieval = payload.get("retrieval_audit") or {}
+    setup = payload.get("setup") or {}
+    resolved_skill = post.get("resolved_skill") or {}
+    test_result = post.get("test_result") or {}
+    stale_output = stale_call.get("output_payload") or {}
+    audit_rows = role_audit or []
+    given = {
+        "query": payload.get("query", ""),
+        "setup": setup,
+        "expected": payload.get("expected") or {},
+        "skills_before": setup.get("skills_before_resolution") or [],
+    }
+    algorithm_output = {
+        "retrieval_audit": retrieval,
+        "role_calls": role_calls,
+        "post_resolution": post,
+        "selected_skills": retrieval.get("selected") or [],
+        "candidate_scores": retrieval.get("candidates") or [],
+        "store_summary": retrieval.get("store_summary") or {},
+        "resolved_skill": resolved_skill,
+        "test_result": test_result,
+    }
+    model_output = {
+        "stale_resolver": stale_output,
+        "audit_rows": audit_rows,
+        "role_io": {
+            "stale_resolver": {
+                "system": audit_rows[0].get("system", "") if audit_rows else "",
+                "user": audit_rows[0].get("user", "") if audit_rows else "",
+                "raw_response": audit_rows[0].get("raw_response", "") if audit_rows else "",
+                "parsed_output": stale_output,
+            }
+        },
+    }
+    return {
+        "type": "method_case",
+        "title": payload.get("case_id", "Method Case"),
+        "subtitle": payload.get("query", ""),
+        "tone": "success" if payload.get("passed") else "danger",
+        "case_id": payload.get("case_id", ""),
+        "passed": bool(payload.get("passed")),
+        "given": given,
+        "algorithm_output": algorithm_output,
+        "model_output": model_output,
+        "assertions": assertions,
+        "view_model": {
+            "given_summary": {
+                "query": payload.get("query", ""),
+                "n_setup_skills": len(setup.get("skills_before_resolution") or []),
+                "expected_behavior": payload.get("expected") or {},
+            },
+            "retrieval_summary": {
+                "top_k": retrieval.get("top_k"),
+                "store_summary": retrieval.get("store_summary") or {},
+                "selected": retrieval.get("selected") or [],
+                "candidates": retrieval.get("candidates") or [],
+            },
+            "role_summary": {
+                "stale_resolver_action": stale_output.get("action", ""),
+                "stale_resolver_reason": stale_output.get("reason", ""),
+                "pinned_dependencies": stale_output.get("pinned_dependencies") or [],
+                "artifact_updates": stale_output.get("artifact_updates") or {},
+            },
+            "artifact_summary": {
+                "resolved_name": resolved_skill.get("name", ""),
+                "resolved_version": resolved_skill.get("version"),
+                "resolved_status": resolved_skill.get("status", ""),
+                "resolved_version_kind": resolved_skill.get("version_kind", ""),
+                "resolved_body": resolved_skill.get("body", ""),
+                "resolved_interface": resolved_skill.get("interface") or {},
+            },
+            "test_summary": test_result,
+        },
+        "detail": {
+            "given": given,
+            "model_output": model_output,
+            "algorithm_output": algorithm_output,
+            "assertions": assertions,
+            "raw_result": payload,
+        },
+    }
+
+
+def _method_validation_pages(payload: Dict[str, Any], role_audit: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    card = _method_case_card(payload, role_audit)
+    assertions = payload.get("assertions") or {}
+    page = _round_page(
+        page_id=str(payload.get("case_id") or "method_case"),
+        label=str(payload.get("case_id") or "Method Case"),
+        title=f"{payload.get('case_id', 'Method Case')} | {payload.get('query', '')}",
+        status_tone="success" if payload.get("passed") else "danger",
+        summary_metrics=[
+            _metric_item("Passed", bool(payload.get("passed")), "success" if payload.get("passed") else "danger"),
+            _metric_item("Assertions", f"{sum(1 for value in assertions.values() if value)}/{len(assertions)}", "accent"),
+            _metric_item("Role Calls", len((payload.get("role_calls") or {})), "accent"),
+            _metric_item("Audit Rows", len(role_audit), "accent"),
+        ],
+        flow_cards=[card],
+    )
+    page["subtitle"] = payload.get("query", "")
+    return [page]
+
+
+def _refine_summary_card(decision: Dict[str, Any]) -> Dict[str, Any]:
+    action = decision.get("action", "unknown")
+    return {
+        "type": "refine_decision",
+        "title": "Refine Decision",
+        "subtitle": decision.get("skill_name", ""),
+        "tone": "danger" if "disable" in action else "accent",
+        "action": action,
+        "skill_name": decision.get("skill_name", ""),
+        "version_before": decision.get("version_before"),
+        "version_after": decision.get("version_after"),
+        "failed_count": decision.get("failed_count", 0),
+        "helped_count": decision.get("helped_count", 0),
+        "regression_task_ids": decision.get("regression_task_ids", []),
+        "counterfactual_task_ids": decision.get("counterfactual_task_ids", []),
+        "used_counterfactual_evidence": decision.get("used_counterfactual_evidence"),
+        "detail": {
+            "raw_decision": decision,
+        },
+    }
+
+
+def _role_audit_entries(meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    role_entries = _load_jsonl(Path(meta["role_log_path"])) if meta.get("role_log_exists") else []
+    rows: List[Dict[str, Any]] = []
+    for idx, item in enumerate(role_entries):
+        parsed = item.get("parsed_response")
+        rows.append(
+            {
+                "index": idx + 1,
+                "role": item.get("role", "unknown"),
+                "ts": item.get("ts", ""),
+                "llm_config": item.get("llm_config", ""),
+                "model_name": item.get("model_name", ""),
+                "metadata": item.get("metadata", {}),
+                "user_preview": str(item.get("user", "")).strip()[:240],
+                "system": item.get("system", ""),
+                "user": item.get("user", ""),
+                "raw_response": item.get("raw_response", ""),
+                "parsed_response_data": parsed if isinstance(parsed, dict) else {},
+            }
+        )
+    return rows
+
+
+def _group_role_audit_by_loop(role_audit: List[Dict[str, Any]]) -> Dict[int, List[Dict[str, Any]]]:
+    grouped: Dict[int, List[Dict[str, Any]]] = {}
+    for entry in role_audit:
+        metadata = dict(entry.get("metadata") or {})
+        loop_index = metadata.get("loop_index")
+        if loop_index is None:
+            continue
+        try:
+            loop_key = int(loop_index)
+        except Exception:
+            continue
+        grouped.setdefault(loop_key, []).append(entry)
+    return grouped
+
+
+def _fallback_role_group(role_audit: List[Dict[str, Any]], idx: int) -> List[Dict[str, Any]]:
+    if not role_audit:
+        return []
+    group_size = 3
+    start = idx * group_size
+    end = start + group_size
+    return role_audit[start:end]
+
+
+def _overview_metrics(summary_cards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return summary_cards
+
+
+def _round_page(
+    *,
+    page_id: str,
+    label: str,
+    title: str,
+    status_tone: str,
+    summary_metrics: List[Dict[str, Any]],
+    flow_cards: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "page_id": page_id,
+        "label": label,
+        "title": title,
+        "status_tone": status_tone,
+        "summary_metrics": summary_metrics,
+        "flow_cards": flow_cards,
+    }
+
+
+def _debug_event_card(event: Dict[str, Any]) -> Dict[str, Any]:
+    event_type = str(event.get("event_type") or "debug_event")
+    tone = "accent"
+    if "exception" in event_type or "error" in event_type:
+        tone = "danger"
+    elif "retrieval" in event_type:
+        tone = "warning"
+    return {
+        "type": "debug_event",
+        "title": event_type.replace("_", " ").title(),
+        "subtitle": str(event.get("event_id") or ""),
+        "tone": tone,
+        "event": _compact_debug_event(event),
+        "detail": {
+            "input": _summarize_mapping(event.get("input", {}) if isinstance(event.get("input"), dict) else {}),
+            "output": _summarize_mapping(event.get("output", {}) if isinstance(event.get("output"), dict) else {}),
+            "metrics": event.get("metrics", {}),
+            "raw_event": {
+                **_compact_debug_event(event),
+                "raw_note": "Full event payload is available through /api/maintenance/player and source result JSON.",
+            },
+        },
+    }
+
+
+def _debug_cards_for_loop(payload: Dict[str, Any], loop: Dict[str, Any]) -> List[Dict[str, Any]]:
+    events = payload.get("debug_events") or []
+    refs = set(loop.get("debug_event_refs") or [])
+    selected = [event for event in events if event.get("event_id") in refs]
+    if not selected and events:
+        loop_index = loop.get("loop_index")
+        selected = [event for event in events if event.get("loop_index") == loop_index]
+    return [_debug_event_card(event) for event in selected]
+
+
+def _exp1_pages(payload: Dict[str, Any], role_audit: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rounds = payload.get("loops", []) or payload.get("rounds", [])
+    pages: List[Dict[str, Any]] = []
+    role_groups = _group_role_audit_by_loop(role_audit)
+    for idx, round_item in enumerate(rounds):
+        result = _coerce_run_wrapper(
+            round_item.get("run")
+            or round_item.get("pre_run")
+            or round_item.get("result")
+        )
+        evolve = round_item.get("evolve") or {}
+        refine = round_item.get("refine") or {}
+        flow_cards: List[Dict[str, Any]] = [
+            _flow_run_card(
+                "Executor",
+                result,
+                subtitle=f"skills_before={round_item.get('n_skills_before', 0)}",
+            ),
+        ]
+        group = role_groups.get(int(round_item.get("loop_index", idx)), _fallback_role_group(role_audit, idx))
+        for entry in group:
+            if entry["role"] == "extractor":
+                flow_cards.append(_flow_extractor_card(entry))
+            elif entry["role"] == "bundle_builder":
+                flow_cards.append(_flow_bundle_card(entry))
+            elif entry["role"] == "refiner":
+                flow_cards.append(_flow_refiner_card(entry))
+        for maintenance_round in refine.get("maintenance_rounds") or []:
+            for item in maintenance_round.get("maintenance_test_results") or []:
+                flow_cards.append(_maintenance_test_card(item))
+            for item in maintenance_round.get("refine_decisions") or []:
+                flow_cards.append(_refine_summary_card(item))
+            for item in maintenance_round.get("post_refine_test_results") or []:
+                flow_cards.append(_maintenance_test_card(item))
+        flow_cards.append(
+            {
+                "type": "skill_delta",
+                "title": "Skill Store Update",
+                "subtitle": f"after round {round_item.get('loop_index', round_item.get('round_index', idx))}",
+                "tone": "accent",
+                "new_skill_names": evolve.get("new_skill_names", []),
+                "n_skills_after": evolve.get("n_skills_after", 0),
+                "skill_names_after": evolve.get("skill_names_after", []),
+            }
+        )
+        pages.append(
+            _round_page(
+                page_id=f"round_{idx}",
+                label=f"Round {idx}",
+                title=f"Round {idx} | {_task_label(_run_summary(result).get('task_id'))}",
+                status_tone=_run_tone(result),
+                summary_metrics=[
+                    _metric_item("Official", _run_summary(result).get("official_valid"), _run_tone(result)),
+                    _metric_item("Call F1", _run_summary(result).get("call_f1"), "accent"),
+                    _metric_item("Tokens", _run_summary(result).get("total_tokens"), "accent"),
+                    _metric_item("Steps", _run_summary(result).get("n_model_steps"), "accent"),
+                    _metric_item("New Skills", len(evolve.get("new_skill_names", [])), "success"),
+                ],
+                flow_cards=flow_cards,
+            )
+        )
+    return pages
+
+
+def _exp2_pages(payload: Dict[str, Any], role_audit: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    loops = payload.get("loops") or []
+    pages: List[Dict[str, Any]] = []
+    role_groups = _group_role_audit_by_loop(role_audit)
+    for idx, loop in enumerate(loops):
+        run = _coerce_run_wrapper(loop.get("run"))
+        refine = loop.get("refine") or {}
+        flow_cards: List[Dict[str, Any]] = [
+            _flow_run_card(loop.get("label") or "Executor", run, subtitle=loop.get("kind", "")),
+        ]
+        if loop.get("fault_injection"):
+            flow_cards.append(
+                {
+                    "type": "skill_delta",
+                    "title": "Fault Injection",
+                    "subtitle": loop.get("fault_injection", {}).get("skill_name", ""),
+                    "tone": "warning",
+                    "new_skill_names": [loop.get("fault_injection", {}).get("skill_name", "")],
+                    "n_skills_after": (loop.get("store_state") or {}).get("n_skills_after", 0),
+                    "skill_names_after": (loop.get("store_state") or {}).get("skills_after", []),
+                }
+            )
+        for entry in role_groups.get(int(loop.get("loop_index", idx)), _fallback_role_group(role_audit, idx)):
+            if entry["role"] == "bundle_builder":
+                flow_cards.append(_flow_bundle_card(entry, artifact_name=(loop.get("fault_injection") or {}).get("skill_name", "")))
+            elif entry["role"] == "refiner":
+                flow_cards.append(_flow_refiner_card(entry))
+        for maintenance_round in refine.get("maintenance_rounds") or []:
+            for item in maintenance_round.get("maintenance_test_results") or []:
+                flow_cards.append(_maintenance_test_card(item))
+            for item in maintenance_round.get("refine_decisions") or []:
+                flow_cards.append(_refine_summary_card(item))
+            for item in maintenance_round.get("post_refine_test_results") or []:
+                flow_cards.append(_maintenance_test_card(item))
+        metrics = [
+            _metric_item("Official", _run_summary(run).get("official_valid"), _run_tone(run)),
+            _metric_item("Call F1", _run_summary(run).get("call_f1"), "accent"),
+            _metric_item("Tokens", _run_summary(run).get("total_tokens"), "accent"),
+        ]
+        if refine:
+            metrics.append(_metric_item("Maint Tests", len(refine.get("maintenance_test_results") or []), "accent"))
+            metrics.append(_metric_item("Refine Actions", len(refine.get("refine_decisions") or []), "accent"))
+        pages.append(
+            _round_page(
+                page_id=f"round_{idx}",
+                label=loop.get("label") or f"Round {idx}",
+                title=f"{loop.get('label') or f'Round {idx}'} | {_task_label(_run_summary(run).get('task_id'))}",
+                status_tone=_run_tone(run),
+                summary_metrics=metrics,
+                flow_cards=flow_cards,
+            )
+        )
+    return pages
+
+
+def _exp3_pages(payload: Dict[str, Any], role_audit: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    loops = payload.get("loops") or []
+    pages: List[Dict[str, Any]] = []
+    role_groups = _group_role_audit_by_loop(role_audit)
+    for idx, loop in enumerate(loops):
+        run = _coerce_run_wrapper(loop.get("run") or loop.get("result"))
+        evolve = loop.get("evolve") or {}
+        refine = loop.get("refine") or {}
+        flow_cards: List[Dict[str, Any]] = [
+            _flow_run_card(loop.get("label") or "Executor", run, subtitle=f"skills_before={loop.get('n_skills_before', 0)}"),
+        ]
+        if loop.get("fault_baseline_run"):
+            flow_cards.insert(0, _flow_run_card("Fault Baseline", _coerce_run_wrapper(loop.get("fault_baseline_run")), subtitle="before fault injection"))
+        for entry in role_groups.get(int(loop.get("loop_index", idx)), _fallback_role_group(role_audit, idx)):
+            if entry["role"] == "extractor":
+                flow_cards.append(_flow_extractor_card(entry))
+            elif entry["role"] == "bundle_builder":
+                flow_cards.append(_flow_bundle_card(entry, artifact_name=(loop.get("fault_injection") or {}).get("skill_name", "")))
+            elif entry["role"] == "refiner":
+                flow_cards.append(_flow_refiner_card(entry))
+        for maintenance_round in refine.get("maintenance_rounds") or []:
+            for item in maintenance_round.get("maintenance_test_results") or []:
+                flow_cards.append(_maintenance_test_card(item))
+            for item in maintenance_round.get("refine_decisions") or []:
+                flow_cards.append(_refine_summary_card(item))
+            for item in maintenance_round.get("post_refine_test_results") or []:
+                flow_cards.append(_maintenance_test_card(item))
+        if evolve:
+            flow_cards.append(
+                {
+                    "type": "skill_delta",
+                    "title": "Skill Store Update",
+                    "subtitle": loop.get("label", ""),
+                    "tone": "accent",
+                    "new_skill_names": evolve.get("new_skill_names", []),
+                    "n_skills_after": evolve.get("n_skills_after", 0),
+                    "skill_names_after": evolve.get("skill_names_after", []),
+                }
+            )
+        flow_cards.extend(_debug_cards_for_loop(payload, loop))
+        metrics = [
+            _metric_item("Official", _run_summary(run).get("official_valid"), _run_tone(run)),
+            _metric_item("Call F1", _run_summary(run).get("call_f1"), "accent"),
+            _metric_item("Tokens", _run_summary(run).get("total_tokens"), "accent"),
+        ]
+        if evolve:
+            metrics.append(_metric_item("New Skills", len(evolve.get("new_skill_names", [])), "success"))
+        if refine:
+            metrics.append(_metric_item("Maint Tests", len(refine.get("maintenance_test_results") or []), "accent"))
+            metrics.append(_metric_item("Refine Actions", len(refine.get("refine_decisions") or []), "accent"))
+        if loop.get("debug_event_refs"):
+            metrics.append(_metric_item("Debug Events", len(loop.get("debug_event_refs") or []), "accent"))
+        pages.append(
+            _round_page(
+                page_id=f"round_{idx}",
+                label=loop.get("label") or f"Round {idx}",
+                title=f"{loop.get('label') or f'Round {idx}'} | {_task_label(_run_summary(run).get('task_id'))}",
+                status_tone=_run_tone(run),
+                summary_metrics=metrics,
+                flow_cards=flow_cards,
+            )
+        )
+    return pages
+
+
+def _medium_pages(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        _round_page(
+            page_id="algorithm",
+            label="Algorithm",
+            title="Algorithm Monitor",
+            status_tone="accent",
+            summary_metrics=[
+                {"label": "Train Official", "value": (payload.get("train_summary") or {}).get("official_valid_rate"), "tone": "success"},
+                {"label": "Replay Official", "value": (payload.get("refine_summary_before") or {}).get("official_valid_rate"), "tone": "success"},
+                {"label": "Skills", "value": len(payload.get("skills") or []), "tone": "success"},
+                {"label": "Unit Tests", "value": len(payload.get("maintenance_test_results") or []), "tone": "accent"},
+            ],
+            flow_cards=_algorithm_monitor_cards(payload),
+        ),
+        _round_page(
+            page_id="train",
+            label="Train",
+            title="Train Summary",
+            status_tone="accent",
+            summary_metrics=[
+                {"label": "Success Rate", "value": (payload.get("train_summary") or {}).get("success_rate"), "tone": "accent"},
+                {"label": "Official Valid", "value": (payload.get("train_summary") or {}).get("official_valid_rate"), "tone": "success"},
+                {"label": "Avg Call F1", "value": _avg_call_quality(payload.get("train_summary") or {}) or "—", "tone": "accent"},
+                {"label": "Skills", "value": len(payload.get("skills") or []), "tone": "success"},
+            ],
+            flow_cards=[
+                {
+                    "type": "summary_board",
+                    "title": "Train Metrics",
+                    "subtitle": "aggregate over training tasks",
+                    "tone": "accent",
+                    "metrics": payload.get("train_summary") or {},
+                }
+            ],
+        ),
+        _round_page(
+            page_id="refine",
+            label="Refine",
+            title="Refine Board",
+            status_tone="warning",
+            summary_metrics=[
+                {"label": "Maintenance Tests", "value": len(payload.get("maintenance_test_results") or []), "tone": "accent"},
+                {"label": "Refine Actions", "value": len(payload.get("refine_decisions") or []), "tone": "warning"},
+                {"label": "Integration Cases", "value": payload.get("integration_cases_appended", 0), "tone": "accent"},
+                {"label": "Micro Refactors", "value": len(payload.get("micro_refactor_candidates") or []), "tone": "accent"},
+            ],
+            flow_cards=
+            [_maintenance_test_card(item) for item in (payload.get("maintenance_test_results") or [])]
+            + [_refine_summary_card(item) for item in (payload.get("refine_decisions") or [])],
+        ),
+        _round_page(
+            page_id="test",
+            label="Test",
+            title="Test Summary",
+            status_tone="success",
+            summary_metrics=[
+                {"label": "Success Rate", "value": (payload.get("test_summary") or {}).get("success_rate"), "tone": "accent"},
+                {"label": "Official Valid", "value": (payload.get("test_summary") or {}).get("official_valid_rate"), "tone": "success"},
+                {"label": "Avg Precision", "value": (payload.get("test_summary") or {}).get("avg_call_precision"), "tone": "accent"},
+                {"label": "Avg Recall", "value": (payload.get("test_summary") or {}).get("avg_call_recall"), "tone": "accent"},
+            ],
+            flow_cards=[
+                {
+                    "type": "summary_board",
+                    "title": "Test Metrics",
+                    "subtitle": "aggregate over held-out tasks",
+                    "tone": "success",
+                    "metrics": payload.get("test_summary") or {},
+                }
+            ],
+        ),
+    ]
+
+
+def _maintenance_detail_from_payload(meta: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    kind = meta["kind"]
+    docs = _maintenance_docs(meta)
+    readme_text = docs[0]["text"] if docs else ""
+    role_audit = _role_audit_entries(meta)
+    files = {
+        "result_json": meta["result_path"],
+        "readme": meta["readme_path"],
+        "suite_readme": meta["suite_readme_path"],
+        "role_log": meta["role_log_path"],
+    }
+    artifacts: List[Dict[str, Any]] = []
+    summary_cards: List[Dict[str, Any]] = [
+        {"label": "Experiment", "value": kind.upper(), "tone": "accent"},
+        {"label": "Audit Rows", "value": str(len(role_audit)), "tone": "accent"},
+    ]
+    subtitle = ""
+    pages: List[Dict[str, Any]] = []
+
+    if kind == "method_validation":
+        artifacts = []
+        assertions = payload.get("assertions") or {}
+        summary_cards.extend(
+            [
+                {
+                    "label": "Passed",
+                    "value": str(bool(payload.get("passed"))),
+                    "tone": "success" if payload.get("passed") else "danger",
+                },
+                {
+                    "label": "Case",
+                    "value": str(payload.get("case_id", "")),
+                    "tone": "accent",
+                },
+                {
+                    "label": "Assertions",
+                    "value": f"{sum(1 for value in assertions.values() if value)}/{len(assertions)}",
+                    "tone": "accent",
+                },
+                {
+                    "label": "Role Calls",
+                    "value": str(len(payload.get("role_calls") or {})),
+                    "tone": "accent",
+                },
+            ]
+        )
+        subtitle = str(payload.get("query", "method validation case"))
+        pages = _method_validation_pages(payload, role_audit)
+    elif kind == "exp1":
+        rounds = payload.get("loops", []) or payload.get("rounds", [])
+        artifacts = [_artifact_card(skill) for skill in payload.get("final_skills", [])]
+        summary_cards.extend(
+            [
+                {
+                    "label": "Passed",
+                    "value": str(bool(payload.get("passed"))),
+                    "tone": "success" if payload.get("passed") else "danger",
+                },
+                {
+                    "label": "Rounds",
+                    "value": str(len(rounds)),
+                    "tone": "accent",
+                },
+                {
+                    "label": "Final Skills",
+                    "value": str(len(artifacts)),
+                    "tone": "success",
+                },
+            ]
+        )
+        subtitle = f"Task {payload.get('task_id', '')} | repeated from empty store"
+        pages = _exp1_pages(payload, role_audit)
+    elif kind == "exp2":
+        artifacts = [
+            _artifact_card(skill)
+            for skill in (payload.get("refine") or {}).get("skills_after_refine", [])
+        ]
+        broken_run = _coerce_run_wrapper(payload.get("broken_run") or {})
+        verify_run = _coerce_run_wrapper(payload.get("verify_run") or {})
+        summary_cards.extend(
+            [
+                {
+                    "label": "Passed",
+                    "value": str(bool(payload.get("passed"))),
+                    "tone": "success" if payload.get("passed") else "danger",
+                },
+                {
+                    "label": "Broken Valid",
+                    "value": str(_run_summary(broken_run).get("official_valid")),
+                    "tone": "danger",
+                },
+                {
+                    "label": "Verify Valid",
+                    "value": str(_run_summary(verify_run).get("official_valid")),
+                    "tone": "success"
+                    if _run_summary(verify_run).get("official_valid")
+                    else "warning",
+                },
+                {
+                    "label": "Maint Tests",
+                    "value": str(len((payload.get("refine") or {}).get("maintenance_test_results", []))),
+                    "tone": "accent",
+                },
+            ]
+        )
+        subtitle = f"Task {payload.get('task_id', '')} | fault injection and repair"
+        pages = _exp2_pages(payload, role_audit)
+    elif kind == "exp3":
+        artifacts = [_artifact_card(skill) for skill in payload.get("final_skills", [])]
+        loops = payload.get("loops") or []
+        summary_cards.extend(
+            [
+                {
+                    "label": "Passed",
+                    "value": str(bool(payload.get("passed"))),
+                    "tone": "success" if payload.get("passed") else "danger",
+                },
+                {
+                    "label": "Rounds",
+                    "value": str(len(loops) if loops else len(payload.get("warmup_rounds", []))),
+                    "tone": "accent",
+                },
+                {
+                    "label": "Final Skills",
+                    "value": str(len(artifacts)),
+                    "tone": "success",
+                },
+                {
+                    "label": "Fault Skill",
+                    "value": str(payload.get("chosen_fault_skill", "")),
+                    "tone": "warning",
+                },
+                {
+                    "label": "Debug Events",
+                    "value": str(len(payload.get("debug_events") or [])),
+                    "tone": "accent",
+                },
+            ]
+        )
+        subtitle = (
+            f"Fault task {payload.get('fault_task_id', '')} | "
+            f"verify task {payload.get('verify_task_id', '')}"
+        )
+        pages = _exp3_pages(payload, role_audit)
+    else:
+        artifacts = [_artifact_card(skill) for skill in payload.get("skills", [])]
+        disabled_count = sum(1 for item in artifacts if item.get("status") == "disabled")
+        summary_cards.extend(
+            [
+                {"label": "Model", "value": str(payload.get("model_name", "")), "tone": "accent"},
+                {"label": "Skills", "value": str(len(artifacts)), "tone": "success"},
+                {"label": "Disabled", "value": str(disabled_count), "tone": "warning"},
+                {
+                    "label": "Test Valid",
+                    "value": str((payload.get("test_summary") or {}).get("official_valid_rate")),
+                    "tone": "success",
+                },
+            ]
+        )
+        subtitle = f"{payload.get('benchmark', '')} | medium-scale evolve"
+        pages = _medium_pages(payload)
+
+    return {
+        "kind": kind,
+        "experiment": {
+            **meta,
+            "passed": bool(payload.get("passed", False))
+            if kind.startswith("exp") or kind == "method_validation"
+            else None,
+            "subtitle": subtitle,
+        },
+        "overview_metrics": _overview_metrics(summary_cards),
+        "files": files,
+        "artifacts": artifacts,
+        "readme_text": readme_text,
+        "docs": docs,
+        "pages": pages,
+    }
 
 
 def _job_path(job_id: str) -> Path:
@@ -1129,6 +3028,31 @@ def execute():
     return render_template("execute.html")
 
 
+@app.route("/maintenance")
+def maintenance():
+    return render_template("maintenance.html")
+
+
+@app.route("/maintenance/<path:_subpath>")
+def maintenance_subpath(_subpath: str):
+    return render_template("maintenance.html")
+
+
+@app.route("/method-tests")
+def method_tests():
+    return render_template("maintenance.html")
+
+
+@app.route("/method-tests/<path:_subpath>")
+def method_tests_subpath(_subpath: str):
+    return render_template("maintenance.html")
+
+
+@app.route("/maintenance-docs")
+def maintenance_docs_page():
+    return render_template("maintenance_docs.html")
+
+
 # ── Skill Explorer API ──────────────────────────────────────────────────────
 
 
@@ -1816,6 +3740,81 @@ def api_execute_memory_add_workflow():
         )
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
+
+
+@app.route("/api/maintenance/experiments")
+def api_maintenance_experiments():
+    experiments = _maintenance_experiment_meta()
+    return jsonify({"experiments": experiments})
+
+
+@app.route("/api/maintenance/experiment")
+def api_maintenance_experiment():
+    experiment_id = str(request.args.get("id", "")).strip()
+    if not experiment_id:
+        return jsonify({"error": "id is required"}), 400
+    try:
+        meta = _maintenance_lookup(experiment_id)
+        payload = _load_json(Path(meta["result_path"]))
+        detail = _maintenance_detail_from_payload(meta, payload)
+        return jsonify(detail)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/maintenance/player")
+def api_maintenance_player():
+    experiment_id = str(request.args.get("id", "")).strip()
+    if not experiment_id:
+        return jsonify({"error": "id is required"}), 400
+    try:
+        meta = _maintenance_lookup(experiment_id)
+        payload = _load_json(Path(meta["result_path"]))
+        detail = _maintenance_detail_from_payload(meta, payload)
+        title = str((detail.get("experiment") or {}).get("title") or experiment_id)
+        kind = str(detail.get("kind") or meta.get("kind") or "maintenance")
+        if payload.get("debug_events"):
+            trace = build_runner_trace_from_debug_events(
+                run_id=experiment_id,
+                title=title,
+                kind=kind,
+                debug_events=payload.get("debug_events") or [],
+                pages=detail.get("pages") or [],
+                artifacts=detail.get("artifacts") or [],
+            )
+        else:
+            trace = build_player_trace_from_pages(
+                run_id=experiment_id,
+                title=title,
+                kind=kind,
+                pages=detail.get("pages") or [],
+                artifacts=detail.get("artifacts") or [],
+            )
+        return jsonify(trace)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/maintenance/docs")
+def api_maintenance_docs():
+    try:
+        return jsonify({"docs": _maintenance_reference_docs()})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/maintenance-docs/_sidebar.md")
+def maintenance_docs_sidebar():
+    return Response(_maintenance_docs_sidebar(), mimetype="text/markdown; charset=utf-8")
+
+
+@app.route("/maintenance-docs/<path:doc_path>")
+def maintenance_docs_markdown(doc_path: str):
+    safe_name = Path(doc_path).name
+    path = MAINTENANCE_DOC_FILES.get(safe_name)
+    if path is None or not path.exists():
+        return Response(f"# Not Found\n\nUnknown maintenance doc: `{doc_path}`\n", status=404, mimetype="text/markdown; charset=utf-8")
+    return Response(path.read_text(encoding="utf-8"), mimetype="text/markdown; charset=utf-8")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────

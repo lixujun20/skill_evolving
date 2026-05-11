@@ -9,20 +9,40 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import json
+import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
+from uuid import uuid4
 
 from academic.benchmarks.artifacts import ArtifactStore
 from academic.benchmarks.bfcl import load_bfcl_tasks, load_bfcl_tools, run_bfcl_task
+from academic.benchmarks.bfcl_llm_maintenance import (
+    append_failure_cases_from_result,
+    build_bfcl_skill_bundles_llm,
+    execute_bfcl_bundle_tests,
+    extract_bfcl_skill_artifacts_llm,
+    refine_bfcl_skill_store_llm,
+    select_bfcl_maintenance_targets,
+)
 from academic.benchmarks.bfcl_skills import (
     default_bfcl_skill_store,
-    extract_bfcl_skills_from_results,
     write_bfcl_handwritten_skills,
 )
 from academic.benchmarks.registry import BENCHMARK_REGISTRY
 from academic.benchmarks.spreadsheet import load_spreadsheet_tasks, run_spreadsheet_task
+from academic.benchmarks.types import (
+    BenchmarkResult,
+    SkillArtifact,
+    SkillBundleCase,
+    SkillInterface,
+    SkillLineage,
+    SkillTestCaseRun,
+    SkillTestResult,
+)
 from academic.config import AGENT_MODEL, ACADEMIC_ROOT, RESULTS_DIR
 
 
@@ -36,6 +56,20 @@ async def main_async() -> None:
     parser.add_argument("--model-names", default="", help="Comma-separated model overrides for sweep mode")
     parser.add_argument("--n-train", type=int, default=None)
     parser.add_argument("--n-test", type=int, default=None)
+    parser.add_argument("--train-offset", type=int, default=0, help="Skip this many shuffled train tasks after loading")
+    parser.add_argument("--test-offset", type=int, default=0, help="Skip this many shuffled test tasks after loading")
+    parser.add_argument(
+        "--train-task-ids",
+        type=Path,
+        default=None,
+        help="Optional JSON file containing an ordered list of BFCL train task ids to run.",
+    )
+    parser.add_argument(
+        "--test-task-ids",
+        type=Path,
+        default=None,
+        help="Optional JSON file containing an ordered list of BFCL test task ids to run.",
+    )
     parser.add_argument("--n-runs", type=int, default=1)
     parser.add_argument("--n-train-runs", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
@@ -49,9 +83,24 @@ async def main_async() -> None:
     )
     parser.add_argument("--skills", type=Path, default=None, help="Optional SkillArtifact JSON file")
     parser.add_argument("--use-handwritten-skills", action="store_true")
+    parser.add_argument("--top-k-skills", type=int, default=2, help="Maximum retrieved skill artifacts per BFCL task")
+    parser.add_argument(
+        "--skill-injection-mode",
+        choices=["none", "prompt_only", "tool_only", "hybrid"],
+        default="prompt_only",
+        help="How retrieved benchmark skills are exposed to the BFCL model.",
+    )
     parser.add_argument("--bfcl-explicit-skill-tool", action="store_true")
     parser.add_argument("--save-skills", type=Path, default=None)
+    parser.add_argument(
+        "--load-train-details",
+        type=Path,
+        default=None,
+        help="Optional JSON file containing previously completed BFCL train-task run details; when set in evolve mode, skip rerunning train and reuse these details for skill extraction.",
+    )
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--partial-output", type=Path, default=None, help="Write completed BFCL task results incrementally")
+    parser.add_argument("--max-task-seconds", type=float, default=None, help="Optional wall-clock timeout per BFCL task run")
     parser.add_argument("--cache-dir", type=Path, default=ACADEMIC_ROOT.parent / "data" / "benchmarks")
     parser.add_argument(
         "--bfcl-adapter-mode",
@@ -61,7 +110,14 @@ async def main_async() -> None:
     )
     parser.add_argument("--bfcl-execution-backend", choices=["auto", "official", "local_mock"], default="auto")
     parser.add_argument("--bfcl-prompt-style", choices=["native", "official", "academic"], default="native")
+    parser.add_argument(
+        "--bfcl-tool-api-style",
+        choices=["auto", "openai", "openai_stream", "anthropic_direct"],
+        default="auto",
+        help="Provider protocol for native tool calls. auto uses Anthropic native tools for Claude and streaming OpenAI-compatible calls for Qwen.",
+    )
     parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--max-steps-per-turn", type=int, default=20)
     parser.add_argument("--bfcl-synthetic-continue", action="store_true")
     parser.add_argument(
         "--no-bfcl-tool-name-hints",
@@ -86,14 +142,26 @@ async def main_async() -> None:
     if args.benchmark == "bfcl_v3":
         n_train = args.n_train if args.n_train is not None else 50
         n_test = args.n_test if args.n_test is not None else 20
+        requested_train_ids = _load_task_id_list(args.train_task_ids) if args.train_task_ids else []
+        requested_test_ids = _load_task_id_list(args.test_task_ids) if args.test_task_ids else []
+        need_full_train_pool = bool(requested_train_ids)
+        need_full_test_pool = bool(requested_test_ids)
         train, test = load_bfcl_tasks(
             cache_dir=args.cache_dir / "bfcl_v3",
             split_seed=args.seed,
-            n_train=n_train,
-            n_test=n_test,
+            n_train=(50 if need_full_train_pool else n_train + max(args.train_offset, 0)),
+            n_test=(150 if need_full_test_pool else n_test + max(args.test_offset, 0)),
             refresh=args.refresh_data,
             data_source=args.bfcl_data_source,
         )
+        if requested_train_ids:
+            train = _select_tasks_by_id(train, args.train_task_ids)
+        else:
+            train = train[max(args.train_offset, 0): max(args.train_offset, 0) + n_train]
+        if requested_test_ids:
+            test = _select_tasks_by_id(test, args.test_task_ids)
+        else:
+            test = test[max(args.test_offset, 0): max(args.test_offset, 0) + n_test]
         tools = load_bfcl_tools(
             args.cache_dir / "bfcl_v3",
             refresh=args.refresh_data,
@@ -114,17 +182,39 @@ async def main_async() -> None:
                 execution_backend=args.bfcl_execution_backend,
                 data_source=args.bfcl_data_source,
                 prompt_style=args.bfcl_prompt_style,
+                tool_api_style=args.bfcl_tool_api_style,
+                top_k_skills=args.top_k_skills,
+                skill_injection_mode=args.skill_injection_mode,
+                max_steps_per_turn=args.max_steps_per_turn,
+                partial_output=args.partial_output,
+                max_task_seconds=args.max_task_seconds,
                 temperature=args.temperature,
                 synthetic_continue=args.bfcl_synthetic_continue,
                 explicit_skill_tool=args.bfcl_explicit_skill_tool,
                 tag=args.tag,
                 save_skills=args.save_skills,
+                load_train_details=args.load_train_details,
             )
             summary["elapsed_s"] = round(time.monotonic() - t0, 3)
             out = args.output or RESULTS_DIR / f"{args.benchmark}_{args.tag}_{args.mode}.json"
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(summary, ensure_ascii=False, indent=2))
-            print(json.dumps({k: v for k, v in summary.items() if k not in ("train_details", "test_details")}, ensure_ascii=False, indent=2))
+            compact_summary = {
+                k: v
+                for k, v in summary.items()
+                if k
+                not in {
+                    "skills",
+                    "skill_bundles",
+                    "maintenance_test_results",
+                    "final_maintenance_test_results",
+                    "train_details",
+                    "refine_details",
+                    "post_refine_details",
+                    "test_details",
+                }
+            }
+            print(json.dumps(compact_summary, ensure_ascii=False, indent=2))
             print(f"Saved detail: {out}")
             return
         model_names = _model_names(args)
@@ -140,6 +230,10 @@ async def main_async() -> None:
                 execution_backend=args.bfcl_execution_backend,
                 data_source=args.bfcl_data_source,
                 prompt_style=args.bfcl_prompt_style,
+                tool_api_style=args.bfcl_tool_api_style,
+                top_k_skills=args.top_k_skills,
+                skill_injection_mode=args.skill_injection_mode,
+                max_steps_per_turn=args.max_steps_per_turn,
                 temperature=args.temperature,
                 synthetic_continue=args.bfcl_synthetic_continue,
                 explicit_skill_tool=args.bfcl_explicit_skill_tool,
@@ -162,6 +256,12 @@ async def main_async() -> None:
             model_name=args.model_name,
             execution_backend=args.bfcl_execution_backend,
             prompt_style=args.bfcl_prompt_style,
+            tool_api_style=args.bfcl_tool_api_style,
+            top_k_skills=args.top_k_skills,
+            skill_injection_mode=args.skill_injection_mode,
+            max_steps_per_turn=args.max_steps_per_turn,
+            partial_output=args.partial_output,
+            max_task_seconds=args.max_task_seconds,
             temperature=args.temperature,
             synthetic_continue=args.bfcl_synthetic_continue,
             explicit_skill_tool=args.bfcl_explicit_skill_tool,
@@ -187,6 +287,10 @@ async def main_async() -> None:
         summary["execution_backend"] = args.bfcl_execution_backend
         summary["bfcl_data_source"] = args.bfcl_data_source
         summary["bfcl_prompt_style"] = args.bfcl_prompt_style
+        summary["bfcl_tool_api_style"] = args.bfcl_tool_api_style
+        summary["top_k_skills"] = args.top_k_skills
+        summary["skill_injection_mode"] = args.skill_injection_mode
+        summary["max_steps_per_turn"] = args.max_steps_per_turn
         summary["temperature"] = args.temperature
         summary["bfcl_synthetic_continue"] = args.bfcl_synthetic_continue
         summary["bfcl_explicit_skill_tool"] = args.bfcl_explicit_skill_tool
@@ -208,31 +312,126 @@ async def _run_bfcl_baseline(
     model_name: str | None = None,
     execution_backend: str = "auto",
     prompt_style: str = "native",
+    tool_api_style: str = "auto",
+    top_k_skills: int = 5,
+    skill_injection_mode: str = "prompt_only",
+    max_steps_per_turn: int = 8,
+    partial_output: Path | None = None,
+    max_task_seconds: float | None = None,
     temperature: float | None = None,
     synthetic_continue: bool = False,
     explicit_skill_tool: bool = False,
 ) -> List[Dict[str, Any]]:
-    details = []
-    for task in tasks:
+    details: List[Dict[str, Any]] = []
+    completed_task_ids: set[str] = set()
+    if partial_output and partial_output.exists():
+        try:
+            payload = json.loads(partial_output.read_text())
+            existing = payload.get("details", [])
+            if isinstance(existing, list):
+                details = [item for item in existing if isinstance(item, dict) and item.get("task_id")]
+                completed_task_ids = {str(item.get("task_id")) for item in details}
+        except Exception:
+            details = []
+            completed_task_ids = set()
+    completed_before = len(details)
+    remaining_tasks = [task for task in tasks if task.task_id not in completed_task_ids]
+    for offset, task in enumerate(remaining_tasks):
+        task_index = completed_before + offset
         runs = []
         for run_idx in range(n_runs):
-            result = await run_bfcl_task(
-                task,
-                llm_config=llm_config,
-                tools=tools,
-                artifact_store=store,
-                adapter_mode=adapter_mode,
-                model_name=model_name,
-                enable_skill_tool=explicit_skill_tool and bool(store.all()),
-                execution_backend=execution_backend,
-                prompt_style=prompt_style,
-                temperature=temperature,
-                synthetic_continue=synthetic_continue,
-            )
+            try:
+                result = await asyncio.wait_for(
+                    run_bfcl_task(
+                        task,
+                        llm_config=llm_config,
+                        tools=tools,
+                        artifact_store=store,
+                        adapter_mode=adapter_mode,
+                        model_name=model_name,
+                        enable_skill_tool=explicit_skill_tool and bool(store.all()),
+                        execution_backend=execution_backend,
+                        prompt_style=prompt_style,
+                        tool_api_style=tool_api_style,
+                        top_k_skills=top_k_skills,
+                        max_steps_per_turn=max_steps_per_turn,
+                        skill_injection_mode=skill_injection_mode,
+                        temperature=temperature,
+                        synthetic_continue=synthetic_continue,
+                    ),
+                    timeout=max_task_seconds,
+                ) if max_task_seconds else await run_bfcl_task(
+                    task,
+                    llm_config=llm_config,
+                    tools=tools,
+                    artifact_store=store,
+                    adapter_mode=adapter_mode,
+                    model_name=model_name,
+                    enable_skill_tool=explicit_skill_tool and bool(store.all()),
+                    execution_backend=execution_backend,
+                    prompt_style=prompt_style,
+                    tool_api_style=tool_api_style,
+                    top_k_skills=top_k_skills,
+                    max_steps_per_turn=max_steps_per_turn,
+                    skill_injection_mode=skill_injection_mode,
+                    temperature=temperature,
+                    synthetic_continue=synthetic_continue,
+                )
+            except asyncio.TimeoutError:
+                result = BenchmarkResult(
+                    benchmark="bfcl_v3",
+                    task_id=task.task_id,
+                    success=False,
+                    score=0.0,
+                    metrics={
+                        "exception": "TaskTimeout",
+                        "max_task_seconds": max_task_seconds,
+                    },
+                    trace={"task_id": task.task_id, "timed_out": True},
+                    error=f"Task exceeded {max_task_seconds} seconds",
+                )
             item = result.as_dict()
             item["run_idx"] = run_idx
             runs.append(item)
-        details.append(_task_runs(task.task_id, runs))
+            metrics = item.get("metrics") or {}
+            print(
+                json.dumps(
+                    {
+                        "progress": "bfcl_task_run",
+                        "task_index": task_index,
+                        "n_tasks": len(tasks),
+                        "task_id": task.task_id,
+                        "run_idx": run_idx,
+                        "score": item.get("score"),
+                        "success": item.get("success"),
+                        "official_valid": metrics.get("official_valid"),
+                        "call_f1": metrics.get("call_f1"),
+                        "elapsed_s": metrics.get("elapsed_s"),
+                        "skill_injection_mode": metrics.get("skill_injection_mode"),
+                        "prompt_injected_skills": metrics.get("prompt_injected_skills"),
+                        "tool_injected_skills": metrics.get("tool_injected_skills"),
+                        "called_skill_tools": metrics.get("called_skill_tools"),
+                        "error": item.get("error"),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        details.append(_task_runs(task, runs))
+        if partial_output:
+            partial_output.parent.mkdir(parents=True, exist_ok=True)
+            partial_output.write_text(
+                json.dumps(
+                    {
+                        "benchmark": "bfcl_v3",
+                        "completed_tasks": len(details),
+                        "total_tasks": len(tasks),
+                        "details": details,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
     return details
 
 
@@ -254,13 +453,25 @@ async def _run_spreadsheet_baseline(
             item = result.as_dict()
             item["run_idx"] = run_idx
             runs.append(item)
-        details.append(_task_runs(task.task_id, runs))
+        details.append(_task_runs(task, runs))
     return details
 
 
-def _task_runs(task_id: str, runs: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _task_snapshot(task: Any) -> Dict[str, Any]:
     return {
-        "task_id": task_id,
+        "benchmark": getattr(task, "benchmark", "bfcl_v3"),
+        "task_id": getattr(task, "task_id", ""),
+        "question": copy.deepcopy(getattr(task, "question", None)),
+        "expected": copy.deepcopy(getattr(task, "expected", None)),
+        "input_artifacts": copy.deepcopy(getattr(task, "input_artifacts", {}) or {}),
+        "metadata": copy.deepcopy(getattr(task, "metadata", {}) or {}),
+    }
+
+
+def _task_runs(task: Any, runs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    return {
+        "task_id": getattr(task, "task_id", ""),
+        "task": _task_snapshot(task),
         "n_runs": len(runs),
         "n_success": sum(1 for run in runs if run.get("success")),
         "avg_score": round(sum(float(run.get("score", 0.0)) for run in runs) / max(len(runs), 1), 4),
@@ -286,14 +497,33 @@ def _aggregate(
     ]
     retrieved_counts: Dict[str, int] = {}
     used_counts: Dict[str, int] = {}
+    prompt_injected_counts: Dict[str, int] = {}
+    tool_injected_counts: Dict[str, int] = {}
+    called_skill_counts: Dict[str, int] = {}
     called_counts: Dict[str, int] = {}
+    elapsed_values: List[float] = []
+    timeout_count = 0
+    step_values: List[int] = []
     for run in runs:
         metrics = run.get("metrics") or {}
+        trace = run.get("trace") or {}
+        if metrics.get("exception") == "TaskTimeout" or trace.get("timed_out"):
+            timeout_count += 1
+        if metrics.get("elapsed_s") is not None:
+            elapsed_values.append(float(metrics.get("elapsed_s") or 0.0))
+        if metrics.get("n_model_steps") is not None:
+            step_values.append(int(metrics.get("n_model_steps") or 0))
         for name in metrics.get("retrieved_skills", []) or []:
             retrieved_counts[name] = retrieved_counts.get(name, 0) + 1
         for name in metrics.get("used_skills", []) or []:
             used_counts[name] = used_counts.get(name, 0) + 1
-        for call in ((run.get("trace") or {}).get("tool_calls") or []):
+        for name in metrics.get("prompt_injected_skills", []) or []:
+            prompt_injected_counts[name] = prompt_injected_counts.get(name, 0) + 1
+        for name in metrics.get("tool_injected_skills", []) or []:
+            tool_injected_counts[name] = tool_injected_counts.get(name, 0) + 1
+        for name in metrics.get("called_skill_tools", []) or []:
+            called_skill_counts[name] = called_skill_counts.get(name, 0) + 1
+        for call in (trace.get("tool_calls") or []):
             name = call.get("name")
             if name:
                 called_counts[name] = called_counts.get(name, 0) + 1
@@ -309,6 +539,11 @@ def _aggregate(
         "success_rate": round(total_success / max(total_runs, 1), 4),
         "avg_score": round(avg_score, 4),
         "avg_total_tokens": round(sum(total_tokens) / max(len(total_tokens), 1), 1),
+        "timeout_rate": round(timeout_count / max(total_runs, 1), 4),
+        "avg_elapsed_s": round(sum(elapsed_values) / max(len(elapsed_values), 1), 3) if elapsed_values else None,
+        "max_elapsed_s": round(max(elapsed_values), 3) if elapsed_values else None,
+        "avg_model_steps": round(sum(step_values) / max(len(step_values), 1), 2) if step_values else None,
+        "max_model_steps": max(step_values) if step_values else None,
         "avg_at_k": round(total_success / max(total_runs, 1), 4),
         "pass_at_k": round(
             sum(1 for item in details if item.get("n_success", 0) > 0) / max(len(details), 1),
@@ -319,10 +554,15 @@ def _aggregate(
         "avg_turn_success_rate": _avg_metric(runs, "turn_success_rate"),
         "avg_relaxed_turn_success_rate": _avg_metric(runs, "relaxed_turn_success_rate"),
         "official_valid_rate": _avg_bool_metric(runs, "official_valid"),
+        "official_avg_at_k": _avg_bool_metric(runs, "official_valid"),
+        "official_pass_at_k": _pass_bool_metric(details, "official_valid"),
         "call_error_summary": _call_error_summary(runs),
         "skill_stats": {
             "retrieved_counts": dict(sorted(retrieved_counts.items())),
+            "prompt_injected_counts": dict(sorted(prompt_injected_counts.items())),
+            "tool_injected_counts": dict(sorted(tool_injected_counts.items())),
             "used_counts": dict(sorted(used_counts.items())),
+            "called_skill_tool_counts": dict(sorted(called_skill_counts.items())),
             "domain_tool_called_counts": dict(sorted(called_counts.items())),
         },
         "details": details,
@@ -341,6 +581,10 @@ async def _run_bfcl_model_sweep(
     execution_backend: str,
     data_source: str,
     prompt_style: str,
+    tool_api_style: str,
+    top_k_skills: int,
+    skill_injection_mode: str,
+    max_steps_per_turn: int,
     temperature: float | None,
     synthetic_continue: bool,
     explicit_skill_tool: bool,
@@ -358,6 +602,10 @@ async def _run_bfcl_model_sweep(
             model_name=model_name,
             execution_backend=execution_backend,
             prompt_style=prompt_style,
+            tool_api_style=tool_api_style,
+            top_k_skills=top_k_skills,
+            skill_injection_mode=skill_injection_mode,
+            max_steps_per_turn=max_steps_per_turn,
             temperature=temperature,
             synthetic_continue=synthetic_continue,
             explicit_skill_tool=explicit_skill_tool,
@@ -368,6 +616,10 @@ async def _run_bfcl_model_sweep(
         report["execution_backend"] = execution_backend
         report["bfcl_data_source"] = data_source
         report["bfcl_prompt_style"] = prompt_style
+        report["bfcl_tool_api_style"] = tool_api_style
+        report["top_k_skills"] = top_k_skills
+        report["skill_injection_mode"] = skill_injection_mode
+        report["max_steps_per_turn"] = max_steps_per_turn
         reports.append(report)
     return {
         "benchmark": "bfcl_v3",
@@ -378,6 +630,10 @@ async def _run_bfcl_model_sweep(
         "execution_backend": execution_backend,
         "bfcl_data_source": data_source,
         "bfcl_prompt_style": prompt_style,
+        "bfcl_tool_api_style": tool_api_style,
+        "top_k_skills": top_k_skills,
+        "skill_injection_mode": skill_injection_mode,
+        "max_steps_per_turn": max_steps_per_turn,
         "temperature": temperature,
         "bfcl_synthetic_continue": synthetic_continue,
         "bfcl_explicit_skill_tool": explicit_skill_tool,
@@ -400,34 +656,254 @@ async def _run_bfcl_evolve(
     execution_backend: str,
     data_source: str,
     prompt_style: str,
+    tool_api_style: str,
+    top_k_skills: int,
+    skill_injection_mode: str,
+    max_steps_per_turn: int,
+    partial_output: Path | None,
+    max_task_seconds: float | None,
     temperature: float | None,
     synthetic_continue: bool,
     explicit_skill_tool: bool,
     tag: str,
     save_skills: Path | None,
+    load_train_details: Path | None,
 ) -> Dict[str, Any]:
-    train_details = await _run_bfcl_baseline(
-        train,
-        n_train_runs,
-        llm_config,
-        tools,
-        seed_store,
-        adapter_mode=adapter_mode,
-        model_name=model_name,
-        execution_backend=execution_backend,
-        prompt_style=prompt_style,
-        temperature=temperature,
-        synthetic_continue=synthetic_continue,
-        explicit_skill_tool=explicit_skill_tool,
-    )
+    phase_t0 = time.monotonic()
+
+    def log_phase(name: str, **extra: Any) -> None:
+        nonlocal phase_t0
+        now = time.monotonic()
+        payload = {
+            "progress": "bfcl_evolve_phase_done",
+            "phase": name,
+            "duration_s": round(now - phase_t0, 3),
+            **extra,
+        }
+        print(json.dumps(payload, ensure_ascii=False), flush=True)
+        phase_t0 = now
+
+    if load_train_details:
+        train_details = _load_saved_details(load_train_details)
+    else:
+        train_details = await _run_bfcl_baseline(
+            train,
+            n_train_runs,
+            llm_config,
+            tools,
+            seed_store,
+            adapter_mode=adapter_mode,
+            model_name=model_name,
+            execution_backend=execution_backend,
+            prompt_style=prompt_style,
+            tool_api_style=tool_api_style,
+            top_k_skills=top_k_skills,
+            skill_injection_mode=skill_injection_mode,
+            max_steps_per_turn=max_steps_per_turn,
+            partial_output=_phase_partial_path(partial_output, "train"),
+            max_task_seconds=max_task_seconds,
+            temperature=temperature,
+            synthetic_continue=synthetic_continue,
+            explicit_skill_tool=explicit_skill_tool,
+        )
+    log_phase("train_rollout", n_train_details=len(train_details))
     train_results = [
         _result_from_dict(run)
         for item in train_details
         for run in item.get("runs", [])
     ]
-    evolved = ArtifactStore(seed_store.all())
-    for artifact in extract_bfcl_skills_from_results(train_results):
+    evolved = ArtifactStore(seed_store.all(), test_results=seed_store.test_results())
+    llm_train_results = [
+        _result_from_dict(run).as_dict()
+        for item in train_details
+        for run in item.get("runs", [])
+    ]
+    extracted = await extract_bfcl_skill_artifacts_llm(
+        llm_train_results,
+        tool_schemas=tools,
+        existing_artifacts=evolved.all(),
+        llm_config=llm_config,
+        model_name=model_name,
+    )
+    max_extracted = int(os.environ.get("BFCL_MAX_EXTRACTED_SKILLS", "0") or "0")
+    if max_extracted > 0:
+        extracted = extracted[:max_extracted]
+    for artifact in extracted:
         evolved.add(artifact)
+    for artifact in evolved.all():
+        _ensure_artifact_maintenance_fields(artifact)
+    log_phase("extract_candidate_skills", n_extracted=len(extracted), n_store=len(evolved.all()))
+    maintenance_targets = select_bfcl_maintenance_targets(
+        evolved,
+        train_details=train_details,
+    )
+    maintenance_targets = _limit_maintenance_targets(maintenance_targets)
+    await build_bfcl_skill_bundles_llm(
+        evolved,
+        train_details=train_details,
+        llm_config=llm_config,
+        model_name=model_name,
+        artifact_names=maintenance_targets,
+    )
+    log_phase("build_initial_bundles", n_targets=len(maintenance_targets))
+    refine_input_skill_names = [skill.name for skill in evolved.all()]
+    refine_details = await _run_bfcl_baseline(
+        train,
+        1,
+        llm_config,
+        tools,
+        evolved,
+        adapter_mode=adapter_mode,
+        model_name=model_name,
+        execution_backend=execution_backend,
+        prompt_style=prompt_style,
+        tool_api_style=tool_api_style,
+        top_k_skills=top_k_skills,
+        skill_injection_mode=skill_injection_mode,
+        max_steps_per_turn=max_steps_per_turn,
+        partial_output=_phase_partial_path(partial_output, "refine"),
+        max_task_seconds=max_task_seconds,
+        temperature=temperature,
+        synthetic_continue=synthetic_continue,
+        explicit_skill_tool=explicit_skill_tool,
+    )
+    refine_summary_before = _aggregate("bfcl_v3", "evolve_refine_before", tag, llm_config, len(train), refine_details)
+    log_phase("integration_replay_before_refine", n_refine_details=len(refine_details))
+    maintenance_targets = select_bfcl_maintenance_targets(
+        evolved,
+        train_details=train_details,
+        replay_details=refine_details,
+    )
+    maintenance_targets = _limit_maintenance_targets(maintenance_targets)
+    maintenance_target_set = set(maintenance_targets)
+    replay_bundle_targets = []
+    for artifact in evolved.all():
+        if artifact.name not in maintenance_target_set:
+            continue
+        needs_bundle = not artifact.bundle.all_cases()
+        skill_used_in_failed_replay = False
+        for detail in refine_details or []:
+            run = (detail.get("runs") or [{}])[0]
+            metrics = run.get("metrics") or {}
+            if metrics.get("official_valid") is not False:
+                continue
+            used_names = set(metrics.get("retrieved_skills") or []) | set(metrics.get("prompt_injected_skills") or [])
+            if artifact.name in used_names:
+                skill_used_in_failed_replay = True
+                break
+        if needs_bundle or skill_used_in_failed_replay:
+            replay_bundle_targets.append(artifact.name)
+    if replay_bundle_targets:
+        await build_bfcl_skill_bundles_llm(
+            evolved,
+            train_details=train_details,
+            replay_details=refine_details,
+            llm_config=llm_config,
+            model_name=model_name,
+            artifact_names=replay_bundle_targets,
+        )
+    log_phase("build_replay_bundles", n_targets=len(replay_bundle_targets), selected_targets=len(maintenance_targets))
+
+    async def run_bundle_test_for(artifact: SkillArtifact) -> SkillTestResult:
+        result = await execute_bfcl_bundle_tests(
+            artifact,
+            tools=tools,
+            llm_config=llm_config,
+            model_name=model_name,
+            adapter_mode=adapter_mode,
+            execution_backend=execution_backend,
+            prompt_style=prompt_style,
+            tool_api_style=tool_api_style,
+            max_steps_per_turn=max_steps_per_turn,
+            temperature=temperature,
+            synthetic_continue=synthetic_continue,
+            explicit_skill_tool=explicit_skill_tool,
+            max_case_seconds=max_task_seconds or 180.0,
+        )
+        return result
+
+    unit_test_results: List[SkillTestResult] = []
+    unit_targets = [item for item in evolved.all() if item.name in set(maintenance_targets)]
+    unit_sem = asyncio.Semaphore(max(1, int(os.environ.get("BFCL_UNIT_TEST_CONCURRENCY", os.environ.get("BFCL_MAINTENANCE_CONCURRENCY", "2")) or "2")))
+
+    async def guarded_bundle_test(artifact: SkillArtifact) -> SkillTestResult:
+        async with unit_sem:
+            return await run_bundle_test_for(artifact)
+
+    for artifact, result in zip(unit_targets, await asyncio.gather(*(guarded_bundle_test(item) for item in unit_targets))):
+        evolved.add_test_result(result)
+        artifact.evidence.integration_failures = copy.deepcopy(result.integration_failures)
+        unit_test_results.append(result)
+    log_phase("run_unit_utility_tests", n_results=len(unit_test_results))
+    refine_decisions = await refine_bfcl_skill_store_llm(
+        evolved,
+        maintenance_test_results=unit_test_results,
+        llm_config=llm_config,
+        model_name=model_name,
+    )
+    log_phase("llm_refine", n_decisions=len(refine_decisions))
+    generic_refine_decisions = []
+    appended_failure_cases = 0
+    for artifact in evolved.all():
+        result = next((item for item in unit_test_results if item.skill_name == artifact.name), None)
+        if result is None:
+            continue
+        generic_refine_decisions.append(
+            _refine_skill_artifact(
+                artifact,
+                test_result=result,
+            )
+        )
+        appended_failure_cases += append_failure_cases_from_result(artifact, result)
+    has_refine_change = any(
+        row.get("action") != "keep"
+        for row in refine_decisions
+    ) or any(
+        bool(row.get("changed"))
+        for row in generic_refine_decisions
+    ) or appended_failure_cases > 0
+    if has_refine_change:
+        post_refine_details = await _run_bfcl_baseline(
+            train,
+            1,
+            llm_config,
+            tools,
+            evolved,
+            adapter_mode=adapter_mode,
+            model_name=model_name,
+            execution_backend=execution_backend,
+            prompt_style=prompt_style,
+            tool_api_style=tool_api_style,
+            top_k_skills=top_k_skills,
+            skill_injection_mode=skill_injection_mode,
+            max_steps_per_turn=max_steps_per_turn,
+            partial_output=_phase_partial_path(partial_output, "post_refine"),
+            max_task_seconds=max_task_seconds,
+            temperature=temperature,
+            synthetic_continue=synthetic_continue,
+            explicit_skill_tool=explicit_skill_tool,
+        )
+    else:
+        post_refine_details = refine_details
+    log_phase("post_refine_replay", changed=has_refine_change)
+    refine_summary_after = summarize_bfcl_skill_impact(
+        skills=[skill.as_dict() for skill in evolved.all()],
+        test_details=post_refine_details,
+    )
+    if has_refine_change:
+        final_train_test_results: List[SkillTestResult] = []
+        final_targets = [item for item in evolved.all() if item.name in set(maintenance_targets)]
+        for result in await asyncio.gather(*(guarded_bundle_test(item) for item in final_targets)):
+            evolved.add_test_result(result)
+            final_train_test_results.append(result)
+        log_phase("run_final_unit_utility_tests", n_results=len(final_train_test_results), skipped=False)
+    else:
+        final_train_test_results = unit_test_results
+        log_phase("run_final_unit_utility_tests", n_results=len(final_train_test_results), skipped=True)
+    micro_refactor_candidates = _micro_refactor_candidates(
+        evolved,
+        k_step=max(len(train), 1),
+    )
     if save_skills:
         evolved.save(save_skills)
 
@@ -441,12 +917,23 @@ async def _run_bfcl_evolve(
         model_name=model_name,
         execution_backend=execution_backend,
         prompt_style=prompt_style,
+        tool_api_style=tool_api_style,
+        top_k_skills=top_k_skills,
+        skill_injection_mode=skill_injection_mode,
+        max_steps_per_turn=max_steps_per_turn,
+        partial_output=_phase_partial_path(partial_output, "test"),
+        max_task_seconds=max_task_seconds,
         temperature=temperature,
         synthetic_continue=synthetic_continue,
         explicit_skill_tool=explicit_skill_tool,
     )
+    log_phase("final_test_rollout", n_test_details=len(test_details))
     train_summary = _aggregate("bfcl_v3", "evolve_train", tag, llm_config, len(train), train_details)
     test_summary = _aggregate("bfcl_v3", "evolve_test", tag, llm_config, len(train), test_details)
+    evolved_skill_rows = summarize_bfcl_skill_impact(
+        skills=[skill.as_dict() for skill in evolved.all()],
+        test_details=test_details,
+    )
     return {
         "benchmark": "bfcl_v3",
         "mode": "evolve",
@@ -457,19 +944,43 @@ async def _run_bfcl_evolve(
         "execution_backend": execution_backend,
         "bfcl_data_source": data_source,
         "bfcl_prompt_style": prompt_style,
+        "bfcl_tool_api_style": tool_api_style,
+        "top_k_skills": top_k_skills,
+        "skill_injection_mode": skill_injection_mode,
+        "max_steps_per_turn": max_steps_per_turn,
         "temperature": temperature,
         "bfcl_synthetic_continue": synthetic_continue,
         "bfcl_explicit_skill_tool": explicit_skill_tool,
+        "max_task_seconds": max_task_seconds,
+        "partial_output": str(partial_output) if partial_output else None,
         "n_train": len(train),
         "n_test": len(test),
         "n_train_runs": n_train_runs,
+        "load_train_details": str(load_train_details) if load_train_details else None,
         "n_test_runs": n_test_runs,
         "n_skills_seed": len(seed_store.all()),
         "n_skills_evolved": len(evolved.all()),
+        "n_skills_refine_input": len(refine_input_skill_names),
         "skill_names": [skill.name for skill in evolved.all()],
+        "skills": [skill.as_dict() for skill in evolved.all()],
+        "skill_bundles": {
+            skill.name: skill.bundle.as_dict()
+            for skill in evolved.all()
+        },
+        "skill_impact_summary": evolved_skill_rows,
+        "refine_summary_before": {k: v for k, v in refine_summary_before.items() if k != "details"},
+        "refine_skill_impact": refine_summary_after,
+        "refine_decisions": refine_decisions,
+        "refine_generic_decisions": generic_refine_decisions,
+        "maintenance_test_results": [item.as_dict() for item in unit_test_results],
+        "final_maintenance_test_results": [item.as_dict() for item in final_train_test_results],
+        "integration_cases_appended": appended_failure_cases,
+        "micro_refactor_candidates": micro_refactor_candidates,
         "train_summary": {k: v for k, v in train_summary.items() if k != "details"},
         "test_summary": {k: v for k, v in test_summary.items() if k != "details"},
         "train_details": train_details,
+        "refine_details": refine_details,
+        "post_refine_details": post_refine_details,
         "test_details": test_details,
     }
 
@@ -480,6 +991,50 @@ def _load_artifact_store(args: argparse.Namespace) -> ArtifactStore:
         for artifact in default_bfcl_skill_store().all():
             base.add(artifact)
     return base
+
+
+def _load_task_id_list(path: Path | None) -> List[str]:
+    if path is None:
+        return []
+    raw = json.loads(path.read_text())
+    if isinstance(raw, dict):
+        ids = raw.get("task_ids", [])
+    else:
+        ids = raw
+    return [str(item).strip() for item in ids if str(item).strip()]
+
+
+def _select_tasks_by_id(tasks: List[Any], path: Path) -> List[Any]:
+    ordered_ids = _load_task_id_list(path)
+    task_map = {str(task.task_id): task for task in tasks}
+    missing = [task_id for task_id in ordered_ids if task_id not in task_map]
+    if missing:
+        raise ValueError(f"Unknown task ids in {path}: {missing}")
+    return [task_map[task_id] for task_id in ordered_ids]
+
+
+def _phase_partial_path(path: Path | None, phase: str) -> Path | None:
+    if path is None:
+        return None
+    return path.with_name(f"{path.stem}_{phase}{path.suffix or '.json'}")
+
+
+def _limit_maintenance_targets(targets: List[str]) -> List[str]:
+    limit = int(os.environ.get("BFCL_MAX_MAINTENANCE_TARGETS", "0") or "0")
+    if limit <= 0:
+        return targets
+    return list(targets)[:limit]
+
+
+def _load_saved_details(path: Path) -> List[Dict[str, Any]]:
+    payload = json.loads(path.read_text())
+    if isinstance(payload, dict):
+        details = payload.get("details", [])
+    else:
+        details = payload
+    if not isinstance(details, list):
+        raise ValueError(f"Malformed details payload in {path}")
+    return [item for item in details if isinstance(item, dict) and item.get("task_id")]
 
 
 def _model_names(args: argparse.Namespace) -> List[str]:
@@ -507,6 +1062,28 @@ def _avg_bool_metric(runs: List[Dict[str, Any]], metric_name: str) -> float | No
     if not vals:
         return None
     return round(sum(1 for value in vals if value is True) / len(vals), 4)
+
+
+def _pass_bool_metric(details: List[Dict[str, Any]], metric_name: str) -> float | None:
+    if not details:
+        return None
+    passes = 0
+    counted = 0
+    for item in details:
+        runs = item.get("runs", []) or []
+        metric_vals = [
+            (run.get("metrics") or {}).get(metric_name)
+            for run in runs
+            if (run.get("metrics") or {}).get(metric_name) is not None
+        ]
+        if not metric_vals:
+            continue
+        counted += 1
+        if any(value is True for value in metric_vals):
+            passes += 1
+    if counted == 0:
+        return None
+    return round(passes / counted, 4)
 
 
 def _call_error_summary(runs: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -541,6 +1118,773 @@ def _result_from_dict(data: Dict[str, Any]):
         trace=data.get("trace") or {},
         error=data.get("error"),
     )
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _skill_case_id(skill_name: str, label: str, index: int) -> str:
+    return f"{skill_name}:{label}:{index}"
+
+
+def _first_run(item: Dict[str, Any]) -> Dict[str, Any]:
+    runs = item.get("runs", []) or []
+    return runs[0] if runs else {}
+
+
+def _official_valid(run: Dict[str, Any]) -> bool | None:
+    return (run.get("metrics") or {}).get("official_valid")
+
+
+def _metrics_int(run: Dict[str, Any], key: str) -> int:
+    value = (run.get("metrics") or {}).get(key)
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except Exception:
+        try:
+            return int(float(value))
+        except Exception:
+            return 0
+
+
+def _skill_matches_run(skill: SkillArtifact, run: Dict[str, Any]) -> bool:
+    metrics = run.get("metrics") or {}
+    sets = [
+        metrics.get("retrieved_skills", []) or [],
+        metrics.get("prompt_injected_skills", []) or [],
+        metrics.get("tool_injected_skills", []) or [],
+        metrics.get("called_skill_tools", []) or [],
+        metrics.get("used_skills", []) or [],
+    ]
+    return any(skill.name in values for values in sets)
+
+
+def _result_signature(run: Dict[str, Any]) -> Dict[str, Any]:
+    metrics = run.get("metrics") or {}
+    return {
+        "official_valid": metrics.get("official_valid"),
+        "call_f1": metrics.get("call_f1"),
+        "n_model_steps": metrics.get("n_model_steps"),
+        "total_tokens": metrics.get("total_tokens"),
+        "retrieved_skills": metrics.get("retrieved_skills", []) or [],
+        "prompt_injected_skills": metrics.get("prompt_injected_skills", []) or [],
+        "tool_injected_skills": metrics.get("tool_injected_skills", []) or [],
+        "called_skill_tools": metrics.get("called_skill_tools", []) or [],
+        "used_skills": metrics.get("used_skills", []) or [],
+        "call_errors": metrics.get("call_errors", []) or [],
+    }
+
+
+def _ensure_artifact_maintenance_fields(artifact: SkillArtifact) -> SkillArtifact:
+    if not artifact.interface.summary:
+        artifact.interface = SkillInterface(
+            summary=artifact.description,
+            usage=f"Use `{artifact.name}` when its described BFCL pattern applies.",
+            invocation_contract={
+                "injection_type": artifact.injection_type(),
+                "allowed_tools": list(artifact.metadata.get("allowed_tools") or []),
+                "domains": list(artifact.metadata.get("domains") or []),
+            },
+        )
+    if not artifact.bundle.bundle_id:
+        artifact.bundle.bundle_id = f"{artifact.name}.bundle"
+    if not artifact.lineage.version_kind or artifact.lineage.version_kind == "seed":
+        artifact.lineage = SkillLineage(
+            parent_version=artifact.lineage.parent_version,
+            parent_version_id=artifact.lineage.parent_version_id,
+            version_kind=str(artifact.metadata.get("version_kind") or artifact.lineage.version_kind or "seed"),
+            migration_reason=artifact.lineage.migration_reason,
+            refined_from_result_ids=list(artifact.lineage.refined_from_result_ids or []),
+            refactor_group_id=artifact.lineage.refactor_group_id,
+        )
+    artifact.metadata.setdefault("version_kind", artifact.lineage.version_kind or "seed")
+    return artifact
+
+
+def _build_bfcl_skill_bundles(
+    store: ArtifactStore,
+    *,
+    train_details: List[Dict[str, Any]],
+    replay_details: List[Dict[str, Any]] | None = None,
+) -> None:
+    train_by_id = {str(item.get("task_id")): item for item in train_details}
+    replay_by_id = {str(item.get("task_id")): item for item in (replay_details or [])}
+    for artifact in store.all():
+        _ensure_artifact_maintenance_fields(artifact)
+        source_task_ids = [
+            str(item).strip()
+            for item in (artifact.metadata.get("source_task_ids") or [])
+            if str(item).strip()
+        ]
+        positive_cases: List[SkillBundleCase] = []
+        negative_cases: List[SkillBundleCase] = []
+        integration_cases: List[SkillBundleCase] = list(artifact.bundle.integration_cases or [])
+        seen_case_ids = {case.case_id for case in integration_cases}
+        for index, task_id in enumerate(source_task_ids):
+            detail = train_by_id.get(task_id)
+            if not detail:
+                continue
+            run = _first_run(detail)
+            query = f"BFCL task {task_id} for skill {artifact.name}"
+            case = SkillBundleCase(
+                case_id=_skill_case_id(artifact.name, "positive", index),
+                source="train_positive",
+                prompt=query,
+                expected=_result_signature(run),
+                context={
+                    "task_id": task_id,
+                    "run": copy.deepcopy(run),
+                    "artifact_name": artifact.name,
+                },
+                tags=["positive", "source-train"],
+                polarity="positive",
+            )
+            positive_cases.append(case)
+            replay = replay_by_id.get(task_id)
+            if replay:
+                replay_run = _first_run(replay)
+                if _skill_matches_run(artifact, replay_run) and _official_valid(replay_run) is False:
+                    case_id = _skill_case_id(artifact.name, "integration", len(integration_cases))
+                    if case_id in seen_case_ids:
+                        continue
+                    integration_cases.append(
+                        SkillBundleCase(
+                            case_id=case_id,
+                            source="integration_replay_failure",
+                            prompt=query,
+                            expected=_result_signature(replay_run),
+                            context={
+                                "task_id": task_id,
+                                "baseline_run": copy.deepcopy(run),
+                                "replay_run": copy.deepcopy(replay_run),
+                                "artifact_name": artifact.name,
+                            },
+                            tags=["integration-derived", "failure"],
+                            polarity="negative",
+                        )
+                    )
+                    seen_case_ids.add(case_id)
+        for task_id, replay in replay_by_id.items():
+            should_seed_failure_case = bool(
+                artifact.metadata.get("manual_fault_injected")
+                or artifact.history
+                or task_id in source_task_ids
+            )
+            if not should_seed_failure_case:
+                continue
+            replay_run = _first_run(replay)
+            if not _skill_matches_run(artifact, replay_run):
+                continue
+            if _official_valid(replay_run) is not False:
+                continue
+            case_id = f"{artifact.name}:integration:{task_id}"
+            if case_id in seen_case_ids:
+                continue
+            baseline_detail = train_by_id.get(task_id) or {}
+            tags = ["integration-derived", "failure"]
+            source = "integration_replay_failure"
+            if artifact.metadata.get("manual_fault_injected"):
+                tags.append("manual-fault")
+                source = "manual_fault_replay_failure"
+            integration_cases.append(
+                SkillBundleCase(
+                    case_id=case_id,
+                    source=source,
+                    prompt=f"BFCL task {task_id} for skill {artifact.name}",
+                    expected=_result_signature(replay_run),
+                    context={
+                        "task_id": task_id,
+                        "baseline_run": copy.deepcopy(_first_run(baseline_detail)),
+                        "replay_run": copy.deepcopy(replay_run),
+                        "artifact_name": artifact.name,
+                    },
+                    tags=tags,
+                    polarity="negative",
+                )
+            )
+            seen_case_ids.add(case_id)
+        if not positive_cases:
+            positive_cases.append(
+                SkillBundleCase(
+                    case_id=_skill_case_id(artifact.name, "positive", 0),
+                    source="artifact_definition",
+                    prompt=artifact.description,
+                    expected={"injection_type": artifact.injection_type()},
+                    context={"artifact_name": artifact.name},
+                    tags=["bootstrap"],
+                    polarity="positive",
+                )
+            )
+        if artifact.metadata.get("source") == "evolve_rollouts":
+            negative_cases.append(
+                SkillBundleCase(
+                    case_id=_skill_case_id(artifact.name, "negative", 0),
+                    source="regression_guard",
+                    prompt=f"Guardrail for {artifact.name}",
+                    expected={"should_not_regress": True},
+                    context={"artifact_name": artifact.name},
+                    tags=["negative", "guardrail"],
+                    polarity="negative",
+                )
+            )
+        artifact.bundle.positive_cases = positive_cases
+        artifact.bundle.negative_cases = negative_cases
+        artifact.bundle.integration_cases = integration_cases
+        artifact.bundle.fixtures = {
+            "source_task_ids": source_task_ids,
+            "bundle_generated_at": _now_iso(),
+        }
+
+
+def _build_skill_test_result(
+    artifact: SkillArtifact,
+    *,
+    train_details: List[Dict[str, Any]],
+    replay_details: List[Dict[str, Any]],
+    run_label: str,
+) -> SkillTestResult:
+    baseline_valid = _task_official_valid_map(train_details)
+    replay_valid = _task_official_valid_map(replay_details)
+    cases = artifact.bundle.all_cases()
+    case_runs: List[SkillTestCaseRun] = []
+    comparable_case_count = 0
+    improved = 0
+    regressed = 0
+    tokens_delta = 0
+    steps_delta = 0
+    relevant_task_ids: List[str] = []
+    for case in cases:
+        task_id = str(case.context.get("task_id", "")).strip()
+        if not task_id:
+            case_runs.append(
+                SkillTestCaseRun(
+                    case_id=case.case_id,
+                    variant="bundle_only",
+                    passed=True,
+                    trace_ref="",
+                    metadata={"polarity": case.polarity, "source": case.source},
+                )
+            )
+            continue
+        if task_id not in relevant_task_ids:
+            relevant_task_ids.append(task_id)
+        before_valid = baseline_valid.get(task_id)
+        after_valid = replay_valid.get(task_id)
+        baseline_run = case.context.get("baseline_run")
+        if baseline_run is None:
+            baseline_detail = next((item for item in train_details if str(item.get("task_id")) == task_id), None)
+            baseline_run = _first_run(baseline_detail or {})
+        replay_run = case.context.get("replay_run")
+        if replay_run is None:
+            replay_detail = next((item for item in replay_details if str(item.get("task_id")) == task_id), None)
+            replay_run = _first_run(replay_detail or {})
+        if not baseline_run and not replay_run and before_valid is None and after_valid is None:
+            case_runs.append(
+                SkillTestCaseRun(
+                    case_id=case.case_id,
+                    variant="bundle_only",
+                    passed=True,
+                    trace_ref=task_id,
+                    metadata={"polarity": case.polarity, "source": case.source},
+                )
+            )
+            continue
+        comparable_case_count += 1
+        before_tokens = _metrics_int(baseline_run or {}, "total_tokens")
+        after_tokens = _metrics_int(replay_run or {}, "total_tokens")
+        before_steps = _metrics_int(baseline_run or {}, "n_model_steps")
+        after_steps = _metrics_int(replay_run or {}, "n_model_steps")
+        accuracy_before = 1.0 if before_valid is True else 0.0
+        accuracy_after = 1.0 if after_valid is True else 0.0
+        if accuracy_after > accuracy_before:
+            improved += 1
+        if accuracy_after < accuracy_before:
+            regressed += 1
+        tokens_delta += after_tokens - before_tokens
+        steps_delta += after_steps - before_steps
+        case_runs.append(
+            SkillTestCaseRun(
+                case_id=case.case_id,
+                variant="without_skill",
+                passed=before_valid is True,
+                accuracy=accuracy_before,
+                validity=before_valid,
+                tokens=before_tokens,
+                steps=before_steps,
+                trace_ref=task_id,
+                metadata={"polarity": case.polarity},
+            )
+        )
+        case_runs.append(
+            SkillTestCaseRun(
+                case_id=case.case_id,
+                variant="with_skill",
+                passed=after_valid is True,
+                accuracy=accuracy_after,
+                validity=after_valid,
+                tokens=after_tokens,
+                steps=after_steps,
+                failure_summary="" if after_valid is True else str((replay_run or {}).get("error") or ""),
+                trace_ref=task_id,
+                metadata={"polarity": case.polarity},
+            )
+        )
+    total_cases = max(comparable_case_count, 1)
+    aggregate = {
+        "n_cases": len(cases),
+        "n_comparable_cases": comparable_case_count,
+        "n_improved": improved,
+        "n_regressed": regressed,
+        "pass_all_tests": regressed == 0,
+        "unit_utility_report": {
+            "delta_accuracy": round((improved - regressed) / total_cases, 4),
+            "delta_tokens": tokens_delta,
+            "delta_steps": steps_delta,
+        },
+    }
+    counterfactual = {
+        "without_skill_valid_by_task": {
+            task_id: baseline_valid.get(task_id)
+            for task_id in relevant_task_ids
+        },
+        "with_skill_valid_by_task": {
+            task_id: replay_valid.get(task_id)
+            for task_id in relevant_task_ids
+        },
+    }
+    integration_failures = _integration_failures_for_skill(artifact, replay_details)
+    return SkillTestResult(
+        result_id=f"{artifact.name}:{run_label}:{uuid4().hex[:8]}",
+        skill_name=artifact.name,
+        skill_version=artifact.version,
+        bundle_id=artifact.bundle.bundle_id,
+        bundle_version=artifact.bundle.bundle_version,
+        dependency_versions=artifact.dependency_version_map(),
+        run_label=run_label,
+        unit_case_runs=case_runs,
+        aggregate=aggregate,
+        counterfactual=counterfactual,
+        integration_failures=integration_failures,
+        created_at=_now_iso(),
+    )
+
+
+def _integration_failures_for_skill(
+    artifact: SkillArtifact,
+    replay_details: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    failures: List[Dict[str, Any]] = []
+    for item in replay_details:
+        run = _first_run(item)
+        if not _skill_matches_run(artifact, run):
+            continue
+        if _official_valid(run) is not False:
+            continue
+        failures.append(
+            {
+                "task_id": item.get("task_id"),
+                "metrics": copy.deepcopy(run.get("metrics") or {}),
+                "error": run.get("error"),
+            }
+        )
+    return failures
+
+
+def _append_failure_cases_from_test_result(
+    artifact: SkillArtifact,
+    test_result: SkillTestResult,
+) -> int:
+    added = 0
+    existing = {case.case_id for case in artifact.bundle.integration_cases}
+    for failure in test_result.integration_failures:
+        task_id = str(failure.get("task_id", "")).strip()
+        if not task_id:
+            continue
+        case_id = f"{artifact.name}:integration:{task_id}"
+        if case_id in existing:
+            continue
+        artifact.bundle.integration_cases.append(
+            SkillBundleCase(
+                case_id=case_id,
+                source="integration_failure",
+                prompt=f"Integration failure from task {task_id}",
+                expected={"official_valid": False},
+                context={"task_id": task_id, "failure": failure},
+                tags=["integration-derived", "failure"],
+                polarity="negative",
+            )
+        )
+        existing.add(case_id)
+        added += 1
+    if added:
+        artifact.bundle.bundle_version += 1
+    return added
+
+
+def _validate_refine_output_consistency(artifact: SkillArtifact) -> None:
+    if not artifact.bundle.bundle_id:
+        raise ValueError(f"{artifact.name} missing bundle_id")
+    if artifact.version_kind() == "minor":
+        parent_tests = [
+            entry.get("bundle")
+            for entry in artifact.history[-1:]
+            if isinstance(entry, dict) and entry.get("bundle")
+        ]
+        if parent_tests:
+            prev_bundle = parent_tests[-1]
+            prev_cases = []
+            for key in ("positive_cases", "negative_cases", "integration_cases"):
+                prev_cases.extend(case.get("case_id") for case in (prev_bundle.get(key) or []))
+            current_cases = {case.case_id for case in artifact.bundle.all_cases()}
+            missing = [case_id for case_id in prev_cases if case_id not in current_cases]
+            if missing:
+                raise ValueError(
+                    f"{artifact.name} minor update removed existing tests: {missing[:5]}"
+                )
+    if artifact.lineage.version_kind in {"major", "minor"}:
+        if not artifact.interface.summary:
+            raise ValueError(f"{artifact.name} updated interface without interface summary")
+
+
+def _refine_skill_artifact(
+    artifact: SkillArtifact,
+    *,
+    test_result: SkillTestResult,
+    max_rounds: int = 2,
+) -> Dict[str, Any]:
+    action = "keep"
+    notes: List[str] = []
+    changed = False
+    for _ in range(max_rounds):
+        if test_result.aggregate.get("pass_all_tests"):
+            break
+        if test_result.aggregate.get("n_regressed", 0) > 0 and artifact.metadata.get("source") == "evolve_rollouts":
+            artifact.status = "disabled"
+            artifact.metadata["disabled"] = True
+            artifact.metadata["disabled_reason"] = "Refine failed unit utility regression guard."
+            action = "disable"
+            changed = True
+            notes.append("disabled_on_regression")
+            break
+        if artifact.stale:
+            artifact.status = "active"
+            artifact.stale = False
+            action = "refresh_stale"
+            changed = True
+            notes.append("cleared_stale_after_refine")
+        if artifact.lineage.version_kind in {"major", "minor"} and not artifact.interface.summary:
+            artifact.interface.summary = artifact.description
+            changed = True
+            notes.append("filled_interface_summary")
+        break
+    _validate_refine_output_consistency(artifact)
+    return {
+        "skill_name": artifact.name,
+        "action": action,
+        "changed": changed,
+        "notes": notes,
+        "pass_all_tests": bool(test_result.aggregate.get("pass_all_tests")),
+    }
+
+
+def _build_maintenance_test_results(
+    store: ArtifactStore,
+    *,
+    train_details: List[Dict[str, Any]],
+    replay_details: List[Dict[str, Any]],
+    run_label: str,
+) -> List[SkillTestResult]:
+    results: List[SkillTestResult] = []
+    for artifact in store.all():
+        test_result = _build_skill_test_result(
+            artifact,
+            train_details=train_details,
+            replay_details=replay_details,
+            run_label=run_label,
+        )
+        store.add_test_result(test_result)
+        artifact.evidence.integration_failures = copy.deepcopy(test_result.integration_failures)
+        results.append(test_result)
+    return results
+
+
+def _micro_refactor_candidates(
+    store: ArtifactStore,
+    *,
+    k_step: int,
+) -> List[Dict[str, Any]]:
+    artifacts = store.all()
+    if len(artifacts) < 2 or len(artifacts) % max(k_step, 1) != 0:
+        return []
+    by_phrase: Dict[str, List[str]] = {}
+    for artifact in artifacts:
+        normalized = " ".join(artifact.description.lower().split())
+        if len(normalized) < 24:
+            continue
+        by_phrase.setdefault(normalized, []).append(artifact.name)
+    out = []
+    for phrase, names in by_phrase.items():
+        if len(names) < 2:
+            continue
+        out.append(
+            {
+                "shared_fragment": phrase,
+                "affected_skills": sorted(names),
+                "reason": "repeated description fragment",
+            }
+        )
+    return out
+
+
+def summarize_bfcl_skill_impact(
+    *,
+    skills: List[Dict[str, Any]],
+    test_details: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    skill_rows: Dict[str, Dict[str, Any]] = {}
+    for item in skills:
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+        metadata = item.get("metadata") or {}
+        skill_rows[name] = {
+            "skill_name": name,
+            "kind": item.get("kind"),
+            "description": item.get("description"),
+            "injection_type": metadata.get("injection_type"),
+            "source": metadata.get("source"),
+            "source_task_ids": list(metadata.get("source_task_ids") or []),
+            "source_tool": metadata.get("tool"),
+            "source_allowed_tools": list(metadata.get("allowed_tools") or []),
+            "source_domains": list(metadata.get("domains") or []),
+            "source_examples": list(metadata.get("source_examples") or []),
+            "retrieved_test_count": 0,
+            "prompt_injected_test_count": 0,
+            "tool_injected_test_count": 0,
+            "called_skill_tool_test_count": 0,
+            "used_test_count": 0,
+            "helped_official_task_ids": [],
+            "failed_after_injection_task_ids": [],
+            "retrieved_test_task_ids": [],
+        }
+    for item in test_details:
+        task_id = item.get("task_id", "")
+        runs = item.get("runs", []) or []
+        for run in runs:
+            metrics = run.get("metrics") or {}
+            official_valid = metrics.get("official_valid")
+            retrieved = set(metrics.get("retrieved_skills", []) or [])
+            prompt_injected = set(metrics.get("prompt_injected_skills", []) or [])
+            tool_injected = set(metrics.get("tool_injected_skills", []) or [])
+            called_skill_tools = set(metrics.get("called_skill_tools", []) or [])
+            used = set(metrics.get("used_skills", []) or [])
+            mentioned = retrieved | prompt_injected | tool_injected | called_skill_tools | used
+            for skill_name in mentioned:
+                row = skill_rows.setdefault(
+                    skill_name,
+                    {
+                        "skill_name": skill_name,
+                        "kind": None,
+                        "description": None,
+                        "injection_type": None,
+                        "source": None,
+                        "source_task_ids": [],
+                        "source_tool": None,
+                        "source_allowed_tools": [],
+                        "source_domains": [],
+                        "source_examples": [],
+                        "retrieved_test_count": 0,
+                        "prompt_injected_test_count": 0,
+                        "tool_injected_test_count": 0,
+                        "called_skill_tool_test_count": 0,
+                        "used_test_count": 0,
+                        "helped_official_task_ids": [],
+                        "failed_after_injection_task_ids": [],
+                        "retrieved_test_task_ids": [],
+                    },
+                )
+                if skill_name in retrieved:
+                    row["retrieved_test_count"] += 1
+                    if task_id and task_id not in row["retrieved_test_task_ids"]:
+                        row["retrieved_test_task_ids"].append(task_id)
+                if skill_name in prompt_injected:
+                    row["prompt_injected_test_count"] += 1
+                if skill_name in tool_injected:
+                    row["tool_injected_test_count"] += 1
+                if skill_name in called_skill_tools:
+                    row["called_skill_tool_test_count"] += 1
+                if skill_name in used:
+                    row["used_test_count"] += 1
+                if official_valid is True and skill_name in (prompt_injected | tool_injected | used):
+                    if task_id and task_id not in row["helped_official_task_ids"]:
+                        row["helped_official_task_ids"].append(task_id)
+                if official_valid is False and skill_name in (prompt_injected | tool_injected | used):
+                    if task_id and task_id not in row["failed_after_injection_task_ids"]:
+                        row["failed_after_injection_task_ids"].append(task_id)
+    rows = list(skill_rows.values())
+    rows.sort(
+        key=lambda row: (
+            -int(row.get("retrieved_test_count", 0)),
+            -int(row.get("prompt_injected_test_count", 0)),
+            row.get("skill_name", ""),
+        )
+    )
+    return rows
+
+
+def _task_official_valid_map(details: List[Dict[str, Any]]) -> Dict[str, bool | None]:
+    out: Dict[str, bool | None] = {}
+    for item in details:
+        task_id = str(item.get("task_id", "")).strip()
+        if not task_id:
+            continue
+        runs = item.get("runs", []) or []
+        if not runs:
+            out[task_id] = None
+            continue
+        metrics = runs[0].get("metrics") or {}
+        out[task_id] = metrics.get("official_valid")
+    return out
+
+
+def _refine_bfcl_skill_store(
+    store: ArtifactStore,
+    *,
+    train_details: List[Dict[str, Any]],
+    replay_details: List[Dict[str, Any]],
+    maintenance_test_results: List[SkillTestResult] | None = None,
+    min_fail_count: int = 2,
+) -> List[Dict[str, Any]]:
+    replay_rows = summarize_bfcl_skill_impact(
+        skills=[skill.as_dict() for skill in store.all()],
+        test_details=replay_details,
+    )
+    row_by_skill = {str(row.get("skill_name", "")): row for row in replay_rows}
+    result_by_skill = {
+        item.skill_name: item
+        for item in (maintenance_test_results or [])
+    }
+    decisions: List[Dict[str, Any]] = []
+    for artifact in store.all():
+        row = row_by_skill.get(artifact.name, {})
+        retrieved = int(row.get("retrieved_test_count", 0) or 0)
+        test_result = result_by_skill.get(artifact.name)
+        if test_result is not None:
+            without_skill = {
+                str(task_id).strip(): value
+                for task_id, value in (test_result.counterfactual.get("without_skill_valid_by_task") or {}).items()
+                if str(task_id).strip()
+            }
+            with_skill = {
+                str(task_id).strip(): value
+                for task_id, value in (test_result.counterfactual.get("with_skill_valid_by_task") or {}).items()
+                if str(task_id).strip()
+            }
+            evidence_task_ids = sorted(set(without_skill) | set(with_skill))
+            helped = {
+                task_id
+                for task_id in evidence_task_ids
+                if with_skill.get(task_id) is True and without_skill.get(task_id) is not True
+            }
+            failed = {
+                task_id
+                for task_id in evidence_task_ids
+                if with_skill.get(task_id) is False
+            }
+            regressions = sorted(
+                task_id
+                for task_id in evidence_task_ids
+                if without_skill.get(task_id) is True and with_skill.get(task_id) is False
+            )
+        else:
+            helped = {
+                str(task_id).strip()
+                for task_id in row.get("helped_official_task_ids", []) or []
+                if str(task_id).strip()
+            }
+            failed = {
+                str(task_id).strip()
+                for task_id in row.get("failed_after_injection_task_ids", []) or []
+                if str(task_id).strip()
+            }
+            regressions = sorted(
+                task_id
+                for task_id in failed
+                if task_id in {
+                    str(task_id).strip()
+                    for task_id in row.get("failed_after_injection_task_ids", []) or []
+                    if str(task_id).strip()
+                }
+            )
+            evidence_task_ids = sorted(set(helped) | set(failed))
+        has_counterfactual_evidence = bool(test_result is not None and evidence_task_ids)
+        decision = {
+            "skill_name": artifact.name,
+            "version_before": artifact.version,
+            "retrieved_test_count": retrieved,
+            "helped_count": len(helped),
+            "failed_count": len(failed),
+            "regression_task_ids": regressions,
+            "counterfactual_task_ids": evidence_task_ids,
+            "used_counterfactual_evidence": has_counterfactual_evidence,
+            "disabled_before": artifact.is_disabled(),
+            "disabled_after": artifact.is_disabled(),
+            "action": "keep",
+        }
+        should_rollback = (
+            artifact.history
+            and len(helped) == 0
+            and (
+                len(regressions) >= 1
+                or (
+                    len(failed) >= min_fail_count
+                    and (has_counterfactual_evidence or retrieved >= min_fail_count)
+                )
+            )
+        )
+        if should_rollback:
+            rolled_back = store.rollback(artifact.name)
+            repaired = next((skill for skill in store.all() if skill.name == artifact.name), None)
+            if rolled_back and repaired is not None:
+                repaired.metadata["rollback_reason"] = (
+                    "Rolled back after train replay refine detected a regressed or repeatedly harmful version."
+                )
+                repaired.metadata["rollback_task_ids"] = sorted(set(regressions) | set(failed))
+                decision["disabled_after"] = repaired.is_disabled()
+                decision["version_after"] = repaired.version
+                decision["action"] = "rollback_on_regression" if regressions else "rollback_on_no_help"
+                decisions.append(decision)
+                continue
+        if len(regressions) >= 1 and len(helped) == 0 and (has_counterfactual_evidence or artifact.metadata.get("source") == "evolve_rollouts"):
+            artifact.status = "disabled"
+            artifact.metadata["disabled"] = True
+            artifact.metadata["disabled_reason"] = (
+                "Disabled after train replay refine: with/without-skill evidence showed "
+                "official-valid regressions with no observed helped cases."
+            )
+            artifact.metadata["disabled_task_ids"] = regressions
+            decision["disabled_after"] = True
+            decision["action"] = "disable_on_regression"
+        elif len(helped) == 0 and len(failed) >= min_fail_count and (has_counterfactual_evidence or artifact.metadata.get("source") == "evolve_rollouts" or retrieved >= min_fail_count):
+            artifact.status = "disabled"
+            artifact.metadata["disabled"] = True
+            artifact.metadata["disabled_reason"] = (
+                "Disabled after train replay refine: repeatedly failed with no observed "
+                "helped cases in maintenance replay."
+            )
+            artifact.metadata["disabled_task_ids"] = sorted(failed)
+            decision["disabled_after"] = True
+            decision["action"] = "disable_on_no_help"
+        decision["version_after"] = next(
+            (skill.version for skill in store.all() if skill.name == artifact.name),
+            artifact.version,
+        )
+        decisions.append(decision)
+    decisions.sort(key=lambda item: (item["action"] != "keep", -len(item["regression_task_ids"]), item["skill_name"]), reverse=True)
+    return decisions
 
 
 def main() -> None:

@@ -1,0 +1,82 @@
+[
+  {
+    "task_id": "multi_turn_base_11",
+    "mode": "none",
+    "score": 0.3333,
+    "official_valid": false,
+    "call_f1": 0.3333,
+    "prompt_injected_skills": [],
+    "tool_calls": [
+      "pwd",
+      "ls",
+      "posting_get_login_status",
+      "post_tweet"
+    ],
+    "elapsed_s": 19.036
+  },
+  {
+    "task_id": "multi_turn_base_11",
+    "mode": "prompt_only",
+    "score": 0.3333,
+    "official_valid": false,
+    "call_f1": 0.3333,
+    "prompt_injected_skills": [],
+    "tool_calls": [
+      "pwd",
+      "ls",
+      "posting_get_login_status",
+      "post_tweet"
+    ],
+    "elapsed_s": 32.767
+  },
+  {
+    "task_id": "multi_turn_base_67",
+    "mode": "none",
+    "score": 0.6364,
+    "official_valid": true,
+    "call_f1": 0.6364,
+    "prompt_injected_skills": [],
+    "tool_calls": [
+      "get_zipcode_based_on_city",
+      "get_zipcode_based_on_city",
+      "estimate_distance",
+      "displayCarStatus",
+      "estimate_drive_feasibility_by_mileage",
+      "fillFuelTank",
+      "estimate_drive_feasibility_by_mileage",
+      "startEngine",
+      "lockDoors",
+      "startEngine",
+      "pressBrakePedal",
+      "startEngine",
+      "pressBrakePedal",
+      "startEngine"
+    ],
+    "elapsed_s": 91.565
+  },
+  {
+    "task_id": "multi_turn_base_67",
+    "mode": "prompt_only",
+    "score": 0.6364,
+    "official_valid": true,
+    "call_f1": 0.6364,
+    "prompt_injected_skills": [],
+    "tool_calls": [
+      "get_zipcode_based_on_city",
+      "get_zipcode_based_on_city",
+      "estimate_distance",
+      "displayCarStatus",
+      "estimate_drive_feasibility_by_mileage",
+      "fillFuelTank",
+      "estimate_drive_feasibility_by_mileage",
+      "startEngine",
+      "lockDoors",
+      "startEngine",
+      "pressBrakePedal",
+      "startEngine",
+      "pressBrakePedal",
+      "startEngine"
+    ],
+    "elapsed_s": 73.528
+  }
+]

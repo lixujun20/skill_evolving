@@ -1,14 +1,25 @@
-"""Shared benchmark and skill-artifact data structures.
+"""Shared benchmark/task/result types plus skill-repository re-exports.
 
-The existing academic pipeline is math-specific and stores reusable skills as
-Python helper functions.  The adapters in this package need a broader contract:
-BFCL skills are mostly tool-use rules, while spreadsheet skills are closer to a
-small skill directory with markdown instructions and optional scripts.
+Benchmark adapters should use the benchmark-agnostic skill repository model
+defined under ``academic.skill_repository`` instead of maintaining a second
+copy in ``academic.benchmarks``.
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
+
+from academic.skill_repository.types import (
+    DependencyPin,
+    SkillArtifact,
+    SkillBundle,
+    SkillBundleCase,
+    SkillEvidence,
+    SkillInterface,
+    SkillLineage,
+    SkillTestCaseRun,
+    SkillTestResult,
+)
 
 
 @dataclass
@@ -31,42 +42,13 @@ class BenchmarkMetadata:
 
 
 @dataclass
-class SkillArtifact:
-    """A reusable skill in a benchmark-native format."""
-
-    name: str
-    kind: str
-    description: str
-    body: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    version: int = 1
-    usage_count: int = 0
-    success_count: int = 0
-
-    def retrieval_text(self) -> str:
-        return (
-            f"{self.name}\nkind: {self.kind}\n{self.description}\n"
-            f"{self.body}\nmetadata: {self.metadata}"
-        )
-
-    def prompt_block(self) -> str:
-        return (
-            f"### {self.name} ({self.kind}, v{self.version})\n"
-            f"{self.description}\n\n{self.body}"
-        )
-
-    def as_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
 class BenchmarkTask:
-    benchmark: str
-    task_id: str
-    question: Any
-    expected: Any = None
-    input_artifacts: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    benchmark: str  # Benchmark family identifier, e.g. bfcl_v3 or spreadsheet.
+    task_id: str  # Stable benchmark-native task id.
+    question: Any  # Raw task input in benchmark-native form; for BFCL this is multi-turn message groups.
+    expected: Any = None  # Benchmark-native gold target used by verifiers/scorers.
+    input_artifacts: Dict[str, Any] = field(default_factory=dict)  # External initial state required for execution, such as files, configs, or environment state.
+    metadata: Dict[str, Any] = field(default_factory=dict)  # Extra benchmark-specific routing info, e.g. involved classes, paths, data source.
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -74,13 +56,29 @@ class BenchmarkTask:
 
 @dataclass
 class BenchmarkResult:
-    benchmark: str
-    task_id: str
-    success: bool
-    score: float
-    metrics: Dict[str, Any] = field(default_factory=dict)
-    trace: Dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    benchmark: str  # Benchmark family identifier copied from the executed task.
+    task_id: str  # Task id of the executed case.
+    success: bool  # Runner-level success boolean; benchmark-specific and not always the same as official validity.
+    score: float  # Main scalar score exposed by the current runner.
+    metrics: Dict[str, Any] = field(default_factory=dict)  # Structured benchmark metrics such as official_valid, call_f1, tokens, steps, and retrieval stats.
+    trace: Dict[str, Any] = field(default_factory=dict)  # Full execution trace needed for extraction, replay, attribution, and UI visualization.
+    error: Optional[str] = None  # Top-level execution error summary when the run crashes or times out.
 
     def as_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+__all__ = [
+    "BenchmarkMetadata",
+    "BenchmarkResult",
+    "BenchmarkTask",
+    "DependencyPin",
+    "SkillArtifact",
+    "SkillBundle",
+    "SkillBundleCase",
+    "SkillEvidence",
+    "SkillInterface",
+    "SkillLineage",
+    "SkillTestCaseRun",
+    "SkillTestResult",
+]

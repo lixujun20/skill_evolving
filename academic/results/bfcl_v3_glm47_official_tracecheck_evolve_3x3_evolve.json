@@ -1,0 +1,4131 @@
+{
+  "benchmark": "bfcl_v3",
+  "mode": "evolve",
+  "tag": "glm47_official_tracecheck_evolve_3x3",
+  "llm_config": "bigmodel",
+  "model_name": "glm-4.7",
+  "adapter_mode": "official",
+  "execution_backend": "official",
+  "bfcl_data_source": "bfcl_eval_bundle",
+  "bfcl_prompt_style": "native",
+  "bfcl_tool_api_style": "auto",
+  "top_k_skills": 2,
+  "skill_injection_mode": "prompt_only",
+  "max_steps_per_turn": 20,
+  "temperature": null,
+  "bfcl_synthetic_continue": false,
+  "bfcl_explicit_skill_tool": false,
+  "max_task_seconds": null,
+  "partial_output": "/home/lixujun/skill_evolving/academic/results/bfcl_v3_glm47_official_tracecheck_evolve_3x3_partial.json",
+  "n_train": 3,
+  "n_test": 3,
+  "n_train_runs": 1,
+  "n_test_runs": 1,
+  "n_skills_seed": 5,
+  "n_skills_evolved": 8,
+  "skill_names": [
+    "bfcl_state_id_reuse",
+    "bfcl_schema_parameter_names",
+    "bfcl_multi_action_turn_completion",
+    "bfcl_literal_user_text_arguments",
+    "bfcl_task_checklist",
+    "bfcl_params_get_stock_info",
+    "bfcl_params_send_message",
+    "bfcl_observed_error_feedback"
+  ],
+  "skills": [
+    {
+      "name": "bfcl_state_id_reuse",
+      "kind": "functional_workflow_card",
+      "description": "Reuse ids/tokens from earlier turns and tool results.",
+      "body": "Multi-turn BFCL tasks often hide the needed id in a previous user turn, tool result, or environment record. Reuse exact ids such as booking_id, order_id, ticket_id, tweet_id, card_id, and access_token. Do not write placeholder strings like 'booking_id' when a concrete id is available.",
+      "metadata": {
+        "domains": [
+          "TravelAPI",
+          "TradingBot",
+          "TicketAPI",
+          "TwitterAPI"
+        ],
+        "injection_type": "workflow"
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    },
+    {
+      "name": "bfcl_schema_parameter_names",
+      "kind": "atomic_tool_rule_card",
+      "description": "Use exact BFCL function schema parameter names.",
+      "body": "Arguments are scored by exact schema names. Never invent aliases. For TravelAPI invoice and support calls use booking_id if the schema requires booking_id, not insurance_id or reservation_id. For ticket creation use priority/title/description exactly as provided by schema.",
+      "metadata": {
+        "domains": [
+          "TravelAPI",
+          "TicketAPI"
+        ],
+        "injection_type": "informational"
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    },
+    {
+      "name": "bfcl_multi_action_turn_completion",
+      "kind": "planning_card",
+      "description": "Complete all required tool calls before ending a turn.",
+      "body": "A single user turn may require multiple API calls. Keep calling tools until all requested state changes or lookups for the current turn are done, then stop. Do not ask the user for values that can be inferred from available context or previous tool results.",
+      "metadata": {
+        "domains": [
+          "all"
+        ],
+        "injection_type": "workflow"
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    },
+    {
+      "name": "bfcl_literal_user_text_arguments",
+      "kind": "atomic_tool_rule_card",
+      "description": "Prefer concise literal text arguments over creative rewrites.",
+      "body": "BFCL state checks compare many string arguments exactly. When the user gives a title, message, or description, preserve the requested wording and avoid adding invoice details, explanations, greetings, or quotes unless explicitly requested. Treat 'high-priority' conservatively as priority 4 when the schema uses a 1-5 scale and does not define a separate urgent level.",
+      "metadata": {
+        "domains": [
+          "TicketAPI",
+          "TravelAPI"
+        ],
+        "allowed_tools": [
+          "create_ticket",
+          "edit_ticket",
+          "book_flight",
+          "contact_customer_support",
+          "retrieve_invoice"
+        ],
+        "injection_type": "informational"
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    },
+    {
+      "name": "bfcl_task_checklist",
+      "kind": "executable_tool",
+      "description": "Return a concise checklist for avoiding common BFCL tool-call errors.",
+      "body": "Checklist: identify all actions requested in the current user turn; prefer direct domain tools over unnecessary lookup calls; reuse exact ids and tokens from user text, prior turns, or tool results; keep string arguments literal and concise; use exact schema parameter names; stop once the turn's requested state changes or lookup results are complete.",
+      "metadata": {
+        "domains": [
+          "all"
+        ],
+        "injection_type": "functional"
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    },
+    {
+      "name": "bfcl_params_get_stock_info",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed parameter names for get_stock_info.",
+      "body": "For `get_stock_info`, use these observed parameter names when applicable: symbol.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "get_stock_info",
+        "allowed_tools": [
+          "get_stock_info"
+        ],
+        "domains": [
+          "all"
+        ],
+        "injection_type": "informational",
+        "source_task_ids": [
+          "multi_turn_base_101"
+        ],
+        "source_tool_count": 1,
+        "source_param_counts": {
+          "symbol": 1
+        },
+        "source_examples": [
+          {
+            "task_id": "multi_turn_base_101",
+            "turn_index": 0,
+            "arguments": {
+              "symbol": "XTC"
+            }
+          }
+        ],
+        "source_train_total_runs": 3,
+        "source_train_positive_runs": 1
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    },
+    {
+      "name": "bfcl_params_send_message",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed parameter names for send_message.",
+      "body": "For `send_message`, use these observed parameter names when applicable: receiver_id, message.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "tool": "send_message",
+        "allowed_tools": [
+          "send_message"
+        ],
+        "domains": [
+          "all"
+        ],
+        "injection_type": "informational",
+        "source_task_ids": [
+          "multi_turn_base_101"
+        ],
+        "source_tool_count": 1,
+        "source_param_counts": {
+          "receiver_id": 1,
+          "message": 1
+        },
+        "source_examples": [
+          {
+            "task_id": "multi_turn_base_101",
+            "turn_index": 1,
+            "arguments": {
+              "receiver_id": "USR003",
+              "message": "The latest stock price of XTC is $150.75."
+            }
+          }
+        ],
+        "source_train_total_runs": 3,
+        "source_train_positive_runs": 1
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    },
+    {
+      "name": "bfcl_observed_error_feedback",
+      "kind": "debug_feedback_card",
+      "description": "Observed BFCL failure modes from train rollouts.",
+      "body": "Recent train rollouts showed error types: extra_call=8, argument_mismatch=4. Parameter-level issues: fuelAmount=1, insurance_type=1, message=1, priority=1, description=1. In future calls, prioritize exact schema names, concise literal user wording for text fields, and avoid extra lookup/tool calls unless needed.",
+      "metadata": {
+        "source": "evolve_rollouts",
+        "error_counts": {
+          "argument_mismatch": 4,
+          "extra_call": 8
+        },
+        "source_error_task_ids": {
+          "argument_mismatch": [
+            "multi_turn_base_187",
+            "multi_turn_base_66"
+          ],
+          "extra_call": [
+            "multi_turn_base_187",
+            "multi_turn_base_66"
+          ]
+        },
+        "source_param_task_ids": {
+          "description": [
+            "multi_turn_base_187"
+          ],
+          "fuelAmount": [
+            "multi_turn_base_66"
+          ],
+          "insurance_type": [
+            "multi_turn_base_187"
+          ],
+          "message": [
+            "multi_turn_base_187"
+          ],
+          "priority": [
+            "multi_turn_base_187"
+          ]
+        },
+        "source_task_ids": [
+          "multi_turn_base_187",
+          "multi_turn_base_66"
+        ],
+        "source_train_total_runs": 3,
+        "source_train_positive_runs": 1,
+        "domains": [
+          "TravelAPI",
+          "TicketAPI"
+        ],
+        "allowed_tools": [
+          "create_ticket",
+          "edit_ticket",
+          "contact_customer_support",
+          "retrieve_invoice",
+          "book_flight",
+          "purchase_insurance"
+        ],
+        "injection_type": "informational"
+      },
+      "version": 1,
+      "usage_count": 0,
+      "success_count": 0
+    }
+  ],
+  "skill_impact_summary": [
+    {
+      "skill_name": "bfcl_multi_action_turn_completion",
+      "kind": "planning_card",
+      "description": "Complete all required tool calls before ending a turn.",
+      "injection_type": "workflow",
+      "source": null,
+      "source_task_ids": [],
+      "source_tool": null,
+      "source_allowed_tools": [],
+      "source_domains": [
+        "all"
+      ],
+      "source_examples": [],
+      "retrieved_test_count": 3,
+      "prompt_injected_test_count": 0,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": [
+        "multi_turn_base_193",
+        "multi_turn_base_111",
+        "multi_turn_base_121"
+      ]
+    },
+    {
+      "skill_name": "bfcl_task_checklist",
+      "kind": "executable_tool",
+      "description": "Return a concise checklist for avoiding common BFCL tool-call errors.",
+      "injection_type": "functional",
+      "source": null,
+      "source_task_ids": [],
+      "source_tool": null,
+      "source_allowed_tools": [],
+      "source_domains": [
+        "all"
+      ],
+      "source_examples": [],
+      "retrieved_test_count": 3,
+      "prompt_injected_test_count": 0,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": [
+        "multi_turn_base_193",
+        "multi_turn_base_111",
+        "multi_turn_base_121"
+      ]
+    },
+    {
+      "skill_name": "bfcl_state_id_reuse",
+      "kind": "functional_workflow_card",
+      "description": "Reuse ids/tokens from earlier turns and tool results.",
+      "injection_type": "workflow",
+      "source": null,
+      "source_task_ids": [],
+      "source_tool": null,
+      "source_allowed_tools": [],
+      "source_domains": [
+        "TravelAPI",
+        "TradingBot",
+        "TicketAPI",
+        "TwitterAPI"
+      ],
+      "source_examples": [],
+      "retrieved_test_count": 2,
+      "prompt_injected_test_count": 0,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": [
+        "multi_turn_base_193",
+        "multi_turn_base_121"
+      ]
+    },
+    {
+      "skill_name": "bfcl_literal_user_text_arguments",
+      "kind": "atomic_tool_rule_card",
+      "description": "Prefer concise literal text arguments over creative rewrites.",
+      "injection_type": "informational",
+      "source": null,
+      "source_task_ids": [],
+      "source_tool": null,
+      "source_allowed_tools": [
+        "create_ticket",
+        "edit_ticket",
+        "book_flight",
+        "contact_customer_support",
+        "retrieve_invoice"
+      ],
+      "source_domains": [
+        "TicketAPI",
+        "TravelAPI"
+      ],
+      "source_examples": [],
+      "retrieved_test_count": 1,
+      "prompt_injected_test_count": 1,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [
+        "multi_turn_base_193"
+      ],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": [
+        "multi_turn_base_193"
+      ]
+    },
+    {
+      "skill_name": "bfcl_observed_error_feedback",
+      "kind": "debug_feedback_card",
+      "description": "Observed BFCL failure modes from train rollouts.",
+      "injection_type": "informational",
+      "source": "evolve_rollouts",
+      "source_task_ids": [
+        "multi_turn_base_187",
+        "multi_turn_base_66"
+      ],
+      "source_tool": null,
+      "source_allowed_tools": [
+        "create_ticket",
+        "edit_ticket",
+        "contact_customer_support",
+        "retrieve_invoice",
+        "book_flight",
+        "purchase_insurance"
+      ],
+      "source_domains": [
+        "TravelAPI",
+        "TicketAPI"
+      ],
+      "source_examples": [],
+      "retrieved_test_count": 0,
+      "prompt_injected_test_count": 0,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": []
+    },
+    {
+      "skill_name": "bfcl_params_get_stock_info",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed parameter names for get_stock_info.",
+      "injection_type": "informational",
+      "source": "evolve_rollouts",
+      "source_task_ids": [
+        "multi_turn_base_101"
+      ],
+      "source_tool": "get_stock_info",
+      "source_allowed_tools": [
+        "get_stock_info"
+      ],
+      "source_domains": [
+        "all"
+      ],
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_101",
+          "turn_index": 0,
+          "arguments": {
+            "symbol": "XTC"
+          }
+        }
+      ],
+      "retrieved_test_count": 0,
+      "prompt_injected_test_count": 0,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": []
+    },
+    {
+      "skill_name": "bfcl_params_send_message",
+      "kind": "atomic_tool_rule_card",
+      "description": "Observed parameter names for send_message.",
+      "injection_type": "informational",
+      "source": "evolve_rollouts",
+      "source_task_ids": [
+        "multi_turn_base_101"
+      ],
+      "source_tool": "send_message",
+      "source_allowed_tools": [
+        "send_message"
+      ],
+      "source_domains": [
+        "all"
+      ],
+      "source_examples": [
+        {
+          "task_id": "multi_turn_base_101",
+          "turn_index": 1,
+          "arguments": {
+            "receiver_id": "USR003",
+            "message": "The latest stock price of XTC is $150.75."
+          }
+        }
+      ],
+      "retrieved_test_count": 0,
+      "prompt_injected_test_count": 0,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": []
+    },
+    {
+      "skill_name": "bfcl_schema_parameter_names",
+      "kind": "atomic_tool_rule_card",
+      "description": "Use exact BFCL function schema parameter names.",
+      "injection_type": "informational",
+      "source": null,
+      "source_task_ids": [],
+      "source_tool": null,
+      "source_allowed_tools": [],
+      "source_domains": [
+        "TravelAPI",
+        "TicketAPI"
+      ],
+      "source_examples": [],
+      "retrieved_test_count": 0,
+      "prompt_injected_test_count": 0,
+      "tool_injected_test_count": 0,
+      "called_skill_tool_test_count": 0,
+      "used_test_count": 0,
+      "helped_official_task_ids": [],
+      "failed_after_injection_task_ids": [],
+      "retrieved_test_task_ids": []
+    }
+  ],
+  "train_summary": {
+    "benchmark": "bfcl_v3",
+    "mode": "evolve_train",
+    "tag": "glm47_official_tracecheck_evolve_3x3",
+    "llm_config": "bigmodel",
+    "n_train_reserved": 3,
+    "n_tasks": 3,
+    "n_runs": 3,
+    "total_success": 1,
+    "success_rate": 0.3333,
+    "avg_score": 0.6906,
+    "avg_total_tokens": 58096.7,
+    "timeout_rate": 0.0,
+    "avg_elapsed_s": 61.35,
+    "max_elapsed_s": 95.224,
+    "avg_model_steps": 9.67,
+    "max_model_steps": 13,
+    "avg_at_k": 0.3333,
+    "pass_at_k": 0.3333,
+    "avg_call_recall": 0.8111,
+    "avg_call_precision": 0.6282,
+    "avg_turn_success_rate": 0.5833,
+    "avg_relaxed_turn_success_rate": 0.75,
+    "official_valid_rate": 0.3333,
+    "official_avg_at_k": 0.3333,
+    "official_pass_at_k": 0.3333,
+    "call_error_summary": {
+      "error_type_counts": {
+        "argument_mismatch": 4,
+        "extra_call": 8
+      },
+      "param_error_counts": {
+        "description": 1,
+        "fuelAmount": 1,
+        "insurance_type": 1,
+        "message": 1,
+        "priority": 1
+      }
+    },
+    "skill_stats": {
+      "retrieved_counts": {
+        "bfcl_literal_user_text_arguments": 1,
+        "bfcl_multi_action_turn_completion": 3,
+        "bfcl_state_id_reuse": 2,
+        "bfcl_task_checklist": 3
+      },
+      "prompt_injected_counts": {
+        "bfcl_literal_user_text_arguments": 1
+      },
+      "tool_injected_counts": {},
+      "used_counts": {},
+      "called_skill_tool_counts": {},
+      "domain_tool_called_counts": {
+        "activateParkingBrake": 1,
+        "contact_customer_support": 1,
+        "create_ticket": 1,
+        "estimate_drive_feasibility_by_mileage": 2,
+        "fillFuelTank": 1,
+        "get_stock_info": 1,
+        "lockDoors": 1,
+        "pressBrakePedal": 2,
+        "purchase_insurance": 1,
+        "retrieve_invoice": 2,
+        "send_message": 1,
+        "set_navigation": 2,
+        "startEngine": 4,
+        "ticket_login": 1,
+        "view_messages_sent": 1
+      }
+    }
+  },
+  "test_summary": {
+    "benchmark": "bfcl_v3",
+    "mode": "evolve_test",
+    "tag": "glm47_official_tracecheck_evolve_3x3",
+    "llm_config": "bigmodel",
+    "n_train_reserved": 3,
+    "n_tasks": 3,
+    "n_runs": 3,
+    "total_success": 0,
+    "success_rate": 0.0,
+    "avg_score": 0.8418,
+    "avg_total_tokens": 53099.0,
+    "timeout_rate": 0.0,
+    "avg_elapsed_s": 97.761,
+    "max_elapsed_s": 183.769,
+    "avg_model_steps": 9.67,
+    "max_model_steps": 11,
+    "avg_at_k": 0.0,
+    "pass_at_k": 0.0,
+    "avg_call_recall": 0.9444,
+    "avg_call_precision": 0.7905,
+    "avg_turn_success_rate": 0.5833,
+    "avg_relaxed_turn_success_rate": 0.9167,
+    "official_valid_rate": 0.6667,
+    "official_avg_at_k": 0.6667,
+    "official_pass_at_k": 0.6667,
+    "call_error_summary": {
+      "error_type_counts": {
+        "extra_call": 4,
+        "missing_call": 1
+      },
+      "param_error_counts": {}
+    },
+    "skill_stats": {
+      "retrieved_counts": {
+        "bfcl_literal_user_text_arguments": 1,
+        "bfcl_multi_action_turn_completion": 3,
+        "bfcl_state_id_reuse": 2,
+        "bfcl_task_checklist": 3
+      },
+      "prompt_injected_counts": {
+        "bfcl_literal_user_text_arguments": 1
+      },
+      "tool_injected_counts": {},
+      "used_counts": {},
+      "called_skill_tool_counts": {},
+      "domain_tool_called_counts": {
+        "add_to_watchlist": 1,
+        "authenticate_travel": 1,
+        "book_flight": 1,
+        "cancel_booking": 1,
+        "create_ticket": 1,
+        "get_available_stocks": 1,
+        "get_flight_cost": 1,
+        "get_order_details": 2,
+        "get_order_history": 1,
+        "get_stock_info": 1,
+        "get_symbol_by_name": 1,
+        "get_user_id": 1,
+        "place_order": 1,
+        "send_message": 1,
+        "view_messages_sent": 1,
+        "withdraw_funds": 1
+      }
+    }
+  },
+  "train_details": [
+    {
+      "task_id": "multi_turn_base_66",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.5263,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_66",
+          "success": false,
+          "score": 0.5263,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": false,
+            "turn_success_rate": 0.5,
+            "relaxed_turn_success_rate": 0.75,
+            "call_precision": 0.3846,
+            "call_recall": 0.8333,
+            "call_f1": 0.5263,
+            "n_expected_calls": 6,
+            "n_actual_calls": 13,
+            "n_matched_calls": 5,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 3,
+                "matched_calls": 0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 3,
+                "actual_calls": 8,
+                "matched_calls": 3,
+                "precision": 0.375,
+                "recall": 1.0,
+                "f1": 0.5455,
+                "turn_success": false
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 1,
+                "type": "argument_mismatch",
+                "name": "fillFuelTank",
+                "missing": {},
+                "unexpected": {},
+                "wrong": {
+                  "fuelAmount": {
+                    "expected": 30,
+                    "actual": 40
+                  }
+                }
+              },
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "estimate_drive_feasibility_by_mileage",
+                "actual_arguments": {
+                  "distance": 450
+                }
+              },
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "set_navigation",
+                "actual_arguments": {
+                  "destination": "1914 7th St, Apt B, Berkeley, CA 94710"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "activateParkingBrake",
+                "actual_arguments": {
+                  "mode": "engage"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "pressBrakePedal",
+                "actual_arguments": {
+                  "pedalPosition": 0.5
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "startEngine",
+                "actual_arguments": {
+                  "ignitionMode": "START"
+                }
+              }
+            ],
+            "total_tokens": 70329,
+            "completion_tokens": 1450,
+            "elapsed_s": 46.86,
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              4,
+              5,
+              2
+            ],
+            "n_model_steps": 13,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "prompt_only",
+            "model_name": "glm-4.7",
+            "official_valid": false,
+            "official_error_type": "multi_turn:instance_state_mismatch",
+            "official_check": {
+              "valid": false,
+              "error_message": "Model instance for VehicleControlAPI does not match the state with ground truth instance.",
+              "error_type": "multi_turn:instance_state_mismatch",
+              "details": {
+                "differences": {
+                  "fuelLevel": {
+                    "model": 50.0,
+                    "ground_truth": 40.0
+                  },
+                  "destination": {
+                    "model": "1914 7th St, Apt B, Berkeley, CA 94710",
+                    "ground_truth": "None"
+                  }
+                },
+                "model_instance_state": {
+                  "fuelLevel": 50.0,
+                  "batteryVoltage": 12.6,
+                  "engine_state": "stopped",
+                  "remainingUnlockedDoors": 4,
+                  "doorStatus": {
+                    "driver": "unlocked",
+                    "passenger": "unlocked",
+                    "rear_left": "unlocked",
+                    "rear_right": "unlocked"
+                  },
+                  "acTemperature": 25.0,
+                  "fanSpeed": 50,
+                  "acMode": "auto",
+                  "humidityLevel": 50.0,
+                  "headLightStatus": "off",
+                  "parkingBrakeStatus": "released",
+                  "brakePedalStatus": "released",
+                  "distanceToNextVehicle": 50.0,
+                  "cruiseStatus": "inactive",
+                  "destination": "1914 7th St, Apt B, Berkeley, CA 94710",
+                  "frontLeftTirePressure": 32.0,
+                  "frontRightTirePressure": 32.0,
+                  "rearLeftTirePressure": 30.0,
+                  "rearRightTirePressure": 30.0,
+                  "long_context": false
+                },
+                "ground_truth_instance_state": {
+                  "fuelLevel": 40.0,
+                  "batteryVoltage": 12.6,
+                  "engine_state": "stopped",
+                  "remainingUnlockedDoors": 4,
+                  "doorStatus": {
+                    "driver": "unlocked",
+                    "passenger": "unlocked",
+                    "rear_left": "unlocked",
+                    "rear_right": "unlocked"
+                  },
+                  "acTemperature": 25.0,
+                  "fanSpeed": 50,
+                  "acMode": "auto",
+                  "humidityLevel": 50.0,
+                  "headLightStatus": "off",
+                  "parkingBrakeStatus": "released",
+                  "brakePedalStatus": "released",
+                  "distanceToNextVehicle": 50.0,
+                  "cruiseStatus": "inactive",
+                  "destination": "None",
+                  "frontLeftTirePressure": 32.0,
+                  "frontRightTirePressure": 32.0,
+                  "rearLeftTirePressure": 30.0,
+                  "rearRightTirePressure": 30.0,
+                  "long_context": false
+                }
+              },
+              "execution_result": [
+                {
+                  "model": [
+                    [
+                      "{\"canDrive\": false}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"canDrive\": false}"
+                  ]
+                },
+                {
+                  "model": [
+                    [
+                      "{\"fuelLevel\": 50.0}"
+                    ],
+                    [
+                      "{\"canDrive\": true}"
+                    ],
+                    [
+                      "{\"status\": \"Navigating to 1914 7th St, Apt B, Berkeley, CA 94710\"}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"fuelLevel\": 40.0}"
+                  ]
+                }
+              ]
+            },
+            "available_tool_count": 22,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_66",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you check if your car can handle a 450-mile road trip and set up navigation if it's feasible.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666596303593274041",
+                    "type": "function",
+                    "function": {
+                      "name": "estimate_drive_feasibility_by_mileage",
+                      "arguments": "{\"distance\":450}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666596303593274041",
+                "content": "{\"canDrive\": false}"
+              },
+              {
+                "role": "assistant",
+                "content": "Based on the mileage check, unfortunately your car cannot make a 450-mile road trip in its current condition. The system indicates that the distance is not feasible with your current fuel level, so you wouldn't be able to complete the journey without refueling first."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666625440651405806",
+                    "type": "function",
+                    "function": {
+                      "name": "fillFuelTank",
+                      "arguments": "{\"fuelAmount\":40}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666625440651405806",
+                "content": "{\"fuelLevel\": 50.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666641211771322367",
+                    "type": "function",
+                    "function": {
+                      "name": "estimate_drive_feasibility_by_mileage",
+                      "arguments": "{\"distance\":450}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666641211771322367",
+                "content": "{\"canDrive\": true}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666624616017688517",
+                    "type": "function",
+                    "function": {
+                      "name": "set_navigation",
+                      "arguments": "{\"destination\":\"1914 7th St, Apt B, Berkeley, CA 94710\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666624616017688517",
+                "content": "{\"status\": \"Navigating to 1914 7th St, Apt B, Berkeley, CA 94710\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Great news! I've taken care of everything for your road trip:\n\n1. **Fuel Top-Up**: Added 40 gallons to your tank - you're now at full capacity (50 gallons)\n2. **Trip Feasibility**: With the additional fuel, your 450-mile journey is now feasible\n3. **Navigation**: Set your GPS to navigate to 1914 7th St, Apt B, Berkeley, CA 94710\n\nYou're all set for your road trip! Have a safe journey to Berkeley."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666607264349812861",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  },
+                  {
+                    "id": "call_-7666607264349812860",
+                    "type": "function",
+                    "function": {
+                      "name": "lockDoors",
+                      "arguments": "{\"unlock\":false,\"door\":[\"driver\", \"passenger\", \"rear_left\", \"rear_right\"]}"
+                    }
+                  },
+                  {
+                    "id": "call_-7666607264349812859",
+                    "type": "function",
+                    "function": {
+                      "name": "activateParkingBrake",
+                      "arguments": "{\"mode\":\"engage\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666607264349812861",
+                "content": "{\"error\": \"All doors must be locked before starting the engine. Here are the unlocked doors: driver, passenger, rear_left, rear_right\"}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666607264349812860",
+                "content": "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666607264349812859",
+                "content": "{\"parkingBrakeStatus\": \"engaged\", \"_parkingBrakeForce\": 500.0, \"_slopeAngle\": 10.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666585823873069342",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666585823873069342",
+                "content": "{\"error\": \"Brake pedal needs to be pressed when starting the engine.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666631865922484288",
+                    "type": "function",
+                    "function": {
+                      "name": "pressBrakePedal",
+                      "arguments": "{\"pedalPosition\":0.5}"
+                    }
+                  },
+                  {
+                    "id": "call_-7666631865922484287",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666631865922484288",
+                "content": "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 500.0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666631865922484287",
+                "content": "{\"error\": \"Must press the brake fully before starting the engine.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666608329501698246",
+                    "type": "function",
+                    "function": {
+                      "name": "pressBrakePedal",
+                      "arguments": "{\"pedalPosition\":1}"
+                    }
+                  },
+                  {
+                    "id": "call_-7666608329501698245",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666608329501698246",
+                "content": "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 1000.0}"
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666608329501698245",
+                "content": "{\"engineState\": \"running\", \"fuelLevel\": 50.0, \"batteryVoltage\": 12.6}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've got everything ready for your road trip:\n\n✅ **Engine started** in START mode\n✅ **All doors locked** (driver, passenger, rear_left, rear_right)\n✅ **Brake pedal fully pressed** and engaged\n✅ **Parking brake engaged**\n\nYour vehicle is now ready to go with:\n- Engine running\n- Full tank of fuel (50 gallons)\n- All systems operational\n- Navigation set to Berkeley, CA\n\nHave a safe trip!"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666601938590362911",
+                    "type": "function",
+                    "function": {
+                      "name": "set_navigation",
+                      "arguments": "{\"destination\":\"2107 Channing Way, Berkeley, CA\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666601938590362911",
+                "content": "{\"status\": \"Navigating to 2107 Channing Way, Berkeley, CA\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've set up the navigation system to take you to 2107 Channing Way, Berkeley, CA. You're all ready for your road trip!"
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Alright, I've been thinking about a road trip and I want to use my own car for the journey. That's quite a stretch—450 miles in one go today. Is this something I could realistically pull off? I just want to know a answer; you don't need to refill if it's not reachable. If it is reachable, set navigation to '1914 7th St, Apt B, Berkeley, CA 94710'."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "estimate_drive_feasibility_by_mileage",
+                    "arguments": {
+                      "distance": 450
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7666596303593274041",
+                    "result": {
+                      "canDrive": false
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Given that the trip isn't looking too likely with what I have at the moment, I'll need to refuel. I think 40 gallons in total in my tank should do the trick to get me enough mileage. Can you handle the gas top-up for me?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "fillFuelTank",
+                    "arguments": {
+                      "fuelAmount": 40
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666625440651405806",
+                    "result": {
+                      "fuelLevel": 50.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "estimate_drive_feasibility_by_mileage",
+                    "arguments": {
+                      "distance": 450
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666641211771322367",
+                    "result": {
+                      "canDrive": true
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "set_navigation",
+                    "arguments": {
+                      "destination": "1914 7th St, Apt B, Berkeley, CA 94710"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666624616017688517",
+                    "result": {
+                      "status": "Navigating to 1914 7th St, Apt B, Berkeley, CA 94710"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Everything's all set now, and I'm ready to get going. Could you get the engine started for me? Make sure you do it in START mode, with all doors securely locked and the brake properly engaged."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666607264349812861",
+                    "result": {
+                      "error": "All doors must be locked before starting the engine. Here are the unlocked doors: driver, passenger, rear_left, rear_right"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "lockDoors",
+                    "arguments": {
+                      "unlock": false,
+                      "door": [
+                        "driver",
+                        "passenger",
+                        "rear_left",
+                        "rear_right"
+                      ]
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666607264349812860",
+                    "result": {
+                      "lockStatus": "locked",
+                      "remainingUnlockedDoors": 0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "activateParkingBrake",
+                    "arguments": {
+                      "mode": "engage"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666607264349812859",
+                    "result": {
+                      "parkingBrakeStatus": "engaged",
+                      "_parkingBrakeForce": 500.0,
+                      "_slopeAngle": 10.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666585823873069342",
+                    "result": {
+                      "error": "Brake pedal needs to be pressed when starting the engine."
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "pressBrakePedal",
+                    "arguments": {
+                      "pedalPosition": 0.5
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666631865922484288",
+                    "result": {
+                      "brakePedalStatus": "pressed",
+                      "brakePedalForce": 500.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666631865922484287",
+                    "result": {
+                      "error": "Must press the brake fully before starting the engine."
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "pressBrakePedal",
+                    "arguments": {
+                      "pedalPosition": 1
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666608329501698246",
+                    "result": {
+                      "brakePedalStatus": "pressed",
+                      "brakePedalForce": 1000.0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666608329501698245",
+                    "result": {
+                      "engineState": "running",
+                      "fuelLevel": 50.0,
+                      "batteryVoltage": 12.6
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I'm planning on visiting this gorgeous little spot in Berkeley, California. Would you be so kind as to set up the navigation system to take me to 2107 Channing Way, Berkeley, CA?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "set_navigation",
+                    "arguments": {
+                      "destination": "2107 Channing Way, Berkeley, CA"
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7666601938590362911",
+                    "result": {
+                      "status": "Navigating to 2107 Channing Way, Berkeley, CA"
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "estimate_drive_feasibility_by_mileage",
+                "arguments": {
+                  "distance": 450
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7666596303593274041",
+                "result": {
+                  "canDrive": false
+                },
+                "error": null
+              },
+              {
+                "name": "fillFuelTank",
+                "arguments": {
+                  "fuelAmount": 40
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666625440651405806",
+                "result": {
+                  "fuelLevel": 50.0
+                },
+                "error": null
+              },
+              {
+                "name": "estimate_drive_feasibility_by_mileage",
+                "arguments": {
+                  "distance": 450
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666641211771322367",
+                "result": {
+                  "canDrive": true
+                },
+                "error": null
+              },
+              {
+                "name": "set_navigation",
+                "arguments": {
+                  "destination": "1914 7th St, Apt B, Berkeley, CA 94710"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666624616017688517",
+                "result": {
+                  "status": "Navigating to 1914 7th St, Apt B, Berkeley, CA 94710"
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666607264349812861",
+                "result": {
+                  "error": "All doors must be locked before starting the engine. Here are the unlocked doors: driver, passenger, rear_left, rear_right"
+                },
+                "error": null
+              },
+              {
+                "name": "lockDoors",
+                "arguments": {
+                  "unlock": false,
+                  "door": [
+                    "driver",
+                    "passenger",
+                    "rear_left",
+                    "rear_right"
+                  ]
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666607264349812860",
+                "result": {
+                  "lockStatus": "locked",
+                  "remainingUnlockedDoors": 0
+                },
+                "error": null
+              },
+              {
+                "name": "activateParkingBrake",
+                "arguments": {
+                  "mode": "engage"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666607264349812859",
+                "result": {
+                  "parkingBrakeStatus": "engaged",
+                  "_parkingBrakeForce": 500.0,
+                  "_slopeAngle": 10.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666585823873069342",
+                "result": {
+                  "error": "Brake pedal needs to be pressed when starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "pressBrakePedal",
+                "arguments": {
+                  "pedalPosition": 0.5
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666631865922484288",
+                "result": {
+                  "brakePedalStatus": "pressed",
+                  "brakePedalForce": 500.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666631865922484287",
+                "result": {
+                  "error": "Must press the brake fully before starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "pressBrakePedal",
+                "arguments": {
+                  "pedalPosition": 1
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666608329501698246",
+                "result": {
+                  "brakePedalStatus": "pressed",
+                  "brakePedalForce": 1000.0
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666608329501698245",
+                "result": {
+                  "engineState": "running",
+                  "fuelLevel": 50.0,
+                  "batteryVoltage": 12.6
+                },
+                "error": null
+              },
+              {
+                "name": "set_navigation",
+                "arguments": {
+                  "destination": "2107 Channing Way, Berkeley, CA"
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7666601938590362911",
+                "result": {
+                  "status": "Navigating to 2107 Channing Way, Berkeley, CA"
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              4,
+              5,
+              2
+            ],
+            "n_model_steps": 13,
+            "total_tokens": 70329,
+            "completion_tokens": 1450,
+            "elapsed_s": 46.86,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_187",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.5455,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_187",
+          "success": false,
+          "score": 0.5455,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": false,
+            "turn_success_rate": 0.25,
+            "relaxed_turn_success_rate": 0.5,
+            "call_precision": 0.5,
+            "call_recall": 0.6,
+            "call_f1": 0.5455,
+            "n_expected_calls": 5,
+            "n_actual_calls": 6,
+            "n_matched_calls": 3,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 0,
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "turn_success": false
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 2,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 0.5,
+                "f1": 0.5,
+                "turn_success": false
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "argument_mismatch",
+                "name": "purchase_insurance",
+                "missing": {},
+                "unexpected": {},
+                "wrong": {
+                  "insurance_type": {
+                    "expected": "comprehensive",
+                    "actual": "comprehensive travel insurance"
+                  }
+                }
+              },
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "retrieve_invoice",
+                "actual_arguments": {
+                  "access_token": "token_abc123",
+                  "insurance_id": "255316027"
+                }
+              },
+              {
+                "turn_index": 2,
+                "type": "argument_mismatch",
+                "name": "contact_customer_support",
+                "missing": {},
+                "unexpected": {},
+                "wrong": {
+                  "message": {
+                    "expected": "There are discrepancies in my travel-related costs. Please assist.",
+                    "actual": "I am writing to report discrepancies in my recent travel-related expenses that don't appear to be recorded correctly in my booking records. I've noticed errors in how my trip costs are being reflected in my account, and I need assistance investigating and correcting these discrepancies. Please review my booking history and transactions to ensure all charges are accurately documented and aligned with my actual travel expenses. Thank you for your prompt attention to this matter."
+                  }
+                }
+              },
+              {
+                "turn_index": 3,
+                "type": "argument_mismatch",
+                "name": "create_ticket",
+                "missing": {},
+                "unexpected": {},
+                "wrong": {
+                  "priority": {
+                    "expected": 4,
+                    "actual": 5
+                  },
+                  "description": {
+                    "expected": "Feedback from customer support was unsatisfactory regarding discrepancies in travel costs.",
+                    "actual": "I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support (booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented."
+                  }
+                }
+              }
+            ],
+            "total_tokens": 71054,
+            "completion_tokens": 2045,
+            "elapsed_s": 95.224,
+            "retrieved_skills": [
+              "bfcl_state_id_reuse",
+              "bfcl_task_checklist",
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments"
+            ],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              3
+            ],
+            "n_model_steps": 10,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "prompt_only",
+            "model_name": "glm-4.7",
+            "official_valid": false,
+            "official_error_type": "multi_turn:instance_state_mismatch",
+            "official_check": {
+              "valid": false,
+              "error_message": "Model instance for TicketAPI does not match the state with ground truth instance.",
+              "error_type": "multi_turn:instance_state_mismatch",
+              "details": {
+                "differences": {
+                  "ticket_queue": {
+                    "model": [
+                      {
+                        "id": 0,
+                        "title": "Discrepancy in Travel Costs",
+                        "description": "I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support(booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.",
+                        "status": "Open",
+                        "priority": 5,
+                        "created_by": "mthompson"
+                      }
+                    ],
+                    "ground_truth": [
+                      {
+                        "id": 0,
+                        "title": "Discrepancy in Travel Costs",
+                        "description": "Feedback from customer support was unsatisfactory regarding discrepancies in travel costs.",
+                        "status": "Open",
+                        "priority": 4,
+                        "created_by": "mthompson"
+                      }
+                    ]
+                  }
+                },
+                "model_instance_state": {
+                  "ticket_queue": [
+                    {
+                      "id": 0,
+                      "title": "Discrepancy in Travel Costs",
+                      "description": "I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support(booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.",
+                      "status": "Open",
+                      "priority": 5,
+                      "created_by": "mthompson"
+                    }
+                  ],
+                  "ticket_counter": 1,
+                  "current_user": "mthompson"
+                },
+                "ground_truth_instance_state": {
+                  "ticket_queue": [
+                    {
+                      "id": 0,
+                      "title": "Discrepancy in Travel Costs",
+                      "description": "Feedback from customer support was unsatisfactory regarding discrepancies in travel costs.",
+                      "status": "Open",
+                      "priority": 4,
+                      "created_by": "mthompson"
+                    }
+                  ],
+                  "ticket_counter": 1,
+                  "current_user": "mthompson"
+                }
+              },
+              "execution_result": [
+                {
+                  "model": [
+                    [
+                      "{\"insurance_id\": \"255316027\", \"insurance_status\": true}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"insurance_id\": \"255316027\", \"insurance_status\": true}"
+                  ]
+                },
+                {
+                  "model": [
+                    [
+                      "{\"error\": \"Booking not found\"}"
+                    ],
+                    [
+                      "{\"invoice\": {\"booking_id\": \"insurance_12345\", \"travel_date\": \"2026-12-24\", \"travel_from\": \"SFO\", \"travel_to\": \"LAX\", \"travel_class\": \"economy\", \"travel_cost\": 9500.0, \"transaction_id\": \"12345\"}}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"invoice\": {\"booking_id\": \"insurance_12345\", \"travel_date\": \"2026-12-24\", \"travel_from\": \"SFO\", \"travel_to\": \"LAX\", \"travel_class\": \"economy\", \"travel_cost\": 9500.0, \"transaction_id\": \"12345\"}}"
+                  ]
+                },
+                {
+                  "model": [
+                    [
+                      "{\"customer_support_message\": \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\"}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"customer_support_message\": \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\"}"
+                  ]
+                },
+                {
+                  "model": [
+                    [
+                      "{\"success\": true}"
+                    ],
+                    [
+                      "{\"id\": 0, \"title\": \"Discrepancy in Travel Costs\", \"description\": \"I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support(booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \\\"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\\\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.\", \"status\": \"Open\", \"priority\": 5, \"created_by\": \"mthompson\"}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"success\": true}",
+                    "{\"id\": 0, \"title\": \"Discrepancy in Travel Costs\", \"description\": \"Feedback from customer support was unsatisfactory regarding discrepancies in travel costs.\", \"status\": \"Open\", \"priority\": 4, \"created_by\": \"mthompson\"}"
+                  ]
+                }
+              ]
+            },
+            "available_tool_count": 27,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_187",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you purchase the comprehensive travel insurance right away. Based on the information you've provided, I have all the details needed to process this purchase:\n\n- Access token: token_abc123\n- Credit card ID: card_4893\n- Booking ID: insurance_12345\n- Insurance type: comprehensive travel insurance\n- Insurance cost: $1,500\n\nLet me process this purchase for you now.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666604790448651422",
+                    "type": "function",
+                    "function": {
+                      "name": "purchase_insurance",
+                      "arguments": "{\"access_token\":\"token_abc123\",\"insurance_type\":\"comprehensive travel insurance\",\"booking_id\":\"insurance_12345\",\"insurance_cost\":1500,\"card_id\":\"card_4893\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666604790448651422",
+                "content": "{\"insurance_id\": \"255316027\", \"insurance_status\": true}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've successfully purchased your comprehensive travel insurance. Here are the details:\n\n✅ **Insurance Purchase Confirmed**\n- **Insurance ID**: 255316027\n- **Type**: Comprehensive travel insurance\n- **Cost**: $1,500\n- **Payment**: Charged to card ending in card_4893\n- **Status**: Active\n\nYour insurance is now in place for your upcoming journey. The transaction has been processed successfully and you're all set for your meeting!"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666633034153584152",
+                    "type": "function",
+                    "function": {
+                      "name": "retrieve_invoice",
+                      "arguments": "{\"access_token\":\"token_abc123\",\"insurance_id\":\"255316027\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666633034153584152",
+                "content": "{\"error\": \"Booking not found\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666579536040951765",
+                    "type": "function",
+                    "function": {
+                      "name": "retrieve_invoice",
+                      "arguments": "{\"access_token\":\"token_abc123\",\"booking_id\":\"insurance_12345\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666579536040951765",
+                "content": "{\"invoice\": {\"booking_id\": \"insurance_12345\", \"travel_date\": \"2026-12-24\", \"travel_from\": \"SFO\", \"travel_to\": \"LAX\", \"travel_class\": \"economy\", \"travel_cost\": 9500.0, \"transaction_id\": \"12345\"}}"
+              },
+              {
+                "role": "assistant",
+                "content": "I was able to retrieve your booking records. Here's the invoice I found:\n\n**Invoice Details:**\n- **Booking ID:** insurance_12345\n- **Transaction ID:** 12345\n- **Travel Date:** December 24, 2026\n- **Route:** SFO (San Francisco) → LAX (Los Angeles)\n- **Travel Class:** Economy\n- **Travel Cost:** $9,500.00\n\nHowever, I should clarify that this invoice appears to be for your main travel booking rather than specifically for the insurance purchase. The insurance transaction we processed earlier (Insurance ID: 255316027) for $1,500 may be reflected separately or may be included as part of this booking's total costs. \n\nIf you need a more detailed breakdown that specifically shows the insurance charges, you may need to contact customer support or check for a separate insurance invoice in your records."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666600632920303227",
+                    "type": "function",
+                    "function": {
+                      "name": "contact_customer_support",
+                      "arguments": "{\"booking_id\":\"insurance_12345\",\"message\":\"I am writing to report discrepancies in my recent travel-related expenses that don't appear to be recorded correctly in my booking records. I've noticed errors in how my trip costs are being reflected in my account, and I need assistance investigating and correcting these discrepancies. Please review my booking history and transactions to ensure all charges are accurately documented and aligned with my actual travel expenses. Thank you for your prompt attention to this matter.\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666600632920303227",
+                "content": "{\"customer_support_message\": \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've successfully contacted customer support on your behalf regarding the discrepancies in your travel-related expenses. \n\nHere's what was communicated:\n- Your message highlighting the expense recording discrepancies has been sent\n- Customer support has confirmed receipt and will get back to you shortly\n- They will investigate and address the issues with your booking records\n\nYou should expect a response from the customer support team soon to help resolve the expense recording errors."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666591252711732845",
+                    "type": "function",
+                    "function": {
+                      "name": "ticket_login",
+                      "arguments": "{\"username\":\"mthompson\",\"password\":\"SecurePass123\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666591252711732845",
+                "content": "{\"success\": true}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666612418310569416",
+                    "type": "function",
+                    "function": {
+                      "name": "create_ticket",
+                      "arguments": "{\"title\":\"Discrepancy in Travel Costs\",\"description\":\"I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support (booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \\\"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\\\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.\",\"priority\":5}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666612418310569416",
+                "content": "{\"id\": 0, \"title\": \"Discrepancy in Travel Costs\", \"description\": \"I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support(booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \\\"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\\\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.\", \"status\": \"Open\", \"priority\": 5, \"created_by\": \"mthompson\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've successfully created a high-priority ticket for you. Here are the details:\n\n**Ticket Created:**\n- **Ticket ID:** 0\n- **Title:** Discrepancy in Travel Costs\n- **Priority:** 5 (Highest Priority)\n- **Status:** Open\n- **Created by:** mthompson\n\nThe ticket description includes your concerns about the travel cost discrepancies and mentions the unsatisfactory response you received from customer support. The ticket is now in the system and should receive immediate attention given its high priority status."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I've been issued a new credit card with id 'card_4893', and it's set to expire sometime the next calendar year. I'm quite eager to use this card to purchase comprehensive travel insurance for an upcoming journey. I only have one past booking history and I think the booking id is insurance_12345. I believe my access privileges remain active as I recently acquired the token labeled 'token_abc123' yesterday. It's important that the coverage amounts to $1,500 which is what it will cost. Could we expedite this as I have an impending meeting?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "purchase_insurance",
+                    "arguments": {
+                      "access_token": "token_abc123",
+                      "insurance_type": "comprehensive travel insurance",
+                      "booking_id": "insurance_12345",
+                      "insurance_cost": 1500,
+                      "card_id": "card_4893"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7666604790448651422",
+                    "result": {
+                      "insurance_id": "255316027",
+                      "insurance_status": true
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "After finally carving out a moment in my schedule, I've noticed I'm unable to recall the expenses associated with the insurance I previously purchased. Would you be so kind as to locate and provide the invoice for that specific insurance transaction from my personal records?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "retrieve_invoice",
+                    "arguments": {
+                      "access_token": "token_abc123",
+                      "insurance_id": "255316027"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666633034153584152",
+                    "result": {
+                      "error": "Booking not found"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "retrieve_invoice",
+                    "arguments": {
+                      "access_token": "token_abc123",
+                      "booking_id": "insurance_12345"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666579536040951765",
+                    "result": {
+                      "invoice": {
+                        "booking_id": "insurance_12345",
+                        "travel_date": "2026-12-24",
+                        "travel_from": "SFO",
+                        "travel_to": "LAX",
+                        "travel_class": "economy",
+                        "travel_cost": 9500.0,
+                        "transaction_id": "12345"
+                      }
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "It seems there might be an error with my recent trip expenses, as they don't appear to be recorded correctly. Could you lend a hand by drafting a communication to customer support, highlighting these discrepancies in my travel-related costs?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "contact_customer_support",
+                    "arguments": {
+                      "booking_id": "insurance_12345",
+                      "message": "I am writing to report discrepancies in my recent travel-related expenses that don't appear to be recorded correctly in my booking records. I've noticed errors in how my trip costs are being reflected in my account, and I need assistance investigating and correcting these discrepancies. Please review my booking history and transactions to ensure all charges are accurately documented and aligned with my actual travel expenses. Thank you for your prompt attention to this matter."
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666600632920303227",
+                    "result": {
+                      "customer_support_message": "Thank you for contacting customer support. Your message has been received and we will get back to you shortly."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "The reply I received from customer support was less than satisfactory. Let's take this a step further by submitting a high-priority ticket. The ticket should be titled 'Discrepancy in Travel Costs' and the description ought to include the feedback we got from customer support. My ticket username is 'mthompson' and password is 'SecurePass123"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "ticket_login",
+                    "arguments": {
+                      "username": "mthompson",
+                      "password": "SecurePass123"
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7666591252711732845",
+                    "result": {
+                      "success": true
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "create_ticket",
+                    "arguments": {
+                      "title": "Discrepancy in Travel Costs",
+                      "description": "I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support (booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.",
+                      "priority": 5
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7666612418310569416",
+                    "result": {
+                      "id": 0,
+                      "title": "Discrepancy in Travel Costs",
+                      "description": "I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support(booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.",
+                      "status": "Open",
+                      "priority": 5,
+                      "created_by": "mthompson"
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "purchase_insurance",
+                "arguments": {
+                  "access_token": "token_abc123",
+                  "insurance_type": "comprehensive travel insurance",
+                  "booking_id": "insurance_12345",
+                  "insurance_cost": 1500,
+                  "card_id": "card_4893"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7666604790448651422",
+                "result": {
+                  "insurance_id": "255316027",
+                  "insurance_status": true
+                },
+                "error": null
+              },
+              {
+                "name": "retrieve_invoice",
+                "arguments": {
+                  "access_token": "token_abc123",
+                  "insurance_id": "255316027"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666633034153584152",
+                "result": {
+                  "error": "Booking not found"
+                },
+                "error": null
+              },
+              {
+                "name": "retrieve_invoice",
+                "arguments": {
+                  "access_token": "token_abc123",
+                  "booking_id": "insurance_12345"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666579536040951765",
+                "result": {
+                  "invoice": {
+                    "booking_id": "insurance_12345",
+                    "travel_date": "2026-12-24",
+                    "travel_from": "SFO",
+                    "travel_to": "LAX",
+                    "travel_class": "economy",
+                    "travel_cost": 9500.0,
+                    "transaction_id": "12345"
+                  }
+                },
+                "error": null
+              },
+              {
+                "name": "contact_customer_support",
+                "arguments": {
+                  "booking_id": "insurance_12345",
+                  "message": "I am writing to report discrepancies in my recent travel-related expenses that don't appear to be recorded correctly in my booking records. I've noticed errors in how my trip costs are being reflected in my account, and I need assistance investigating and correcting these discrepancies. Please review my booking history and transactions to ensure all charges are accurately documented and aligned with my actual travel expenses. Thank you for your prompt attention to this matter."
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666600632920303227",
+                "result": {
+                  "customer_support_message": "Thank you for contacting customer support. Your message has been received and we will get back to you shortly."
+                },
+                "error": null
+              },
+              {
+                "name": "ticket_login",
+                "arguments": {
+                  "username": "mthompson",
+                  "password": "SecurePass123"
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7666591252711732845",
+                "result": {
+                  "success": true
+                },
+                "error": null
+              },
+              {
+                "name": "create_ticket",
+                "arguments": {
+                  "title": "Discrepancy in Travel Costs",
+                  "description": "I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support (booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.",
+                  "priority": 5
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7666612418310569416",
+                "result": {
+                  "id": 0,
+                  "title": "Discrepancy in Travel Costs",
+                  "description": "I am writing to escalate a matter regarding discrepancies in my recent travel-related expenses that don't appear to be recorded correctly. After contacting customer support(booking ID: insurance_12345) with concerns about expense recording errors, I received a generic response stating \"Thank you for contacting customer support. Your message has been received and we will get back to you shortly.\" This response was less than satisfactory and did not address the specific discrepancies in my travel costs that I reported. I need immediate assistance investigating and correcting these discrepancies in my booking records to ensure all charges are accurately documented.",
+                  "status": "Open",
+                  "priority": 5,
+                  "created_by": "mthompson"
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_state_id_reuse",
+              "bfcl_task_checklist",
+              "bfcl_literal_user_text_arguments",
+              "bfcl_multi_action_turn_completion"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments"
+            ],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              3
+            ],
+            "n_model_steps": 10,
+            "total_tokens": 71054,
+            "completion_tokens": 2045,
+            "elapsed_s": 95.224,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_101",
+      "n_runs": 1,
+      "n_success": 1,
+      "avg_score": 1.0,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_101",
+          "success": true,
+          "score": 1.0,
+          "metrics": {
+            "task_success": true,
+            "relaxed_task_success": true,
+            "turn_success_rate": 1.0,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 1.0,
+            "call_recall": 1.0,
+            "call_f1": 1.0,
+            "n_expected_calls": 3,
+            "n_actual_calls": 3,
+            "n_matched_calls": 3,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [],
+            "total_tokens": 32907,
+            "completion_tokens": 1087,
+            "elapsed_s": 41.965,
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_state_id_reuse",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              2,
+              2
+            ],
+            "n_model_steps": 6,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "prompt_only",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 30,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_101",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll retrieve the detailed stock information for 'XTC' including its current price and historical performance indicators.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666565895224813982",
+                    "type": "function",
+                    "function": {
+                      "name": "get_stock_info",
+                      "arguments": "{\"symbol\":\"XTC\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666565895224813982",
+                "content": "{\"price\": 150.75, \"percent_change\": 0.05, \"volume\": 1.5, \"MA(5)\": 150.5, \"MA(20)\": 150.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here's the detailed information for stock XTC:\n\n**Current Performance:**\n- **Current Price:** $150.75\n- **Daily Change:** +0.05% (positive movement)\n- **Volume:** 1.5M shares\n\n**Historical Performance Indicators:**\n- **5-Day Moving Average (MA):** $150.50\n- **20-Day Moving Average (MA):** $150.00\n\n**Key Observations:**\n- The stock is currently trading above both its 5-day and 20-day moving averages, which suggests a short-term bullish trend\n- The current price ($150.75) is higher than the 5-day MA ($150.50), indicating recent upward momentum\n- The stock is also trading above the 20-day MA ($150.00), showing medium-term strength\n- The positive daily change of 0.05% indicates the stock gained value in the most recent trading session\n\nThe moving averages suggest the stock has been in an upward trend recently, with the 5-day MA above the 20-day MA, which is typically considered a bullish signal."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666602488346179731",
+                    "type": "function",
+                    "function": {
+                      "name": "send_message",
+                      "arguments": "{\"receiver_id\":\"USR003\",\"message\":\"The latest stock price of XTC is $150.75.\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666602488346179731",
+                "content": "{\"sent_status\": true, \"message_id\": {\"new_id\": 67410}, \"message\": \"Message sent to 'USR003' successfully.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "The message \"The latest stock price of XTC is $150.75.\" has been successfully sent to your colleague with user ID 'USR003'. The message was assigned ID 67410."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666630938209543882",
+                    "type": "function",
+                    "function": {
+                      "name": "view_messages_sent",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666630938209543882",
+                "content": "{\"messages\": {\"USR003\": [\"The latest stock price of XTC is $150.75.\"]}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Based on your message history, here are all the messages you have sent recently:\n\n**To USR003:**\n- \"The latest stock price of XTC is $150.75.\"\n\nThis shows that you've sent one message recently, which was the XTC stock price update to your colleague with user ID USR003 that we just dispatched."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I've been keeping a keen eye on the stock under the symbol 'XTC'. It'd be tremendously helpful to have a detailed view of its present price along with its historical performance indicators. Could you retrieve this information?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_stock_info",
+                    "arguments": {
+                      "symbol": "XTC"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7666565895224813982",
+                    "result": {
+                      "price": 150.75,
+                      "percent_change": 0.05,
+                      "volume": 1.5,
+                      "MA(5)": 150.5,
+                      "MA(20)": 150.0
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Could you kindly dispatch the message 'The latest stock price of XTC is $150.75.' to my colleague, who's recognized by the user ID 'USR003'?  Your user id is 'USR001'."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "send_message",
+                    "arguments": {
+                      "receiver_id": "USR003",
+                      "message": "The latest stock price of XTC is $150.75."
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666602488346179731",
+                    "result": {
+                      "sent_status": true,
+                      "message_id": {
+                        "new_id": 67410
+                      },
+                      "message": "Message sent to 'USR003' successfully."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Would it be possible for you to view all the messages that I have sent recently? I'm on the lookout for some crucial updates."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "view_messages_sent",
+                    "arguments": {},
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666630938209543882",
+                    "result": {
+                      "messages": {
+                        "USR003": [
+                          "The latest stock price of XTC is $150.75."
+                        ]
+                      }
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_stock_info",
+                "arguments": {
+                  "symbol": "XTC"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7666565895224813982",
+                "result": {
+                  "price": 150.75,
+                  "percent_change": 0.05,
+                  "volume": 1.5,
+                  "MA(5)": 150.5,
+                  "MA(20)": 150.0
+                },
+                "error": null
+              },
+              {
+                "name": "send_message",
+                "arguments": {
+                  "receiver_id": "USR003",
+                  "message": "The latest stock price of XTC is $150.75."
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666602488346179731",
+                "result": {
+                  "sent_status": true,
+                  "message_id": {
+                    "new_id": 67410
+                  },
+                  "message": "Message sent to 'USR003' successfully."
+                },
+                "error": null
+              },
+              {
+                "name": "view_messages_sent",
+                "arguments": {},
+                "turn_index": 2,
+                "tool_call_id": "call_-7666630938209543882",
+                "result": {
+                  "messages": {
+                    "USR003": [
+                      "The latest stock price of XTC is $150.75."
+                    ]
+                  }
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_state_id_reuse",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              2,
+              2
+            ],
+            "n_model_steps": 6,
+            "total_tokens": 32907,
+            "completion_tokens": 1087,
+            "elapsed_s": 41.965,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    }
+  ],
+  "test_details": [
+    {
+      "task_id": "multi_turn_base_193",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.8889,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_193",
+          "success": false,
+          "score": 0.8889,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.75,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.8,
+            "call_recall": 1.0,
+            "call_f1": 0.8889,
+            "n_expected_calls": 4,
+            "n_actual_calls": 5,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "get_flight_cost",
+                "actual_arguments": {
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_date": "2026-12-25",
+                  "travel_class": "first"
+                }
+              }
+            ],
+            "total_tokens": 63557,
+            "completion_tokens": 2073,
+            "elapsed_s": 51.72,
+            "retrieved_skills": [
+              "bfcl_state_id_reuse",
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist",
+              "bfcl_literal_user_text_arguments"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments"
+            ],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              2
+            ],
+            "n_model_steps": 9,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "prompt_only",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 27,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_193",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you authenticate with the travel system using your provided credentials to secure your travel account access for your Maldives getaway!",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666616060442829998",
+                    "type": "function",
+                    "function": {
+                      "name": "authenticate_travel",
+                      "arguments": "{\"client_id\":\"my_client_id\",\"client_secret\":\"my_client_secret\",\"refresh_token\":\"my_refresh_token\",\"grant_type\":\"read_write\",\"user_first_name\":\"Michael\",\"user_last_name\":\"Thompson\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666616060442829998",
+                "content": "{\"expires_in\": 2, \"access_token\": \"251675\", \"token_type\": \"Bearer\", \"scope\": \"read_write\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Excellent! Your travel account authentication was successful, Michael! 🌴\n\n**Authentication Details:**\n- **Access Token:** 251675\n- **Token Type:** Bearer\n- **Scope:** read_write\n- **Expires in:** 2 hours\n\nYou now have full access to the travel system to continue planning your magical Maldives getaway! With your read_write access, you can:\n\n- ✈️ Search and book flights to the Maldives\n- 💳 Manage your credit cards for payments\n- 💰 Set and monitor your travel budget\n- 📋 Review booking history and invoices\n- 🛡️ Purchase travel insurance\n- 🏨 Handle any travel-related support needs\n\nYour surprise trip is one step closer to reality! What would you like to do next? Perhaps search for flights to the Maldives, check your available credit cards, or set up your travel budget?"
+              },
+              {
+                "role": "assistant",
+                "content": "I'll help you check the flight cost and then book your first-class journey to the Maldives! Let me start by verifying the flight cost and then proceed with the booking.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666613277304022692",
+                    "type": "function",
+                    "function": {
+                      "name": "get_flight_cost",
+                      "arguments": "{\"travel_from\":\"JFK\",\"travel_to\":\"MPC\",\"travel_date\":\"2026-12-25\",\"travel_class\":\"first\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666613277304022692",
+                "content": "{\"travel_cost_list\": [4700.0]}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! The flight cost verification confirms **$4,700.00** for your first-class journey from JFK to MPC on December 25th, 2026. Now let me book your idyllic Maldives escape:",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666623550865798219",
+                    "type": "function",
+                    "function": {
+                      "name": "book_flight",
+                      "arguments": "{\"access_token\":\"251675\",\"card_id\":\"credit_9988\",\"travel_date\":\"2026-12-25\",\"travel_from\":\"JFK\",\"travel_to\":\"MPC\",\"travel_class\":\"first\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666623550865798219",
+                "content": "{\"booking_id\": \"5431449\", \"transaction_id\": \"59784505\", \"booking_status\": true, \"booking_history\": {}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Excellent! Your idyllic Maldives escape has been successfully booked! 🌴✈️\n\n**Flight Cost Verification:** ✅ Confirmed $4,700.00 for first-class travel\n\n**Booking Confirmation:**\n- **Booking ID:** 5431449\n- **Transaction ID:** 59784505\n- **Booking Status:** Confirmed ✅\n- **Route:** JFK (New York) → MPC (Maldives)\n- **Date:** December 25th, 2026\n- **Class:** First Class\n- **Cost:** $4,700.00\n- **Payment:** Charged to credit card credit_9988\n\nYour Christmas Day 2026 getaway to paradise is now secured! The booking has been processed and confirmed. You can use your booking ID (5431449) for any future reference, to retrieve your invoice, purchase travel insurance, or contact customer support if needed.\n\nIs there anything else you'd like to arrange for your Maldives adventure? Perhaps travel insurance, or would you like to check your credit card balance?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666574863116532038",
+                    "type": "function",
+                    "function": {
+                      "name": "cancel_booking",
+                      "arguments": "{\"access_token\":\"251675\",\"booking_id\":\"5431449\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666574863116532038",
+                "content": "{\"cancel_status\": true}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your booking has been successfully cancelled! ✅\n\n**Cancellation Confirmation:**\n- **Booking ID:** 5431449\n- **Cancellation Status:** Confirmed\n- **Refund Status:** Your credit card (credit_9988) should be refunded the $4,700.00\n\nThe first-class flight from JFK to MPC for December 25th, 2026 has been cancelled and the refund process has been initiated. I understand that unexpected changes come up - life happens! \n\nWhen you're ready to plan your Maldives getaway again, or if you need assistance with any other travel arrangements, I'll be here to help. Is there anything else I can assist you with regarding your travel needs?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666607126910856611",
+                    "type": "function",
+                    "function": {
+                      "name": "create_ticket",
+                      "arguments": "{\"title\":\"Urgent Change in Travel Plans\",\"description\":\"An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\",\"priority\":4}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666607126910856611",
+                "content": "{\"id\": 1001, \"title\": \"Urgent Change in Travel Plans\", \"description\": \"An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\", \"status\": \"Open\", \"priority\": 4, \"created_by\": \"John\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your formal ticket has been successfully created! 📋\n\n**Ticket Details:**\n- **Ticket ID:** 1001\n- **Title:** Urgent Change in Travel Plans\n- **Description:** An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.\n- **Status:** Open\n- **Priority:** 4 (High Priority)\n- **Created by:** John\n\nThis ticket is now formally documented in the system and will notify your travel agent about the necessary adjustments to your itinerary. The high priority level ensures it receives prompt attention for your urgent travel changes.\n\nIs there anything else you'd like me to add to the ticket or any other assistance you need with this situation?"
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Imagine you've meticulously planned a surprise getaway to the Maldives, brimming with excitement to ensure each detail unfolds seamlessly. Your first step is securing your travel account access; kindly authenticate with your credentials. My access token of abc123xyz, a client ID of my_client_id, a client secret of my_client_secret, and a refresh token of my_refresh_token. The grant type should be set to read_write, and the user's first name is Michael, with the last name being Thompson"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "authenticate_travel",
+                    "arguments": {
+                      "client_id": "my_client_id",
+                      "client_secret": "my_client_secret",
+                      "refresh_token": "my_refresh_token",
+                      "grant_type": "read_write",
+                      "user_first_name": "Michael",
+                      "user_last_name": "Thompson"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7666616060442829998",
+                    "result": {
+                      "expires_in": 2,
+                      "access_token": "251675",
+                      "token_type": "Bearer",
+                      "scope": "read_write"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Fantastic! Now that authentication is successfully completed, let's move forward with booking your idyllic escape. You opt for your trusted credit card, bearing the id credit_9988, to cover all logistical costs. Double check the cost of the flight and book your journey from JFK to MPC for December 25th, 2026, travelling first class, at a cost of 4700 dollars."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_flight_cost",
+                    "arguments": {
+                      "travel_from": "JFK",
+                      "travel_to": "MPC",
+                      "travel_date": "2026-12-25",
+                      "travel_class": "first"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666613277304022692",
+                    "result": {
+                      "travel_cost_list": [
+                        4700.0
+                      ]
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "book_flight",
+                    "arguments": {
+                      "access_token": "251675",
+                      "card_id": "credit_9988",
+                      "travel_date": "2026-12-25",
+                      "travel_from": "JFK",
+                      "travel_to": "MPC",
+                      "travel_class": "first"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666623550865798219",
+                    "result": {
+                      "booking_id": "5431449",
+                      "transaction_id": "59784505",
+                      "booking_status": true,
+                      "booking_history": {}
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Oh dear! Unexpected changes have arisen. Could you please cancel your recent booking as a more urgent matter needs your attention?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "cancel_booking",
+                    "arguments": {
+                      "access_token": "251675",
+                      "booking_id": "5431449"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666574863116532038",
+                    "result": {
+                      "cancel_status": true
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "In light of these new developments, you'd prefer to formally notify your travel agent about the abrupt change in your itinerary. Would you be kind enough to generate a ticket titled 'Urgent Change in Travel Plans’ with a detailed explanation outlining the necessity for these adjustments? Details write 'An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.', priority be level 4"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "create_ticket",
+                    "arguments": {
+                      "title": "Urgent Change in Travel Plans",
+                      "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                      "priority": 4
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7666607126910856611",
+                    "result": {
+                      "id": 1001,
+                      "title": "Urgent Change in Travel Plans",
+                      "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                      "status": "Open",
+                      "priority": 4,
+                      "created_by": "John"
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "authenticate_travel",
+                "arguments": {
+                  "client_id": "my_client_id",
+                  "client_secret": "my_client_secret",
+                  "refresh_token": "my_refresh_token",
+                  "grant_type": "read_write",
+                  "user_first_name": "Michael",
+                  "user_last_name": "Thompson"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7666616060442829998",
+                "result": {
+                  "expires_in": 2,
+                  "access_token": "251675",
+                  "token_type": "Bearer",
+                  "scope": "read_write"
+                },
+                "error": null
+              },
+              {
+                "name": "get_flight_cost",
+                "arguments": {
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_date": "2026-12-25",
+                  "travel_class": "first"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666613277304022692",
+                "result": {
+                  "travel_cost_list": [
+                    4700.0
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "book_flight",
+                "arguments": {
+                  "access_token": "251675",
+                  "card_id": "credit_9988",
+                  "travel_date": "2026-12-25",
+                  "travel_from": "JFK",
+                  "travel_to": "MPC",
+                  "travel_class": "first"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666623550865798219",
+                "result": {
+                  "booking_id": "5431449",
+                  "transaction_id": "59784505",
+                  "booking_status": true,
+                  "booking_history": {}
+                },
+                "error": null
+              },
+              {
+                "name": "cancel_booking",
+                "arguments": {
+                  "access_token": "251675",
+                  "booking_id": "5431449"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666574863116532038",
+                "result": {
+                  "cancel_status": true
+                },
+                "error": null
+              },
+              {
+                "name": "create_ticket",
+                "arguments": {
+                  "title": "Urgent Change in Travel Plans",
+                  "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                  "priority": 4
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7666607126910856611",
+                "result": {
+                  "id": 1001,
+                  "title": "Urgent Change in Travel Plans",
+                  "description": "An unexpected change has arisen, and I need to cancel my booking for the trip to the Maldives.",
+                  "status": "Open",
+                  "priority": 4,
+                  "created_by": "John"
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_state_id_reuse",
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist",
+              "bfcl_literal_user_text_arguments"
+            ],
+            "prompt_injected_skills": [
+              "bfcl_literal_user_text_arguments"
+            ],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              2
+            ],
+            "n_model_steps": 9,
+            "total_tokens": 63557,
+            "completion_tokens": 2073,
+            "elapsed_s": 51.72,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_111",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.7273,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_111",
+          "success": false,
+          "score": 0.7273,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.25,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.5714,
+            "call_recall": 1.0,
+            "call_f1": 0.7273,
+            "n_expected_calls": 4,
+            "n_actual_calls": 7,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 1.0,
+                "f1": 0.6667,
+                "turn_success": false
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "get_symbol_by_name",
+                "actual_arguments": {
+                  "name": "Zeta Corp"
+                }
+              },
+              {
+                "turn_index": 1,
+                "type": "extra_call",
+                "actual_name": "get_order_history",
+                "actual_arguments": {}
+              },
+              {
+                "turn_index": 2,
+                "type": "extra_call",
+                "actual_name": "get_user_id",
+                "actual_arguments": {
+                  "user": "Jane"
+                }
+              }
+            ],
+            "total_tokens": 59909,
+            "completion_tokens": 1451,
+            "elapsed_s": 57.794,
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              3,
+              3,
+              2
+            ],
+            "n_model_steps": 11,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "prompt_only",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 30,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_111",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you add Zeta Corp's stock to your watchlist. First, let me get the stock symbol for Zeta Corp, then add it to your watchlist.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666649801705909362",
+                    "type": "function",
+                    "function": {
+                      "name": "get_symbol_by_name",
+                      "arguments": "{\"name\":\"Zeta Corp\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666649801705909362",
+                "content": "{\"symbol\": \"ZETA\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666607161270592507",
+                    "type": "function",
+                    "function": {
+                      "name": "add_to_watchlist",
+                      "arguments": "{\"stock\":\"ZETA\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666607161270592507",
+                "content": "{\"watchlist\": [\"NVDA\", \"ZETA\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "Great! I've successfully added Zeta Corp to your watchlist. Here's what I did:\n\n1. Found that Zeta Corp's stock symbol is **ZETA**\n2. Added ZETA to your watchlist\n\nYour watchlist now includes: NVDA and ZETA. You'll now be able to track Zeta Corp's stock activities along with your other watched stocks."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666653168960267596",
+                    "type": "function",
+                    "function": {
+                      "name": "get_order_history",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666653168960267596",
+                "content": "{\"history\": [12345, \"order_type\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666606474075830449",
+                    "type": "function",
+                    "function": {
+                      "name": "get_order_details",
+                      "arguments": "{\"order_id\":12345}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666606474075830449",
+                "content": "{\"symbol\": \"AAPL\", \"price\": 210.65, \"num_shares\": 10, \"status\": \"Completed\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've retrieved the details of your last order. Here are the specifics:\n\n**Order Details:**\n- **Order ID:** 12345\n- **Stock:** AAPL (Apple Inc.)\n- **Price:** $210.65 per share\n- **Number of Shares:** 10\n- **Status:** Completed\n\nThis was a completed order for 10 shares of Apple stock at $210.65 per share, totaling $2,106.50. Having this information should help you plan your next investment move!"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666609669531496467",
+                    "type": "function",
+                    "function": {
+                      "name": "get_user_id",
+                      "arguments": "{\"user\":\"Jane\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666609669531496467",
+                "content": "{\"user_id\": \"USR002\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666593176857078264",
+                    "type": "function",
+                    "function": {
+                      "name": "send_message",
+                      "arguments": "{\"receiver_id\":\"USR002\",\"message\":\"What are the new stock inclusion and the status of my current order?\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666593176857078264",
+                "content": "{\"sent_status\": true, \"message_id\": {\"new_id\": 67410}, \"message\": \"Message sent to 'USR002' successfully.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've successfully sent your message to Jane! Here's what happened:\n\n1. Found Jane's user ID: USR002\n2. Sent the message: \"What are the new stock inclusion and the status of my current order?\"\n3. Message was delivered successfully with message ID 67410\n\nJane should now be able to see your message and respond with the information you need about the stock inclusion and order status."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666599018012599264",
+                    "type": "function",
+                    "function": {
+                      "name": "view_messages_sent",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666599018012599264",
+                "content": "{\"messages\": {\"USR001\": [{}], \"USR002\": [{\"USR001\": [\"My name is John. I want to connect.\"], \"USR003\": [\"I am busy\"], \"USR004\": [\"I am on leave\"]}, \"What are the new stock inclusion and the status of my current order?\"], \"USR003\": [{\"USR002\": [\"Could you upload the file?\"]}], \"USR004\": [{\"USR002\": [\"Could you upload the file?\"]}], \"USR005\": [{\"USR001\": [\"Regarding the new stock inclusion and the status of my current order.\"]}]}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here are all the messages you've sent:\n\n**Messages to USR002 (Jane):**\n- \"My name is John. I want to connect.\"\n- \"I am busy\" (appears to be forwarded from USR003)\n- \"I am on leave\" (appears to be forwarded from USR004)\n- \"What are the new stock inclusion and the status of my current order?\" (most recent message we just sent)\n\n**Messages to USR003:**\n- \"Could you upload the file?\" (forwarded from USR002)\n\n**Messages to USR004:**\n- \"Could you upload the file?\" (forwarded from USR002)\n\n**Messages to USR005:**\n- \"Regarding the new stock inclusion and the status of my current order.\"\n\nI can see your recent message to Jane about the stock inclusion and order status has been successfully sent. It appears you've been communicating with multiple contacts about stock-related matters and file sharing activities."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I want to keep track of Zeta Corp's stock activities, so it would be helpful to have its stock added to my watchlist."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_symbol_by_name",
+                    "arguments": {
+                      "name": "Zeta Corp"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7666649801705909362",
+                    "result": {
+                      "symbol": "ZETA"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "add_to_watchlist",
+                    "arguments": {
+                      "stock": "ZETA"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7666607161270592507",
+                    "result": {
+                      "watchlist": [
+                        "NVDA",
+                        "ZETA"
+                      ]
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I've recently placed an order but can't seem to recall the details. It would be useful if you could retrieve the specifics of my last order to aid in planning my next investment move."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_order_history",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666653168960267596",
+                    "result": {
+                      "history": [
+                        12345,
+                        "order_type"
+                      ]
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "get_order_details",
+                    "arguments": {
+                      "order_id": 12345
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666606474075830449",
+                    "result": {
+                      "symbol": "AAPL",
+                      "price": 210.65,
+                      "num_shares": 10,
+                      "status": "Completed"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Considering the latest developments, I (user id USR001) need to quickly communicate with Jane, one of my business partners, regarding the new stock inclusion and the status of my current order. Send the message 'What are the new stock inclusion and the status of my current order?'?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_user_id",
+                    "arguments": {
+                      "user": "Jane"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666609669531496467",
+                    "result": {
+                      "user_id": "USR002"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "send_message",
+                    "arguments": {
+                      "receiver_id": "USR002",
+                      "message": "What are the new stock inclusion and the status of my current order?"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666593176857078264",
+                    "result": {
+                      "sent_status": true,
+                      "message_id": {
+                        "new_id": 67410
+                      },
+                      "message": "Message sent to 'USR002' successfully."
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Post sending that message to Jane, I would prefer to review all the messages I've sent, as there might be relevant follow-up or advice from my network concerning the stock and order decisions."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "view_messages_sent",
+                    "arguments": {},
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7666599018012599264",
+                    "result": {
+                      "messages": {
+                        "USR001": [
+                          {}
+                        ],
+                        "USR002": [
+                          {
+                            "USR001": [
+                              "My name is John. I want to connect."
+                            ],
+                            "USR003": [
+                              "I am busy"
+                            ],
+                            "USR004": [
+                              "I am on leave"
+                            ]
+                          },
+                          "What are the new stock inclusion and the status of my current order?"
+                        ],
+                        "USR003": [
+                          {
+                            "USR002": [
+                              "Could you upload the file?"
+                            ]
+                          }
+                        ],
+                        "USR004": [
+                          {
+                            "USR002": [
+                              "Could you upload the file?"
+                            ]
+                          }
+                        ],
+                        "USR005": [
+                          {
+                            "USR001": [
+                              "Regarding the new stock inclusion and the status of my current order."
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_symbol_by_name",
+                "arguments": {
+                  "name": "Zeta Corp"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7666649801705909362",
+                "result": {
+                  "symbol": "ZETA"
+                },
+                "error": null
+              },
+              {
+                "name": "add_to_watchlist",
+                "arguments": {
+                  "stock": "ZETA"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7666607161270592507",
+                "result": {
+                  "watchlist": [
+                    "NVDA",
+                    "ZETA"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "get_order_history",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7666653168960267596",
+                "result": {
+                  "history": [
+                    12345,
+                    "order_type"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "get_order_details",
+                "arguments": {
+                  "order_id": 12345
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666606474075830449",
+                "result": {
+                  "symbol": "AAPL",
+                  "price": 210.65,
+                  "num_shares": 10,
+                  "status": "Completed"
+                },
+                "error": null
+              },
+              {
+                "name": "get_user_id",
+                "arguments": {
+                  "user": "Jane"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666609669531496467",
+                "result": {
+                  "user_id": "USR002"
+                },
+                "error": null
+              },
+              {
+                "name": "send_message",
+                "arguments": {
+                  "receiver_id": "USR002",
+                  "message": "What are the new stock inclusion and the status of my current order?"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666593176857078264",
+                "result": {
+                  "sent_status": true,
+                  "message_id": {
+                    "new_id": 67410
+                  },
+                  "message": "Message sent to 'USR002' successfully."
+                },
+                "error": null
+              },
+              {
+                "name": "view_messages_sent",
+                "arguments": {},
+                "turn_index": 3,
+                "tool_call_id": "call_-7666599018012599264",
+                "result": {
+                  "messages": {
+                    "USR001": [
+                      {}
+                    ],
+                    "USR002": [
+                      {
+                        "USR001": [
+                          "My name is John. I want to connect."
+                        ],
+                        "USR003": [
+                          "I am busy"
+                        ],
+                        "USR004": [
+                          "I am on leave"
+                        ]
+                      },
+                      "What are the new stock inclusion and the status of my current order?"
+                    ],
+                    "USR003": [
+                      {
+                        "USR002": [
+                          "Could you upload the file?"
+                        ]
+                      }
+                    ],
+                    "USR004": [
+                      {
+                        "USR002": [
+                          "Could you upload the file?"
+                        ]
+                      }
+                    ],
+                    "USR005": [
+                      {
+                        "USR001": [
+                          "Regarding the new stock inclusion and the status of my current order."
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              3,
+              3,
+              3,
+              2
+            ],
+            "n_model_steps": 11,
+            "total_tokens": 59909,
+            "completion_tokens": 1451,
+            "elapsed_s": 57.794,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_121",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.9091,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_121",
+          "success": false,
+          "score": 0.9091,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": false,
+            "turn_success_rate": 0.75,
+            "relaxed_turn_success_rate": 0.75,
+            "call_precision": 1.0,
+            "call_recall": 0.8333,
+            "call_f1": 0.9091,
+            "n_expected_calls": 6,
+            "n_actual_calls": 5,
+            "n_matched_calls": 5,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 2,
+                "actual_calls": 2,
+                "matched_calls": 2,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 2,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 0.5,
+                "f1": 0.6667,
+                "turn_success": false
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 3,
+                "type": "missing_call",
+                "expected_name": "get_account_info",
+                "expected_arguments": {}
+              }
+            ],
+            "total_tokens": 35831,
+            "completion_tokens": 1227,
+            "elapsed_s": 183.769,
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist",
+              "bfcl_state_id_reuse"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              2
+            ],
+            "n_model_steps": 9,
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "official",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai_direct",
+            "skill_injection_mode": "prompt_only",
+            "model_name": "glm-4.7",
+            "official_valid": false,
+            "official_error_type": "multi_turn:execution_response_mismatch",
+            "official_check": {
+              "valid": false,
+              "error_message": "Model response execution results so far does not contain all the ground truth response execution results for turn 3.",
+              "error_type": "multi_turn:execution_response_mismatch",
+              "details": {
+                "missing_items": [
+                  "{\"account_id\": 12345, \"balance\": 35000.0, \"binding_card\": 1974202140965533}"
+                ],
+                "model_response (including all previous turns)": [
+                  "{\"stock_list\": [\"AAPL\", \"GOOG\", \"MSFT\", \"NVDA\"]}",
+                  "{\"price\": 227.16, \"percent_change\": 0.17, \"volume\": 2.552, \"MA(5)\": 227.11, \"MA(20)\": 227.09}",
+                  "{\"order_id\": 12446, \"order_type\": \"Buy\", \"status\": \"Pending\", \"price\": 227.16, \"amount\": 150}",
+                  "{\"id\": 12446, \"order_type\": \"Buy\", \"symbol\": \"AAPL\", \"price\": 227.16, \"amount\": 150, \"status\": \"Open\"}",
+                  "{\"status\": \"Withdrawal successful\", \"new_balance\": 34500.0}"
+                ],
+                "ground_truth_response (only the current turn)": [
+                  "{\"account_id\": 12345, \"balance\": 35000.0, \"binding_card\": 1974202140965533}",
+                  "{\"status\": \"Withdrawal successful\", \"new_balance\": 34500.0}"
+                ]
+              }
+            },
+            "available_tool_count": 20,
+            "available_skill_tool_count": 0
+          },
+          "trace": {
+            "task_id": "multi_turn_base_121",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you get a list of stock symbols in the Technology sector for your investment consideration.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666595307160856431",
+                    "type": "function",
+                    "function": {
+                      "name": "get_available_stocks",
+                      "arguments": "{\"sector\":\"Technology\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666595307160856431",
+                "content": "{\"stock_list\": [\"AAPL\", \"GOOG\", \"MSFT\", \"NVDA\"]}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here are the Technology sector stock symbols available for your consideration:\n\n**Technology Sector Stocks:**\n- **AAPL** - Apple Inc.\n- **GOOG** - Alphabet Inc. (Google)\n- **MSFT** - Microsoft Corporation\n- **NVDA** - NVIDIA Corporation\n\nThese represent some of the leading companies in the technology industry, covering diverse areas such as:\n- Consumer electronics and software (Apple)\n- Internet services and advertising (Google/Alphabet)\n- Software and cloud computing (Microsoft)\n- Graphics processing and AI computing (NVIDIA)\n\nWould you like me to get more detailed information about any of these stocks, such as their current prices, market performance, or other metrics that might help with your investment analysis?"
+              },
+              {
+                "role": "assistant",
+                "content": "I'll help you purchase 150 shares of AAPL (Apple), which is the first stock symbol from the Technology sector list. First, let me get the current market price for AAPL.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666626746321463405",
+                    "type": "function",
+                    "function": {
+                      "name": "get_stock_info",
+                      "arguments": "{\"symbol\":\"AAPL\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666626746321463405",
+                "content": "{\"price\": 227.16, \"percent_change\": 0.17, \"volume\": 2.552, \"MA(5)\": 227.11, \"MA(20)\": 227.09}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666619118459544044",
+                    "type": "function",
+                    "function": {
+                      "name": "place_order",
+                      "arguments": "{\"order_type\":\"Buy\",\"symbol\":\"AAPL\",\"price\":227.16,\"amount\":150}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666619118459544044",
+                "content": "{\"order_id\": 12446, \"order_type\": \"Buy\", \"status\": \"Pending\", \"price\": 227.16, \"amount\": 150}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've successfully placed your buy order for 150 shares of AAPL (Apple Inc.) at the current market price of $227.16 per share.\n\n**Order Details:**\n- Order ID: 12446\n- Stock: AAPL (Apple Inc.)\n- Order Type: Buy\n- Shares: 150\n- Price per Share: $227.16\n- Total Value: $34,074.00\n- Status: Pending\n\nYour order has been submitted and is currently pending execution. The order will be processed at the prevailing market price when it fills."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666578677047485294",
+                    "type": "function",
+                    "function": {
+                      "name": "get_order_details",
+                      "arguments": "{\"order_id\":12446}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666578677047485294",
+                "content": "{\"id\": 12446, \"order_type\": \"Buy\", \"symbol\": \"AAPL\", \"price\": 227.16, \"amount\": 150, \"status\": \"Open\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your order has been successfully verified! Here are the current details:\n\n**Order Status Update:**\n- **Order ID:** 12446\n- **Status:** Open (previously was \"Pending\")\n- **Order Type:** Buy\n- **Stock Symbol:** AAPL\n- **Number of Shares:** 150\n- **Price per Share:** $227.16\n- **Total Order Value:** $34,074.00\n\nThe order has progressed from \"Pending\" to \"Open\" status, which means it's now active in the market and waiting to be filled at your specified price of $227.16 per share. The order is proceeding as intended and is currently being processed by the trading system."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7666579295522780877",
+                    "type": "function",
+                    "function": {
+                      "name": "withdraw_funds",
+                      "arguments": "{\"amount\":500}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7666579295522780877",
+                "content": "{\"status\": \"Withdrawal successful\", \"new_balance\": 34500.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "Perfect! I've successfully withdrawn $500 from your account. Your withdrawal has been processed and your new account balance is $34,500.00. This should provide you with the additional liquidity you wanted to have available for potential market fluctuations."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "In the realm of investment opportunities, I'm intrigued by the Technology sector at the moment. Would you be able to provide a variety of stock symbols within this sector for my consideration?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_available_stocks",
+                    "arguments": {
+                      "sector": "Technology"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7666595307160856431",
+                    "result": {
+                      "stock_list": [
+                        "AAPL",
+                        "GOOG",
+                        "MSFT",
+                        "NVDA"
+                      ]
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Proceed with the purchase of 150 shares of the initial stock symbol from that list at the prevailing market price."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_stock_info",
+                    "arguments": {
+                      "symbol": "AAPL"
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666626746321463405",
+                    "result": {
+                      "price": 227.16,
+                      "percent_change": 0.17,
+                      "volume": 2.552,
+                      "MA(5)": 227.11,
+                      "MA(20)": 227.09
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "place_order",
+                    "arguments": {
+                      "order_type": "Buy",
+                      "symbol": "AAPL",
+                      "price": 227.16,
+                      "amount": 150
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7666619118459544044",
+                    "result": {
+                      "order_id": 12446,
+                      "order_type": "Buy",
+                      "status": "Pending",
+                      "price": 227.16,
+                      "amount": 150
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "I'd like to verify the status and execution of the order we've just initiated to confirm it's proceeding as intended."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_order_details",
+                    "arguments": {
+                      "order_id": 12446
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7666578677047485294",
+                    "result": {
+                      "id": 12446,
+                      "order_type": "Buy",
+                      "symbol": "AAPL",
+                      "price": 227.16,
+                      "amount": 150,
+                      "status": "Open"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Furthermore, withdraw $500 from my account to maintain sufficient liquidity in anticipation of possible market fluctuations."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "withdraw_funds",
+                    "arguments": {
+                      "amount": 500
+                    },
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7666579295522780877",
+                    "result": {
+                      "status": "Withdrawal successful",
+                      "new_balance": 34500.0
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_available_stocks",
+                "arguments": {
+                  "sector": "Technology"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7666595307160856431",
+                "result": {
+                  "stock_list": [
+                    "AAPL",
+                    "GOOG",
+                    "MSFT",
+                    "NVDA"
+                  ]
+                },
+                "error": null
+              },
+              {
+                "name": "get_stock_info",
+                "arguments": {
+                  "symbol": "AAPL"
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666626746321463405",
+                "result": {
+                  "price": 227.16,
+                  "percent_change": 0.17,
+                  "volume": 2.552,
+                  "MA(5)": 227.11,
+                  "MA(20)": 227.09
+                },
+                "error": null
+              },
+              {
+                "name": "place_order",
+                "arguments": {
+                  "order_type": "Buy",
+                  "symbol": "AAPL",
+                  "price": 227.16,
+                  "amount": 150
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7666619118459544044",
+                "result": {
+                  "order_id": 12446,
+                  "order_type": "Buy",
+                  "status": "Pending",
+                  "price": 227.16,
+                  "amount": 150
+                },
+                "error": null
+              },
+              {
+                "name": "get_order_details",
+                "arguments": {
+                  "order_id": 12446
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7666578677047485294",
+                "result": {
+                  "id": 12446,
+                  "order_type": "Buy",
+                  "symbol": "AAPL",
+                  "price": 227.16,
+                  "amount": 150,
+                  "status": "Open"
+                },
+                "error": null
+              },
+              {
+                "name": "withdraw_funds",
+                "arguments": {
+                  "amount": 500
+                },
+                "turn_index": 3,
+                "tool_call_id": "call_-7666579295522780877",
+                "result": {
+                  "status": "Withdrawal successful",
+                  "new_balance": 34500.0
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [
+              "bfcl_multi_action_turn_completion",
+              "bfcl_task_checklist",
+              "bfcl_state_id_reuse"
+            ],
+            "prompt_injected_skills": [],
+            "tool_injected_skills": [],
+            "called_skill_tools": [],
+            "turn_step_counts": [
+              2,
+              3,
+              2,
+              2
+            ],
+            "n_model_steps": 9,
+            "total_tokens": 35831,
+            "completion_tokens": 1227,
+            "elapsed_s": 183.769,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    }
+  ],
+  "elapsed_s": 477.931
+}

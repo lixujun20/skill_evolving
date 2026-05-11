@@ -1,0 +1,1511 @@
+{
+  "benchmark": "bfcl_v3",
+  "mode": "baseline",
+  "tag": "glm47_pathfiltered_test3_baseline",
+  "llm_config": "bigmodel",
+  "n_train_reserved": 3,
+  "n_tasks": 3,
+  "n_runs": 3,
+  "total_success": 0,
+  "success_rate": 0.0,
+  "avg_score": 0.7919,
+  "avg_total_tokens": 16969.0,
+  "avg_at_k": 0.0,
+  "pass_at_k": 0.0,
+  "avg_call_recall": 0.8667,
+  "avg_call_precision": 0.7349,
+  "avg_turn_success_rate": 0.6389,
+  "avg_relaxed_turn_success_rate": 0.7222,
+  "official_valid_rate": 0.3333,
+  "call_error_summary": {
+    "error_type_counts": {
+      "extra_call": 5,
+      "missing_call": 2
+    },
+    "param_error_counts": {}
+  },
+  "skill_stats": {
+    "retrieved_counts": {},
+    "used_counts": {},
+    "domain_tool_called_counts": {
+      "cancel_order": 1,
+      "check_tire_pressure": 1,
+      "displayCarStatus": 3,
+      "echo": 2,
+      "find_nearest_tire_shop": 1,
+      "get_account_info": 1,
+      "get_order_details": 1,
+      "get_stock_info": 1,
+      "get_symbol_by_name": 1,
+      "lockDoors": 1,
+      "mean": 1,
+      "place_order": 1,
+      "startEngine": 1,
+      "touch": 2
+    }
+  },
+  "details": [
+    {
+      "task_id": "multi_turn_base_64",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.6667,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_64",
+          "success": false,
+          "score": 0.6667,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": false,
+            "turn_success_rate": 0.5,
+            "relaxed_turn_success_rate": 0.5,
+            "call_precision": 0.5714,
+            "call_recall": 0.8,
+            "call_f1": 0.6667,
+            "n_expected_calls": 5,
+            "n_actual_calls": 7,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 3,
+                "actual_calls": 5,
+                "matched_calls": 2,
+                "precision": 0.4,
+                "recall": 0.6667,
+                "f1": 0.5,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 2,
+                "actual_calls": 2,
+                "matched_calls": 2,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "missing_call",
+                "expected_name": "pressBrakePedal",
+                "expected_arguments": {
+                  "pedalPosition": 1.0
+                }
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "displayCarStatus",
+                "actual_arguments": {
+                  "option": "doors"
+                }
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "displayCarStatus",
+                "actual_arguments": {
+                  "option": "doors"
+                }
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "displayCarStatus",
+                "actual_arguments": {
+                  "option": "brakePedal"
+                }
+              }
+            ],
+            "total_tokens": 19804,
+            "completion_tokens": 437,
+            "elapsed_s": 67.686,
+            "retrieved_skills": [],
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "path_filtered",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "model_name": "glm-4.7",
+            "official_valid": false,
+            "official_error_type": "multi_turn:instance_state_mismatch",
+            "official_check": {
+              "valid": false,
+              "error_message": "Model instance for VehicleControlAPI does not match the state with ground truth instance.",
+              "error_type": "multi_turn:instance_state_mismatch",
+              "details": {
+                "differences": {
+                  "engine_state": {
+                    "model": "stopped",
+                    "ground_truth": "running"
+                  },
+                  "brakePedalStatus": {
+                    "model": "released",
+                    "ground_truth": "pressed"
+                  }
+                },
+                "model_instance_state": {
+                  "fuelLevel": 15.5,
+                  "batteryVoltage": 12.8,
+                  "engine_state": "stopped",
+                  "remainingUnlockedDoors": 0,
+                  "doorStatus": {
+                    "driver": "locked",
+                    "passenger": "locked",
+                    "rear_left": "locked",
+                    "rear_right": "locked"
+                  },
+                  "acTemperature": 22.0,
+                  "fanSpeed": 60,
+                  "acMode": "auto",
+                  "humidityLevel": 45.0,
+                  "headLightStatus": "off",
+                  "parkingBrakeStatus": "released",
+                  "brakePedalStatus": "released",
+                  "distanceToNextVehicle": 100.0,
+                  "cruiseStatus": "inactive",
+                  "destination": "None",
+                  "frontLeftTirePressure": 35.0,
+                  "frontRightTirePressure": 34.0,
+                  "rearLeftTirePressure": 33.0,
+                  "rearRightTirePressure": 32.0,
+                  "long_context": false
+                },
+                "ground_truth_instance_state": {
+                  "fuelLevel": 15.5,
+                  "batteryVoltage": 12.8,
+                  "engine_state": "running",
+                  "remainingUnlockedDoors": 0,
+                  "doorStatus": {
+                    "driver": "locked",
+                    "passenger": "locked",
+                    "rear_left": "locked",
+                    "rear_right": "locked"
+                  },
+                  "acTemperature": 22.0,
+                  "fanSpeed": 60,
+                  "acMode": "auto",
+                  "humidityLevel": 45.0,
+                  "headLightStatus": "off",
+                  "parkingBrakeStatus": "released",
+                  "brakePedalStatus": "pressed",
+                  "distanceToNextVehicle": 100.0,
+                  "cruiseStatus": "inactive",
+                  "destination": "None",
+                  "frontLeftTirePressure": 35.0,
+                  "frontRightTirePressure": 34.0,
+                  "rearLeftTirePressure": 33.0,
+                  "rearRightTirePressure": 32.0,
+                  "long_context": false
+                }
+              },
+              "execution_result": [
+                {
+                  "model": [
+                    [
+                      "{\"doorStatus\": {\"driver\": \"unlocked\", \"passenger\": \"unlocked\", \"rear_left\": \"unlocked\", \"rear_right\": \"unlocked\"}}"
+                    ],
+                    [
+                      "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}"
+                    ],
+                    [
+                      "{\"doorStatus\": {\"driver\": \"locked\", \"passenger\": \"locked\", \"rear_left\": \"locked\", \"rear_right\": \"locked\"}}"
+                    ],
+                    [
+                      "{\"error\": \"Brake pedal needs to be pressed when starting the engine.\"}"
+                    ],
+                    [
+                      "{\"brakePedalStatus\": \"released\", \"brakePedalForce\": 0.0}"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}",
+                    "{\"brakePedalStatus\": \"pressed\", \"brakePedalForce\": 1000.0}",
+                    "{\"engineState\": \"running\", \"fuelLevel\": 15.5, \"batteryVoltage\": 12.8}"
+                  ]
+                }
+              ]
+            },
+            "available_tool_count": 5
+          },
+          "trace": {
+            "task_id": "multi_turn_base_64",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll first check the status of all doors to ensure they are properly secured, then proceed with starting the engine if everything is confirmed.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667566416446350914",
+                    "type": "function",
+                    "function": {
+                      "name": "displayCarStatus",
+                      "arguments": "{\"option\":\"doors\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667566416446350914",
+                "content": "{\"doorStatus\": {\"driver\": \"unlocked\", \"passenger\": \"unlocked\", \"rear_left\": \"unlocked\", \"rear_right\": \"unlocked\"}}"
+              },
+              {
+                "role": "assistant",
+                "content": "I can see that all car doors are currently unlocked - the driver, passenger, rear left, and rear right doors are all in an unlocked state. For the doors to be \"meticulously secured,\" they need to be locked. Let me secure all doors first:",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667540749721791616",
+                    "type": "function",
+                    "function": {
+                      "name": "lockDoors",
+                      "arguments": "{\"unlock\":false,\"door\":[\"driver\", \"passenger\", \"rear_left\", \"rear_right\"]}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667540749721791616",
+                "content": "{\"lockStatus\": \"locked\", \"remainingUnlockedDoors\": 0}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667495841543742490",
+                    "type": "function",
+                    "function": {
+                      "name": "displayCarStatus",
+                      "arguments": "{\"option\":\"doors\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667495841543742490",
+                "content": "{\"doorStatus\": {\"driver\": \"locked\", \"passenger\": \"locked\", \"rear_left\": \"locked\", \"rear_right\": \"locked\"}}"
+              },
+              {
+                "role": "assistant",
+                "content": "Confirmed: All car doors are now meticulously secured - driver, passenger, rear left, and rear right doors are all locked.\n\nSince everything is aligned, I will now proceed with activating the START mode:",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667527315064090653",
+                    "type": "function",
+                    "function": {
+                      "name": "startEngine",
+                      "arguments": "{\"ignitionMode\":\"START\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667527315064090653",
+                "content": "{\"error\": \"Brake pedal needs to be pressed when starting the engine.\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667547106273393156",
+                    "type": "function",
+                    "function": {
+                      "name": "displayCarStatus",
+                      "arguments": "{\"option\":\"brakePedal\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667547106273393156",
+                "content": "{\"brakePedalStatus\": \"released\", \"brakePedalForce\": 0.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "I have confirmed that all car doors are now meticulously secured - all four doors (driver, passenger, rear left, and rear right) are locked.\n\nHowever, when I attempted to start the engine in START mode, the system requires the brake pedal to be pressed first. The brake pedal is currently released. Would you like me to proceed with pressing the brake pedal and then starting the engine, or would you prefer to handle the brake pedal activation yourself?"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667561193766123931",
+                    "type": "function",
+                    "function": {
+                      "name": "check_tire_pressure",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667561193766123931",
+                "content": "{\"frontLeftTirePressure\": 35.0, \"frontRightTirePressure\": 34.0, \"rearLeftTirePressure\": 33.0, \"rearRightTirePressure\": 32.0, \"healthy_tire_pressure\": true, \"car_info\": {}}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667534358810454452",
+                    "type": "function",
+                    "function": {
+                      "name": "find_nearest_tire_shop",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667534358810454452",
+                "content": "{\"shopLocation\": \"456 Oakwood Avenue, Rivermist, 83214\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "I've assessed your tire pressures and found that all four tires are below the 40 PSI threshold you specified:\n\n- Front left tire: 35.0 PSI\n- Front right tire: 34.0 PSI  \n- Rear left tire: 33.0 PSI\n- Rear right tire: 32.0 PSI\n\nSince all tires are registering under 40 PSI, I've located the nearest tire service facility for you:\n\n**Nearest Tire Shop:** 456 Oakwood Avenue, Rivermist, 83214\n\nI recommend visiting this location to get your tires properly inflated to ensure safe driving conditions."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Before attempting to start the engine, kindly verify that every car door is meticulously secured—acknowledge once confirmed. Should everything be aligned, proceed with activating the START mode."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "displayCarStatus",
+                    "arguments": {
+                      "option": "doors"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667566416446350914",
+                    "result": {
+                      "doorStatus": {
+                        "driver": "unlocked",
+                        "passenger": "unlocked",
+                        "rear_left": "unlocked",
+                        "rear_right": "unlocked"
+                      }
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "lockDoors",
+                    "arguments": {
+                      "unlock": false,
+                      "door": [
+                        "driver",
+                        "passenger",
+                        "rear_left",
+                        "rear_right"
+                      ]
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667540749721791616",
+                    "result": {
+                      "lockStatus": "locked",
+                      "remainingUnlockedDoors": 0
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "displayCarStatus",
+                    "arguments": {
+                      "option": "doors"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667495841543742490",
+                    "result": {
+                      "doorStatus": {
+                        "driver": "locked",
+                        "passenger": "locked",
+                        "rear_left": "locked",
+                        "rear_right": "locked"
+                      }
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "startEngine",
+                    "arguments": {
+                      "ignitionMode": "START"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667527315064090653",
+                    "result": {
+                      "error": "Brake pedal needs to be pressed when starting the engine."
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "displayCarStatus",
+                    "arguments": {
+                      "option": "brakePedal"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667547106273393156",
+                    "result": {
+                      "brakePedalStatus": "released",
+                      "brakePedalForce": 0.0
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Please assess my tire pressures within the context of the car's current status. If any tire registers under 40 PSI, which might imply it's below the safe threshold, promptly guide me to the closest tire service facility."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "check_tire_pressure",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667561193766123931",
+                    "result": {
+                      "frontLeftTirePressure": 35.0,
+                      "frontRightTirePressure": 34.0,
+                      "rearLeftTirePressure": 33.0,
+                      "rearRightTirePressure": 32.0,
+                      "healthy_tire_pressure": true,
+                      "car_info": {}
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "find_nearest_tire_shop",
+                    "arguments": {},
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667534358810454452",
+                    "result": {
+                      "shopLocation": "456 Oakwood Avenue, Rivermist, 83214"
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "displayCarStatus",
+                "arguments": {
+                  "option": "doors"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667566416446350914",
+                "result": {
+                  "doorStatus": {
+                    "driver": "unlocked",
+                    "passenger": "unlocked",
+                    "rear_left": "unlocked",
+                    "rear_right": "unlocked"
+                  }
+                },
+                "error": null
+              },
+              {
+                "name": "lockDoors",
+                "arguments": {
+                  "unlock": false,
+                  "door": [
+                    "driver",
+                    "passenger",
+                    "rear_left",
+                    "rear_right"
+                  ]
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667540749721791616",
+                "result": {
+                  "lockStatus": "locked",
+                  "remainingUnlockedDoors": 0
+                },
+                "error": null
+              },
+              {
+                "name": "displayCarStatus",
+                "arguments": {
+                  "option": "doors"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667495841543742490",
+                "result": {
+                  "doorStatus": {
+                    "driver": "locked",
+                    "passenger": "locked",
+                    "rear_left": "locked",
+                    "rear_right": "locked"
+                  }
+                },
+                "error": null
+              },
+              {
+                "name": "startEngine",
+                "arguments": {
+                  "ignitionMode": "START"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667527315064090653",
+                "result": {
+                  "error": "Brake pedal needs to be pressed when starting the engine."
+                },
+                "error": null
+              },
+              {
+                "name": "displayCarStatus",
+                "arguments": {
+                  "option": "brakePedal"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667547106273393156",
+                "result": {
+                  "brakePedalStatus": "released",
+                  "brakePedalForce": 0.0
+                },
+                "error": null
+              },
+              {
+                "name": "check_tire_pressure",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7667561193766123931",
+                "result": {
+                  "frontLeftTirePressure": 35.0,
+                  "frontRightTirePressure": 34.0,
+                  "rearLeftTirePressure": 33.0,
+                  "rearRightTirePressure": 32.0,
+                  "healthy_tire_pressure": true,
+                  "car_info": {}
+                },
+                "error": null
+              },
+              {
+                "name": "find_nearest_tire_shop",
+                "arguments": {},
+                "turn_index": 1,
+                "tool_call_id": "call_-7667534358810454452",
+                "result": {
+                  "shopLocation": "456 Oakwood Avenue, Rivermist, 83214"
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "total_tokens": 19804,
+            "completion_tokens": 437,
+            "elapsed_s": 67.686,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_44",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.8,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_44",
+          "success": false,
+          "score": 0.8,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": false,
+            "turn_success_rate": 0.6667,
+            "relaxed_turn_success_rate": 0.6667,
+            "call_precision": 0.8,
+            "call_recall": 0.8,
+            "call_f1": 0.8,
+            "n_expected_calls": 5,
+            "n_actual_calls": 5,
+            "n_matched_calls": 4,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 2,
+                "actual_calls": 2,
+                "matched_calls": 1,
+                "precision": 0.5,
+                "recall": 0.5,
+                "f1": 0.5,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 2,
+                "actual_calls": 2,
+                "matched_calls": 2,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "missing_call",
+                "expected_name": "cd",
+                "expected_arguments": {
+                  "folder": "documents"
+                }
+              },
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "touch",
+                "actual_arguments": {
+                  "file_name": "annual_report.txt"
+                }
+              }
+            ],
+            "total_tokens": 11686,
+            "completion_tokens": 251,
+            "elapsed_s": 30.989,
+            "retrieved_skills": [],
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "path_filtered",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "model_name": "glm-4.7",
+            "official_valid": false,
+            "official_error_type": "multi_turn:instance_state_mismatch",
+            "official_check": {
+              "valid": false,
+              "error_message": "Model instance for GorillaFileSystem does not match the state with ground truth instance.",
+              "error_type": "multi_turn:instance_state_mismatch",
+              "details": {
+                "differences": {
+                  "root": {
+                    "model": "<Directory: alex, Parent: None, Contents: {'documents': <Directory: documents, Parent: alex, Contents: {'annual_report.txt': <<File: annual_report.txt, Content: >>}>, 'annual_report.txt': <<File: annual_report.txt, Content: Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000>>}>",
+                    "ground_truth": "<Directory: alex, Parent: None, Contents: {'documents': <Directory: documents, Parent: alex, Contents: {'annual_report.txt': <<File: annual_report.txt, Content: Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000>>}>}>"
+                  }
+                },
+                "model_instance_state": {
+                  "long_context": false,
+                  "root": "<Directory: alex, Parent: None, Contents: {'documents': <Directory: documents, Parent: alex, Contents: {'annual_report.txt': <<File: annual_report.txt, Content: >>}>, 'annual_report.txt': <<File: annual_report.txt, Content: Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000>>}>"
+                },
+                "ground_truth_instance_state": {
+                  "long_context": false,
+                  "root": "<Directory: alex, Parent: None, Contents: {'documents': <Directory: documents, Parent: alex, Contents: {'annual_report.txt': <<File: annual_report.txt, Content: Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000>>}>}>"
+                }
+              },
+              "execution_result": [
+                {
+                  "model": [
+                    [
+                      "None"
+                    ],
+                    [
+                      "None"
+                    ]
+                  ],
+                  "ground_truth": [
+                    "{\"current_working_directory\": \"documents\"}",
+                    "None"
+                  ]
+                }
+              ]
+            },
+            "available_tool_count": 6
+          },
+          "trace": {
+            "task_id": "multi_turn_base_44",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you populate the 'annual_report.txt' file with that quarterly revenue data. Let me first create the file and then write the specified content to it.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667535389602610720",
+                    "type": "function",
+                    "function": {
+                      "name": "touch",
+                      "arguments": "{\"file_name\":\"annual_report.txt\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667535389602610720",
+                "content": "\"None\""
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667559922455798183",
+                    "type": "function",
+                    "function": {
+                      "name": "echo",
+                      "arguments": "{\"content\":\"Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000\",\"file_name\":\"annual_report.txt\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667559922455798183",
+                "content": "\"None\""
+              },
+              {
+                "role": "assistant",
+                "content": "I've successfully created the file 'annual_report.txt' in the current directory and populated it with your specified quarterly revenue data. The file now contains exactly: \"Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000\""
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667566038489233366",
+                    "type": "function",
+                    "function": {
+                      "name": "mean",
+                      "arguments": "{\"numbers\":[5000, 7000, 6000, 8000]}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667566038489233366",
+                "content": "{\"result\": 6500.0}"
+              },
+              {
+                "role": "assistant",
+                "content": "The mean of the quarterly revenue is $6,500."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667569646261759277",
+                    "type": "function",
+                    "function": {
+                      "name": "touch",
+                      "arguments": "{\"file_name\":\"MeanRevenue.txt\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667569646261759277",
+                "content": "\"None\""
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667568993426734679",
+                    "type": "function",
+                    "function": {
+                      "name": "echo",
+                      "arguments": "{\"content\":\"6500\",\"file_name\":\"MeanRevenue.txt\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667568993426734679",
+                "content": "\"None\""
+              },
+              {
+                "role": "assistant",
+                "content": "I've created the file 'MeanRevenue.txt' and written the mean revenue rounded to the nearest integer, which is 6500."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Could you populate 'annual_report.txt' with data on quarterly revenue: 'Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000'? I only want to store the quoted text in my file. The file is somehwhere inside the file system."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "touch",
+                    "arguments": {
+                      "file_name": "annual_report.txt"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667535389602610720",
+                    "result": "None",
+                    "error": null
+                  },
+                  {
+                    "name": "echo",
+                    "arguments": {
+                      "content": "Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000",
+                      "file_name": "annual_report.txt"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667559922455798183",
+                    "result": "None",
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "What's the mean of the quarterly revenue?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "mean",
+                    "arguments": {
+                      "numbers": [
+                        5000,
+                        7000,
+                        6000,
+                        8000
+                      ]
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667566038489233366",
+                    "result": {
+                      "result": 6500.0
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Can you write the answer rounded in nearest integer into a new file named 'MeanRevenue.txt'? Just the number and nothing"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "touch",
+                    "arguments": {
+                      "file_name": "MeanRevenue.txt"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667569646261759277",
+                    "result": "None",
+                    "error": null
+                  },
+                  {
+                    "name": "echo",
+                    "arguments": {
+                      "content": "6500",
+                      "file_name": "MeanRevenue.txt"
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667568993426734679",
+                    "result": "None",
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "touch",
+                "arguments": {
+                  "file_name": "annual_report.txt"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667535389602610720",
+                "result": "None",
+                "error": null
+              },
+              {
+                "name": "echo",
+                "arguments": {
+                  "content": "Q1: $5000, Q2: $7000, Q3: $6000, Q4: $8000",
+                  "file_name": "annual_report.txt"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667559922455798183",
+                "result": "None",
+                "error": null
+              },
+              {
+                "name": "mean",
+                "arguments": {
+                  "numbers": [
+                    5000,
+                    7000,
+                    6000,
+                    8000
+                  ]
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667566038489233366",
+                "result": {
+                  "result": 6500.0
+                },
+                "error": null
+              },
+              {
+                "name": "touch",
+                "arguments": {
+                  "file_name": "MeanRevenue.txt"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667569646261759277",
+                "result": "None",
+                "error": null
+              },
+              {
+                "name": "echo",
+                "arguments": {
+                  "content": "6500",
+                  "file_name": "MeanRevenue.txt"
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667568993426734679",
+                "result": "None",
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "total_tokens": 11686,
+            "completion_tokens": 251,
+            "elapsed_s": 30.989,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    },
+    {
+      "task_id": "multi_turn_base_136",
+      "n_runs": 1,
+      "n_success": 0,
+      "avg_score": 0.9091,
+      "runs": [
+        {
+          "benchmark": "bfcl_v3",
+          "task_id": "multi_turn_base_136",
+          "success": false,
+          "score": 0.9091,
+          "metrics": {
+            "task_success": false,
+            "relaxed_task_success": true,
+            "turn_success_rate": 0.75,
+            "relaxed_turn_success_rate": 1.0,
+            "call_precision": 0.8333,
+            "call_recall": 1.0,
+            "call_f1": 0.9091,
+            "n_expected_calls": 5,
+            "n_actual_calls": 6,
+            "n_matched_calls": 5,
+            "turn_scores": [
+              {
+                "turn_index": 0,
+                "expected_calls": 2,
+                "actual_calls": 3,
+                "matched_calls": 2,
+                "precision": 0.6667,
+                "recall": 1.0,
+                "f1": 0.8,
+                "turn_success": false
+              },
+              {
+                "turn_index": 1,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 2,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              },
+              {
+                "turn_index": 3,
+                "expected_calls": 1,
+                "actual_calls": 1,
+                "matched_calls": 1,
+                "precision": 1.0,
+                "recall": 1.0,
+                "f1": 1.0,
+                "turn_success": true
+              }
+            ],
+            "call_errors": [
+              {
+                "turn_index": 0,
+                "type": "extra_call",
+                "actual_name": "get_symbol_by_name",
+                "actual_arguments": {
+                  "name": "Zeta Corp"
+                }
+              }
+            ],
+            "total_tokens": 19417,
+            "completion_tokens": 587,
+            "elapsed_s": 133.706,
+            "retrieved_skills": [],
+            "used_skills": [],
+            "skill_events": [],
+            "adapter_mode": "path_filtered",
+            "execution_backend": "official",
+            "prompt_style": "native",
+            "temperature": null,
+            "synthetic_continue": false,
+            "tool_api_style": "openai",
+            "model_name": "glm-4.7",
+            "official_valid": true,
+            "official_error_type": null,
+            "official_check": {
+              "valid": true
+            },
+            "available_tool_count": 7
+          },
+          "trace": {
+            "task_id": "multi_turn_base_136",
+            "messages": [
+              {
+                "role": "assistant",
+                "content": "I'll help you get the current information for Zeta Corp's stock and then purchase 50 shares at the current market price. Let me start by getting the stock information.",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667592048811178269",
+                    "type": "function",
+                    "function": {
+                      "name": "get_symbol_by_name",
+                      "arguments": "{\"name\":\"Zeta Corp\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667592048811178269",
+                "content": "{\"symbol\": \"ZETA\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667566622604780211",
+                    "type": "function",
+                    "function": {
+                      "name": "get_stock_info",
+                      "arguments": "{\"symbol\":\"ZETA\"}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667566622604780211",
+                "content": "{\"price\": 150.75, \"percent_change\": 0.05, \"volume\": 1.5, \"MA(5)\": 150.5, \"MA(20)\": 150.25}"
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667542295910018331",
+                    "type": "function",
+                    "function": {
+                      "name": "place_order",
+                      "arguments": "{\"order_type\":\"Buy\",\"symbol\":\"ZETA\",\"price\":150.75,\"amount\":50}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667542295910018331",
+                "content": "{\"order_id\": 12446, \"order_type\": \"Buy\", \"status\": \"Pending\", \"price\": 150.75, \"amount\": 50}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here's the update on Zeta Corp's stock and your purchase:\n\n**Zeta Corp (ZETA) Stock Status:**\n- Current Price: $150.75\n- Percent Change: +0.05%\n- Volume: 1.5M\n- 5-day Moving Average: $150.50\n- 20-day Moving Average: $150.25\n\n**Order Placed:**\nI've successfully placed your buy order for 50 shares of ZETA at the current price of $150.75 per share.\n\n**Order Details:**\n- Order ID: 12446\n- Type: Buy\n- Symbol: ZETA\n- Price: $150.75 per share\n- Quantity: 50 shares\n- Total Value: $7,537.50\n- Status: Pending\n\nYour order has been submitted and is currently pending execution. The stock appears to be performing well with a slight positive gain and is trading above both its 5-day and 20-day moving averages, which could indicate an upward trend."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667564492301005057",
+                    "type": "function",
+                    "function": {
+                      "name": "get_order_details",
+                      "arguments": "{\"order_id\":12446}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667564492301005057",
+                "content": "{\"id\": 12446, \"order_type\": \"Buy\", \"symbol\": \"ZETA\", \"price\": 150.75, \"amount\": 50, \"status\": \"Open\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here's the update on your order:\n\n**Order Details:**\n- **Order ID:** 12446\n- **Type:** Buy\n- **Symbol:** ZETA (Zeta Corp)\n- **Quantity:** 50 shares\n- **Price:** $150.75 per share\n- **Total Value:** $7,537.50\n- **Status:** Open\n\nYour order has been successfully placed and is currently **Open**, meaning it's active in the market waiting to be filled. The order is for 50 shares of Zeta Corp at $150.75 per share, for a total of $7,537.50."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667558341907836206",
+                    "type": "function",
+                    "function": {
+                      "name": "cancel_order",
+                      "arguments": "{\"order_id\":12446}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667558341907836206",
+                "content": "{\"order_id\": 12446, \"status\": \"Cancelled\"}"
+              },
+              {
+                "role": "assistant",
+                "content": "Your order has been successfully cancelled. Order ID 12446 for 50 shares of ZETA at $150.75 is now cancelled."
+              },
+              {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                  {
+                    "id": "call_-7667546556517574611",
+                    "type": "function",
+                    "function": {
+                      "name": "get_account_info",
+                      "arguments": "{}"
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "tool_call_id": "call_-7667546556517574611",
+                "content": "{\"account_id\": 98765, \"balance\": 15000.0, \"binding_card\": 9876543210123456}"
+              },
+              {
+                "role": "assistant",
+                "content": "Here's your current account information:\n\n**Account Details:**\n- Account ID: 98765\n- Current Balance: $15,000.00\n- Linked Card: **** **** **** 3456 (ending in 3456)\n\nYour account is well-funded with a balance of $15,000, and you have a card linked to your trading account for funding and withdrawal purposes."
+              }
+            ],
+            "turns": [
+              {
+                "turn_index": 0,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Give me an update on where Zeta Corp's stock stands right now and proceed with purchasing 50 shares at the ongoing rate."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_symbol_by_name",
+                    "arguments": {
+                      "name": "Zeta Corp"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667592048811178269",
+                    "result": {
+                      "symbol": "ZETA"
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "get_stock_info",
+                    "arguments": {
+                      "symbol": "ZETA"
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667566622604780211",
+                    "result": {
+                      "price": 150.75,
+                      "percent_change": 0.05,
+                      "volume": 1.5,
+                      "MA(5)": 150.5,
+                      "MA(20)": 150.25
+                    },
+                    "error": null
+                  },
+                  {
+                    "name": "place_order",
+                    "arguments": {
+                      "order_type": "Buy",
+                      "symbol": "ZETA",
+                      "price": 150.75,
+                      "amount": 50
+                    },
+                    "turn_index": 0,
+                    "tool_call_id": "call_-7667542295910018331",
+                    "result": {
+                      "order_id": 12446,
+                      "order_type": "Buy",
+                      "status": "Pending",
+                      "price": 150.75,
+                      "amount": 50
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 1,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "After you execute the purchase, fill me in on how that order is doing, okay?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_order_details",
+                    "arguments": {
+                      "order_id": 12446
+                    },
+                    "turn_index": 1,
+                    "tool_call_id": "call_-7667564492301005057",
+                    "result": {
+                      "id": 12446,
+                      "order_type": "Buy",
+                      "symbol": "ZETA",
+                      "price": 150.75,
+                      "amount": 50,
+                      "status": "Open"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 2,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "On second thought, let's scrap that order. I'm going to need that done promptly."
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "cancel_order",
+                    "arguments": {
+                      "order_id": 12446
+                    },
+                    "turn_index": 2,
+                    "tool_call_id": "call_-7667558341907836206",
+                    "result": {
+                      "order_id": 12446,
+                      "status": "Cancelled"
+                    },
+                    "error": null
+                  }
+                ]
+              },
+              {
+                "turn_index": 3,
+                "user_messages": [
+                  {
+                    "role": "user",
+                    "content": "Oh, one more thing - I need a rundown of my current balance and card information linked to my trading account, could you manage that?"
+                  }
+                ],
+                "tool_calls": [
+                  {
+                    "name": "get_account_info",
+                    "arguments": {},
+                    "turn_index": 3,
+                    "tool_call_id": "call_-7667546556517574611",
+                    "result": {
+                      "account_id": 98765,
+                      "balance": 15000.0,
+                      "binding_card": 9876543210123456
+                    },
+                    "error": null
+                  }
+                ]
+              }
+            ],
+            "tool_calls": [
+              {
+                "name": "get_symbol_by_name",
+                "arguments": {
+                  "name": "Zeta Corp"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667592048811178269",
+                "result": {
+                  "symbol": "ZETA"
+                },
+                "error": null
+              },
+              {
+                "name": "get_stock_info",
+                "arguments": {
+                  "symbol": "ZETA"
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667566622604780211",
+                "result": {
+                  "price": 150.75,
+                  "percent_change": 0.05,
+                  "volume": 1.5,
+                  "MA(5)": 150.5,
+                  "MA(20)": 150.25
+                },
+                "error": null
+              },
+              {
+                "name": "place_order",
+                "arguments": {
+                  "order_type": "Buy",
+                  "symbol": "ZETA",
+                  "price": 150.75,
+                  "amount": 50
+                },
+                "turn_index": 0,
+                "tool_call_id": "call_-7667542295910018331",
+                "result": {
+                  "order_id": 12446,
+                  "order_type": "Buy",
+                  "status": "Pending",
+                  "price": 150.75,
+                  "amount": 50
+                },
+                "error": null
+              },
+              {
+                "name": "get_order_details",
+                "arguments": {
+                  "order_id": 12446
+                },
+                "turn_index": 1,
+                "tool_call_id": "call_-7667564492301005057",
+                "result": {
+                  "id": 12446,
+                  "order_type": "Buy",
+                  "symbol": "ZETA",
+                  "price": 150.75,
+                  "amount": 50,
+                  "status": "Open"
+                },
+                "error": null
+              },
+              {
+                "name": "cancel_order",
+                "arguments": {
+                  "order_id": 12446
+                },
+                "turn_index": 2,
+                "tool_call_id": "call_-7667558341907836206",
+                "result": {
+                  "order_id": 12446,
+                  "status": "Cancelled"
+                },
+                "error": null
+              },
+              {
+                "name": "get_account_info",
+                "arguments": {},
+                "turn_index": 3,
+                "tool_call_id": "call_-7667546556517574611",
+                "result": {
+                  "account_id": 98765,
+                  "balance": 15000.0,
+                  "binding_card": 9876543210123456
+                },
+                "error": null
+              }
+            ],
+            "skill_events": [],
+            "retrieved_skills": [],
+            "total_tokens": 19417,
+            "completion_tokens": 587,
+            "elapsed_s": 133.706,
+            "timed_out": false
+          },
+          "error": null,
+          "run_idx": 0
+        }
+      ]
+    }
+  ],
+  "model_name": "glm-4.7",
+  "adapter_mode": "path_filtered",
+  "execution_backend": "auto",
+  "bfcl_data_source": "bfcl_eval_bundle",
+  "bfcl_prompt_style": "native",
+  "bfcl_tool_api_style": "openai",
+  "top_k_skills": 5,
+  "temperature": null,
+  "bfcl_synthetic_continue": false,
+  "bfcl_explicit_skill_tool": false,
+  "elapsed_s": 232.954
+}

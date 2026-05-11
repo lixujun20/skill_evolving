@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maintenance Trace Lab</title>
+<link rel="stylesheet" href="/static/style.css?v=20260511industrial1">
+</head>
+<body class="maintenance-page">
+<div id="app">
+  <header>
+    <div class="top-nav">
+      <a href="/" class="nav-link">Skill Explorer</a>
+      <a href="/replay" class="nav-link">Replay Lab</a>
+      <a href="/execute" class="nav-link">Execute Lab</a>
+      <a href="/maintenance" class="nav-link active" data-section-link="maintenance">Maintenance Lab</a>
+      <a href="/method-tests" class="nav-link" data-section-link="method_tests">Method Tests</a>
+      <a href="/maintenance-docs" class="nav-link">Maintenance Docs</a>
+    </div>
+    <h1>Maintenance Trace Lab</h1>
+    <p class="page-subtitle">Inspect real GLM maintenance experiments end-to-end, including executor results, maintenance tests, refine decisions, and role-level LLM prompts / outputs.</p>
+  </header>
+
+  <div id="maintenance-stats" class="stats-bar"></div>
+
+  <div class="main-layout replay-layout maintenance-layout">
+    <aside class="skill-list-panel replay-list-panel maintenance-list-panel">
+      <div class="search-box">
+        <input type="text" id="maintenance-search" placeholder="Search experiments..." autocomplete="off">
+      </div>
+      <ul id="maintenance-experiment-list" class="skill-list"></ul>
+    </aside>
+
+    <main class="detail-panel replay-detail-panel maintenance-detail-panel">
+      <div id="maintenance-placeholder" class="placeholder">
+        <p>← Select an experiment to inspect overview metrics and round-by-round flow boards</p>
+      </div>
+
+      <div id="maintenance-detail" class="maintenance-spa-root" style="display:none"></div>
+    </main>
+  </div>
+</div>
+
+<script src="/static/maintenance.js?v=20260511industrial1"></script>
+</body>
+</html>

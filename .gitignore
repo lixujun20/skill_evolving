@@ -230,3 +230,22 @@ config/gen-lang-client-0780193487-77a0f4f2f672.json
 
 
 tool_cosmos_ds/
+
+# Academic experiment outputs and logs.
+# Keep generated run artifacts local; algorithm_docs contains maintained docs.
+academic/results/*
+!academic/results/algorithm_docs/
+!academic/results/algorithm_docs/**
+*.log
+*.out
+*.jsonl
+*_debug.json
+*_audit.jsonl
+*_checkpoint*.json
+*_evolve.json
+*_baseline.json
+*_skills.json
+*_partial*.json
+*_monitor.jsonl
+*_progress.jsonl
+academic/experiments/bfcl_case_lists/_tmp_*.json

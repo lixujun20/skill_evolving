@@ -22,6 +22,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import openpyxl
 
 from academic.benchmarks.core.artifacts import ArtifactStore
+from academic.benchmarks.core.llm_text import ask_text_llm
+from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig, NoOpMaintenanceAdapter
 from academic.benchmarks.core.types import BenchmarkResult, BenchmarkTask
 from academic.config import CODE_EXEC_TIMEOUT
 
@@ -136,12 +138,11 @@ async def run_spreadsheet_task(
     task: BenchmarkTask,
     *,
     llm_config: str,
+    model_name: Optional[str] = None,
     artifact_store: Optional[ArtifactStore] = None,
     top_k_skills: int = 5,
     work_dir: Optional[Path] = None,
 ) -> BenchmarkResult:
-    from app.llm import LLM
-
     t0 = time.monotonic()
     trace = SpreadsheetTrace(task_id=task.task_id)
     query = str(task.question)
@@ -159,16 +160,16 @@ async def run_spreadsheet_task(
 
     prompt = _build_spreadsheet_prompt(task, input_copy, output_path)
     trace.prompt = prompt
-    llm = LLM(config_name=llm_config)
-    tokens_before = llm.total_input_tokens + llm.total_completion_tokens
-    completion_before = llm.total_completion_tokens
     try:
-        response = await llm.ask(
-            messages=[{"role": "user", "content": prompt}],
-            system_msgs=[{"role": "system", "content": system}],
-            stream=False,
+        response = await ask_text_llm(
+            llm_config=llm_config,
+            model_name=model_name,
+            system=system,
+            prompt=prompt,
         )
-        trace.code = _extract_code(response)
+        trace.total_tokens = response.prompt_tokens + response.completion_tokens
+        trace.completion_tokens = response.completion_tokens
+        trace.code = _extract_code(response.content)
         if not trace.code:
             trace.elapsed_s = round(time.monotonic() - t0, 3)
             return BenchmarkResult(
@@ -195,8 +196,6 @@ async def run_spreadsheet_task(
         success = bool(returncode == 0 and verify["pass"])
     except Exception as exc:
         trace.elapsed_s = round(time.monotonic() - t0, 3)
-        trace.total_tokens = (llm.total_input_tokens + llm.total_completion_tokens) - tokens_before
-        trace.completion_tokens = llm.total_completion_tokens - completion_before
         return BenchmarkResult(
             benchmark="spreadsheet",
             task_id=task.task_id,
@@ -208,12 +207,12 @@ async def run_spreadsheet_task(
         )
 
     trace.elapsed_s = round(time.monotonic() - t0, 3)
-    trace.total_tokens = (llm.total_input_tokens + llm.total_completion_tokens) - tokens_before
-    trace.completion_tokens = llm.total_completion_tokens - completion_before
     verify["total_tokens"] = trace.total_tokens
     verify["completion_tokens"] = trace.completion_tokens
     verify["elapsed_s"] = trace.elapsed_s
     verify["retrieved_skills"] = trace.retrieved_skills
+    verify["model_name"] = response.model_name
+    verify["llm_api_style"] = response.api_style
     return BenchmarkResult(
         benchmark="spreadsheet",
         task_id=task.task_id,
@@ -328,13 +327,73 @@ def _cells_in_range(answer_range: Optional[str], ws: Any) -> List[str]:
             for cell in row
             if cell.value is not None
         ]
+    target = ws[answer_range]
+    if hasattr(target, "coordinate"):
+        return [target.coordinate]
     cells = []
-    for row in ws[answer_range]:
+    for row in target:
         if isinstance(row, tuple):
             cells.extend(cell.coordinate for cell in row)
         else:
             cells.append(row.coordinate)
     return cells
+
+
+class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
+    """SpreadsheetBench adapter for the benchmark-agnostic evolution runner.
+
+    The first generic path keeps Spreadsheet maintenance conservative: rollout,
+    trace projection, and bundle-compatible task snapshots are supported now;
+    credit/refine/refactor hooks inherit no-op behavior until the spreadsheet
+    roles have enough benchmark-native evidence to safely edit skills.
+    """
+
+    benchmark = "spreadsheet"
+
+    async def run_task(
+        self,
+        task: BenchmarkTask,
+        *,
+        store: ArtifactStore,
+        config: MaintenanceRunConfig,
+        phase: str,
+        task_index: int,
+        run_idx: int,
+    ) -> BenchmarkResult:
+        del phase, task_index, run_idx
+        return await run_spreadsheet_task(
+            task,
+            llm_config=config.llm_config,
+            model_name=config.model_name,
+            artifact_store=store,
+            top_k_skills=config.top_k_skills,
+        )
+
+    async def run_micro_maintenance(self, **kwargs: Any) -> Dict[str, Any]:
+        report = await super().run_micro_maintenance(**kwargs)
+        detail = kwargs.get("detail") or {}
+        report["trace_projection"] = _spreadsheet_trace_projection(detail)
+        return report
+
+
+def _spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
+    runs = detail.get("runs") or []
+    first = runs[0] if runs else {}
+    metrics = first.get("metrics") or {}
+    trace = first.get("trace") or {}
+    return {
+        "task_id": detail.get("task_id"),
+        "success": first.get("success"),
+        "score": first.get("score"),
+        "answer_sheet": metrics.get("answer_sheet"),
+        "answer_position": metrics.get("answer_position"),
+        "checked_cells": metrics.get("checked_cells"),
+        "mismatched_cells": metrics.get("mismatched_cells", [])[:5],
+        "execution_ok": metrics.get("execution_ok"),
+        "llm_api_style": metrics.get("llm_api_style"),
+        "retrieved_skills": metrics.get("retrieved_skills") or trace.get("retrieved_skills") or [],
+        "stderr_tail": str(trace.get("stderr") or "")[-800:],
+    }
 
 
 def _split_sheet_range(answer_range: Optional[str]) -> Tuple[Optional[str], Optional[str]]:

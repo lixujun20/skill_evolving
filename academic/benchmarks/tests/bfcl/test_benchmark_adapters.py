@@ -1,8 +1,10 @@
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, List
+from unittest.mock import AsyncMock
 
+import openpyxl
 import pytest
 
 from academic.benchmarks.bfcl import (
@@ -28,6 +30,7 @@ from academic.benchmarks.core.runner import (
     _build_skill_test_result,
     _load_saved_details,
     _run_bfcl_baseline,
+    _run_spreadsheet_baseline,
     _result_from_dict,
     _refine_bfcl_skill_store,
     _validate_refine_output_consistency,
@@ -189,6 +192,113 @@ def test_spreadsheet_loader_and_verifier_contract() -> None:
     )
     assert result["pass"] is True
     assert result["cell_accuracy"] == 1.0
+
+
+def test_spreadsheet_verifier_accepts_single_cell_range(tmp_path: Path) -> None:
+    pred = tmp_path / "pred.xlsx"
+    gold = tmp_path / "gold.xlsx"
+    for path in (pred, gold):
+        wb = openpyxl.Workbook()
+        wb.active["B1"] = 8
+        wb.save(path)
+
+    result = verify_spreadsheet_output(
+        predicted_xlsx=pred,
+        golden_xlsx=gold,
+        sheet_name=None,
+        answer_range="B1",
+    )
+
+    assert result["pass"] is True
+    assert result["checked_cells"] == 1
+    assert result["cell_accuracy"] == 1.0
+
+
+async def test_spreadsheet_runner_forwards_model_name(monkeypatch) -> None:
+    calls = []
+
+    async def fake_run_spreadsheet_task(task, **kwargs):
+        calls.append(kwargs)
+        return BenchmarkResult(
+            benchmark="spreadsheet",
+            task_id=task.task_id,
+            success=True,
+            score=1.0,
+            metrics={},
+            trace={},
+        )
+
+    monkeypatch.setattr(
+        "academic.benchmarks.core.runner.run_spreadsheet_task",
+        fake_run_spreadsheet_task,
+    )
+    task = SimpleNamespace(task_id="sheet_1")
+
+    await _run_spreadsheet_baseline(
+        [task],
+        1,
+        "local_claude_proxy",
+        ArtifactStore(),
+        model_name="claude-sonnet-4-5",
+    )
+
+    assert calls[0]["llm_config"] == "local_claude_proxy"
+    assert calls[0]["model_name"] == "claude-sonnet-4-5"
+
+
+async def test_spreadsheet_task_passes_model_override_to_llm(monkeypatch, tmp_path: Path) -> None:
+    from academic.benchmarks.spreadsheet.adapter import run_spreadsheet_task
+    from academic.benchmarks.core.llm_text import TextLLMResponse
+
+    captured = {}
+
+    async def fake_ask_text_llm(**kwargs):
+        captured.update(kwargs)
+        return TextLLMResponse(
+            content="""```python
+import openpyxl
+wb = openpyxl.load_workbook(INPUT_XLSX)
+ws = wb.active
+ws["B1"] = 8
+wb.save(OUTPUT_XLSX)
+```""",
+            prompt_tokens=10,
+            completion_tokens=5,
+            model_name=kwargs["model_name"],
+            api_style="anthropic_direct",
+        )
+
+    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter.ask_text_llm", fake_ask_text_llm)
+    input_xlsx = tmp_path / "input.xlsx"
+    golden_xlsx = tmp_path / "golden.xlsx"
+    for path in (input_xlsx, golden_xlsx):
+        wb = openpyxl.Workbook()
+        wb.active["A1"] = 1
+        wb.active["B1"] = 8 if path == golden_xlsx else None
+        wb.save(path)
+    task = BenchmarkTask(
+        benchmark="spreadsheet",
+        task_id="sheet_1",
+        question="Write 8 to B1.",
+        expected={"golden_xlsx": str(golden_xlsx), "answer_sheet": None, "answer_position": "B1"},
+        input_artifacts={"input_xlsx": str(input_xlsx)},
+        metadata={},
+    )
+
+    result = await run_spreadsheet_task(
+        task,
+        llm_config="local_claude_proxy",
+        model_name="claude-sonnet-4-5",
+        artifact_store=ArtifactStore(),
+        top_k_skills=0,
+        work_dir=tmp_path / "work",
+    )
+
+    assert result.success is True
+    assert captured["llm_config"] == "local_claude_proxy"
+    assert captured["model_name"] == "claude-sonnet-4-5"
+    assert result.metrics["model_name"] == "claude-sonnet-4-5"
+    assert result.metrics["llm_api_style"] == "anthropic_direct"
 
 
 def test_bfcl_refine_disables_harmful_auto_skill() -> None:
@@ -1039,6 +1149,79 @@ async def test_execute_bfcl_bundle_tests_enforces_strict_contract_gate() -> None
     with_run = next(run for run in result.unit_case_runs if run.variant == "with_skill")
     assert with_run.passed is False
     assert with_run.metadata["contract_failures"]
+
+
+@pytest.mark.asyncio
+async def test_execute_bfcl_bundle_tests_runs_with_without_variants_concurrently(monkeypatch) -> None:
+    import academic.benchmarks.bfcl.maintenance.adapter as adapter
+
+    artifact = SkillArtifact(
+        name="parallel_bundle_skill",
+        kind="atomic_tool_rule_card",
+        description="parallel bundle",
+        body="body",
+    )
+    artifact.bundle.positive_cases = [
+        SkillBundleCase(
+            case_id="parallel_bundle_skill:positive:0",
+            source="manual",
+            prompt="do a thing",
+            expected={"official_valid": True},
+            context={
+                "task_fragment": {
+                    "task_id": "parallel-case",
+                    "question": [[{"role": "user", "content": "Do a thing."}]],
+                    "expected": [[]],
+                    "input_artifacts": {"initial_config": {"X": {}}},
+                    "metadata": {"involved_classes": ["X"]},
+                }
+            },
+            polarity="positive",
+        )
+    ]
+    monkeypatch.setenv("BFCL_BUNDLE_VARIANT_CONCURRENCY", "2")
+    monkeypatch.setattr(adapter, "_validate_bundle_task_fragment", lambda **kwargs: None)
+    active = 0
+    max_active = 0
+    modes: List[str] = []
+
+    async def fake_run_case_with_timeout(task, **kwargs):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        modes.append(kwargs["skill_injection_mode"])
+        await asyncio.sleep(0.01)
+        active -= 1
+        return BenchmarkResult(
+            benchmark="bfcl_v3",
+            task_id=task.task_id,
+            success=True,
+            score=1.0,
+            metrics={"official_valid": True, "call_f1": 1.0, "call_errors": []},
+            trace={"tool_calls": []},
+        )
+
+    monkeypatch.setattr(adapter, "_run_case_with_timeout", fake_run_case_with_timeout)
+
+    result = await execute_bfcl_bundle_tests(
+        artifact,
+        tools=[],
+        llm_config="dummy",
+        model_name=None,
+        adapter_mode="official",
+        execution_backend="official",
+        prompt_style="official",
+        tool_api_style="openai",
+        max_steps_per_turn=1,
+        temperature=0.0,
+        synthetic_continue=False,
+        explicit_skill_tool=False,
+        max_case_seconds=1.0,
+    )
+
+    assert max_active == 2
+    assert set(modes) == {"none", "prompt_only"}
+    assert [run.variant for run in result.unit_case_runs] == ["without_skill", "with_skill"]
 
 
 def test_trim_bundle_cases_keeps_multiple_cases_up_to_limit() -> None:

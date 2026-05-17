@@ -42,6 +42,13 @@ def _bundle_case_limit_per_polarity() -> int:
         return 2
 
 
+def _bundle_max_total_cases() -> int:
+    try:
+        return max(1, int(os.environ.get("BFCL_BUNDLE_MAX_TOTAL_CASES", "6") or "6"))
+    except Exception:
+        return 6
+
+
 EXTRACT_SYSTEM = """\
 You are the extractor role in a skill-repository maintenance system.
 
@@ -437,7 +444,7 @@ Rules:
 8. Cases should be lightweight enough to rerun repeatedly.
 9. Preserve the benchmark's interaction grain exactly. For BFCL-like function-calling tasks, one user turn may require multiple tool calls; keep those calls in the same `task_fragment.expected` turn as a nested list. Do not invent `next_turn_expected` or split same-turn calls across turns unless the original task has separate user turns.
 10. Bundle cases should test the target skill's local causal effect. If the evidence only says "avoid extra lookup X while directly calling Y and Z in this user turn", encode the expected calls for that same user turn as `[["Y(...)", "Z(...)"]]`.
-11. Keep the bundle compact. Return at most {bundle_limit} positive case(s), at most {bundle_limit} negative case(s), and at most {bundle_limit} integration case(s).
+11. Keep the bundle compact. Return at most {bundle_limit} positive case(s), at most {bundle_limit} negative case(s), and at most {bundle_limit} integration case(s), and at most {bundle_total_limit} case(s) total.
 12. Each case must contain only the minimal single-turn or two-turn fragment needed to test this skill. Do not copy full traces, full metrics, debug events, or unrelated input artifacts.
 13. Keep each `prompt` under 240 characters. Keep each user message under 500 characters. If fixture state is needed, include only the exact fields required by the skill.
 14. For BFCL-like function-calling cases, `context.task_fragment.question` must be an array of turns, and each turn must be an array of message objects with `role` and `content`.
@@ -467,6 +474,10 @@ Field semantics and empty-value rules:
   variant; `integration` catches a context/cross-skill failure.
 - `contrast_protocol`: booleans describing whether the case is meaningful with
   and/or without the skill. Use both true for most regression-style cases.
+- If more than {bundle_total_limit} good cases are available, choose the most
+  diagnostic set: recent credit-assigned cases first, then high-confidence
+  regression/integration cases, while preserving polarity diversity when useful.
+  Do not output overflow cases for a later component to trim.
 
 Return strict JSON:
 {
@@ -501,7 +512,11 @@ Return strict JSON:
 }
 """
 
-BUNDLE_SYSTEM = BUNDLE_SYSTEM.replace("{bundle_limit}", str(_bundle_case_limit_per_polarity()))
+BUNDLE_SYSTEM = (
+    BUNDLE_SYSTEM
+    .replace("{bundle_limit}", str(_bundle_case_limit_per_polarity()))
+    .replace("{bundle_total_limit}", str(_bundle_max_total_cases()))
+)
 
 
 BUNDLE_MAINTAIN_SYSTEM = """\
@@ -527,7 +542,7 @@ Rules:
    - `replace_cases`: exact case replacements by `case_id`, each with an explicit `bucket`
 6. Preserve the benchmark's turn semantics exactly.
 7. Treat credit-assigned negative cases and integration failures as high-priority counterexamples, but do not overfit to one noisy trace.
-8. Keep the final bundle compact: at most {bundle_limit} positive, {bundle_limit} negative, and {bundle_limit} integration case(s).
+8. Keep the final bundle compact: at most {bundle_limit} positive, {bundle_limit} negative, and {bundle_limit} integration case(s), and at most {bundle_total_limit} cases total.
 9. For BFCL-like expected calls, use only exact official tool names and exact schema parameter names from the source result. Never invent aliases such as `company_name` or `stock`, and never use placeholders such as `<market_price>`.
 10. New cases must match the target skill's source/domain evidence and the
    official task fragment selected by credit assignment. Never patch in a
@@ -549,6 +564,10 @@ Field semantics and empty-value rules:
 - Case fields keep the same meanings as in the initial bundle builder:
   `context.task_fragment.expected` is official executable call strings, while
   top-level `expected` is only optional extra assertions.
+- If the current bundle plus new evidence exceeds {bundle_total_limit} cases,
+  you must decide what to keep/drop in this response. Prefer recent
+  credit-assigned cases, high-confidence regressions, and the smallest
+  polarity-diverse set that still represents the skill contract.
 
 Return strict JSON:
 {
@@ -579,7 +598,11 @@ Return strict JSON:
 }
 """
 
-BUNDLE_MAINTAIN_SYSTEM = BUNDLE_MAINTAIN_SYSTEM.replace("{bundle_limit}", str(_bundle_case_limit_per_polarity()))
+BUNDLE_MAINTAIN_SYSTEM = (
+    BUNDLE_MAINTAIN_SYSTEM
+    .replace("{bundle_limit}", str(_bundle_case_limit_per_polarity()))
+    .replace("{bundle_total_limit}", str(_bundle_max_total_cases()))
+)
 
 
 REFINE_SYSTEM = """\
@@ -1303,16 +1326,54 @@ def _trim_bundle_projection(
     total_limit: int,
 ) -> bool:
     changed = False
+    def case_priority(case: SkillBundleCase, index: int) -> tuple[int, float, int, int]:
+        ctx = dict(case.context or {})
+        credit_event = dict(ctx.get("credit_event") or {})
+        source = str(case.source or "")
+        confidence = float(credit_event.get("confidence") or 0.0)
+        is_credit = 1 if source.startswith("credit_assigner_") else 0
+        is_regression = 1 if any(token in source for token in ("regression", "failure", "integration")) else 0
+        return (is_credit + is_regression, confidence, index, 1)
+
     for attr in ("positive_cases", "negative_cases", "integration_cases"):
         cases = list(getattr(bundle, attr) or [])
         if len(cases) <= per_polarity_limit:
             continue
-        setattr(bundle, attr, cases[:per_polarity_limit])
+        indexed = list(enumerate(cases))
+        indexed.sort(key=lambda item: case_priority(item[1], item[0]), reverse=True)
+        setattr(bundle, attr, [case for _idx, case in indexed[:per_polarity_limit]])
         changed = True
     ordered_groups = [
-        ("positive_cases", list(bundle.positive_cases or [])),
-        ("negative_cases", list(bundle.negative_cases or [])),
-        ("integration_cases", list(bundle.integration_cases or [])),
+        (
+            "positive_cases",
+            [
+                case for _idx, case in sorted(
+                    enumerate(list(bundle.positive_cases or [])),
+                    key=lambda item: case_priority(item[1], item[0]),
+                    reverse=True,
+                )
+            ],
+        ),
+        (
+            "negative_cases",
+            [
+                case for _idx, case in sorted(
+                    enumerate(list(bundle.negative_cases or [])),
+                    key=lambda item: case_priority(item[1], item[0]),
+                    reverse=True,
+                )
+            ],
+        ),
+        (
+            "integration_cases",
+            [
+                case for _idx, case in sorted(
+                    enumerate(list(bundle.integration_cases or [])),
+                    key=lambda item: case_priority(item[1], item[0]),
+                    reverse=True,
+                )
+            ],
+        ),
     ]
     total_cases = sum(len(cases) for _, cases in ordered_groups)
     if total_cases > total_limit:
@@ -1398,7 +1459,7 @@ async def apply_bundle_patch_payload_via_editor(
         trim_changed = _trim_bundle_projection(
             temp_artifact.bundle,
             per_polarity_limit=_bundle_case_limit_per_polarity(),
-            total_limit=max(_bundle_case_limit_per_polarity(), int(os.environ.get("BFCL_BUNDLE_MAX_TOTAL_CASES", "6") or "6")),
+            total_limit=_bundle_max_total_cases(),
         )
     if trim_changed:
         target_bundle = temp_artifact.bundle
@@ -2104,6 +2165,11 @@ async def distill_skill_bundle_llm(
     ]
     if not bundle.bundle_id:
         bundle.bundle_id = f"{artifact.name}.bundle"
+    _trim_bundle_projection(
+        bundle,
+        per_polarity_limit=_bundle_case_limit_per_polarity(),
+        total_limit=_bundle_max_total_cases(),
+    )
     return bundle
 
 
@@ -2160,6 +2226,11 @@ def apply_bundle_patch_payload(
         bundle.maintenance_notes = maintenance_notes.strip()
     if not bundle.bundle_id:
         bundle.bundle_id = f"{artifact.name}.bundle"
+    _trim_bundle_projection(
+        bundle,
+        per_polarity_limit=_bundle_case_limit_per_polarity(),
+        total_limit=_bundle_max_total_cases(),
+    )
     return bundle
 
 

@@ -36,6 +36,7 @@ from academic.benchmarks.bfcl.maintenance.adapter import (
     refine_bfcl_skill_store_llm,
     run_bfcl_overlap_refactor_llm,
     select_bfcl_maintenance_targets,
+    trim_bundle_cases,
     update_skill_relation_graph,
     validate_skill_static_dependencies,
 )
@@ -89,6 +90,91 @@ from academic.skill_repository.types import SkillLineage
 _TEXT_PREVIEW_LIMIT = 160
 _ROLE_FEEDBACK_RULE_LIMIT = 5
 _CREDIT_EVIDENCE_CASE_LIMIT = 12
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)) or str(default))
+    except Exception:
+        return int(default)
+
+
+class _AsyncRWLock:
+    def __init__(self) -> None:
+        self._condition = asyncio.Condition()
+        self._readers = 0
+        self._writer = False
+
+    @contextlib.asynccontextmanager
+    async def read(self):
+        async with self._condition:
+            while self._writer:
+                await self._condition.wait()
+            self._readers += 1
+        try:
+            yield
+        finally:
+            async with self._condition:
+                self._readers -= 1
+                if self._readers == 0:
+                    self._condition.notify_all()
+
+    @contextlib.asynccontextmanager
+    async def write(self):
+        async with self._condition:
+            while self._writer or self._readers:
+                await self._condition.wait()
+            self._writer = True
+        try:
+            yield
+        finally:
+            async with self._condition:
+                self._writer = False
+                self._condition.notify_all()
+
+
+class SkillMaintenanceLockManager:
+    """Runtime locks for window-parallel micro maintenance."""
+
+    def __init__(self, *, micro_concurrency: int | None = None) -> None:
+        self.micro_semaphore = asyncio.Semaphore(max(1, int(micro_concurrency or _env_int("BFCL_MICRO_CONCURRENCY", 4))))
+        self.relation_graph_lock = asyncio.Lock()
+        self.store_commit_lock = asyncio.Lock()
+        self.macro_barrier = asyncio.Lock()
+        self._skill_locks: Dict[str, _AsyncRWLock] = {}
+
+    def _skill_lock(self, name: str) -> _AsyncRWLock:
+        key = str(name or "").strip()
+        lock = self._skill_locks.get(key)
+        if lock is None:
+            lock = _AsyncRWLock()
+            self._skill_locks[key] = lock
+        return lock
+
+    @contextlib.asynccontextmanager
+    async def target_write_locks(self, names: Sequence[str]):
+        ordered = sorted({str(name or "").strip() for name in names if str(name or "").strip()})
+        stack = contextlib.AsyncExitStack()
+        try:
+            for name in ordered:
+                await stack.enter_async_context(self._skill_lock(name).write())
+            yield
+        finally:
+            await stack.aclose()
+
+    async def snapshot_skill_versions(self, store: ArtifactStore, names: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+        out: Dict[str, Dict[str, Any]] = {}
+        for name in sorted({str(item or "").strip() for item in names if str(item or "").strip()}):
+            async with self._skill_lock(name).read():
+                artifact = store.get(name)
+                if artifact is None:
+                    continue
+                out[name] = {
+                    "version": int(artifact.version or 0),
+                    "bundle_version": int(artifact.bundle.bundle_version or 0),
+                    "status": str(artifact.status or ""),
+                }
+        return out
 
 
 def _first_run(detail: Dict[str, Any]) -> Dict[str, Any]:
@@ -573,6 +659,7 @@ def _apply_credit_bundle_case_suggestions(
                 **dict(artifact.bundle.fixtures or {}),
                 f"last_credit_{polarity}_case_task_id": task_id,
             }
+            trim_bundle_cases(artifact)
             added.append({"skill_name": artifact.name, "case_id": case_id, "task_id": task_id, "polarity": polarity})
     return added
 
@@ -1211,6 +1298,7 @@ def _current_round_state_projection(
         "n_train_details": len(train_details),
         "n_window_train_details": len(current_round_state.get("window_train_details") or []),
         "n_window_segments": len(current_round_state.get("window_segments") or []),
+        "n_prefetched_train_details": len(current_round_state.get("prefetched_train_details") or []),
         "n_micro_maintenance_reports": len(current_round_state.get("micro_maintenance_reports") or []),
         "n_maintenance_windows": len(current_round_state.get("maintenance_windows") or []),
         "n_online_refactor_attempts": len(online_refactor_attempts),
@@ -1326,6 +1414,7 @@ def _write_current_round_sidecars(
                 "maintenance_windows": list(current_round_state.get("maintenance_windows") or []),
                 "extraction_events": list(current_round_state.get("extraction_events") or []),
                 "credit_events": list(current_round_state.get("credit_events") or []),
+                "prefetched_train_details": list(current_round_state.get("prefetched_train_details") or []),
             },
         )
     if online_refactors_path is not None:
@@ -1380,6 +1469,9 @@ def _restore_current_round_state(
             restored["credit_events"] = [
                 dict(item or {}) for item in (payload.get("credit_events") or []) if isinstance(item, dict)
             ]
+            restored["prefetched_train_details"] = [
+                dict(item or {}) for item in (payload.get("prefetched_train_details") or []) if isinstance(item, dict)
+            ]
         else:
             restored["train_details"] = []
             restored["window_train_details"] = []
@@ -1388,6 +1480,7 @@ def _restore_current_round_state(
             restored["maintenance_windows"] = []
             restored["extraction_events"] = []
             restored["credit_events"] = []
+            restored["prefetched_train_details"] = []
     if "online_refactor_attempts" not in restored:
         attempts_path = str(restored.get("online_refactor_attempts_path") or "").strip()
         if attempts_path:
@@ -1417,6 +1510,9 @@ def _restore_current_round_state(
     restored["role_feedback"] = _normalize_role_feedback_memory(restored.get("role_feedback"))
     restored["extraction_events"] = [dict(item or {}) for item in (restored.get("extraction_events") or []) if isinstance(item, dict)]
     restored["credit_events"] = [dict(item or {}) for item in (restored.get("credit_events") or []) if isinstance(item, dict)]
+    restored["prefetched_train_details"] = [
+        dict(item or {}) for item in (restored.get("prefetched_train_details") or []) if isinstance(item, dict)
+    ]
     restored["window_train_details"] = [
         item for item in (restored.get("window_train_details") or []) if isinstance(item, dict) and item.get("task_id")
     ]
@@ -2035,6 +2131,8 @@ async def _run_bundle_test_and_refine_targets(
     tag: str,
     phase: str,
     credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    lock_manager: SkillMaintenanceLockManager | None = None,
     run_refine: bool = True,
     max_repair_rounds: int = 1,
 ) -> Dict[str, Any]:
@@ -2074,7 +2172,11 @@ async def _run_bundle_test_and_refine_targets(
             else:
                 result.aggregate = {**dict(result.aggregate or {}), "cached_reuse": True}
             if not result.aggregate.get("cached_reuse"):
-                store.add_test_result(result)
+                if lock_manager is not None:
+                    async with lock_manager.store_commit_lock:
+                        store.add_test_result(result)
+                else:
+                    store.add_test_result(result)
             round_results.append(result)
         test_results.extend(round_results)
         failed_targets = [
@@ -2091,6 +2193,7 @@ async def _run_bundle_test_and_refine_targets(
             model_name=model_name,
             artifact_names=failed_targets,
             credit_context_by_skill=credit_context_by_skill,
+            dependency_context_by_skill=dependency_context_by_skill,
             audit_context={
                 "phase": f"{phase}_refine",
                 "round_index": round_index,
@@ -2144,6 +2247,92 @@ def _credit_pre_refine_target_names(events: Sequence[Dict[str, Any]], targets: S
     return _unique_ordered(names)
 
 
+def _relation_names_for_artifact(artifact: SkillArtifact) -> List[str]:
+    relation = dict(artifact.metadata.get("skill_relation_graph") or {})
+    names: List[str] = []
+    names.extend(str(item).strip() for item in (artifact.dependencies or []) if str(item).strip())
+    for key in ("calls", "called_by", "co_retrieved_with", "co_used_with", "derived_from", "refines", "conflicts_with"):
+        names.extend(str(item).strip() for item in (relation.get(key) or []) if str(item).strip())
+    return _unique_ordered(name for name in names if name and name != artifact.name)
+
+
+def _reference_skill_names_for_targets(store: ArtifactStore, target_names: Sequence[str]) -> List[str]:
+    target_set = {str(item or "").strip() for item in target_names if str(item or "").strip()}
+    refs: List[str] = []
+    for name in target_set:
+        artifact = store.get(name)
+        if artifact is None:
+            continue
+        refs.extend(name for name in _relation_names_for_artifact(artifact) if name not in target_set)
+    return _unique_ordered(refs)
+
+
+def _dependency_context_projection(store: ArtifactStore, target_names: Sequence[str]) -> Dict[str, List[Dict[str, Any]]]:
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for name in _unique_ordered(target_names):
+        artifact = store.get(name)
+        if artifact is None:
+            out[name] = []
+            continue
+        rows: List[Dict[str, Any]] = []
+        for ref_name in _relation_names_for_artifact(artifact):
+            ref = store.get(ref_name)
+            if ref is None:
+                continue
+            rows.append(
+                {
+                    "name": ref.name,
+                    "kind": ref.kind,
+                    "description": ref.description,
+                    "version": ref.version,
+                    "bundle_version": ref.bundle.bundle_version,
+                    "status": ref.status,
+                    "dependencies": list(ref.dependencies or []),
+                    "allowed_tools": list((ref.metadata or {}).get("allowed_tools") or []),
+                    "domains": list((ref.metadata or {}).get("domains") or []),
+                }
+            )
+        out[name] = rows[:12]
+    return out
+
+
+def _mark_targets_stale_for_changed_refs(
+    *,
+    store: ArtifactStore,
+    target_names: Sequence[str],
+    before_refs: Dict[str, Dict[str, Any]],
+    after_refs: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    changed: List[Dict[str, Any]] = []
+    for ref_name, before in before_refs.items():
+        after = after_refs.get(ref_name)
+        if after is None or before != after:
+            changed.append({"skill_name": ref_name, "before": before, "after": after})
+    if not changed:
+        return []
+    for name in _unique_ordered(target_names):
+        artifact = store.get(name)
+        if artifact is None:
+            continue
+        artifact.stale = True
+        artifact.metadata["stale_due_to_dependency_change"] = True
+        artifact.metadata["stale_dependency_changes"] = copy.deepcopy(changed[-12:])
+    return changed
+
+
+async def _update_skill_relation_graph_locked(
+    *,
+    lock_manager: SkillMaintenanceLockManager | None,
+    store: ArtifactStore,
+    **kwargs: Any,
+) -> None:
+    if lock_manager is None:
+        update_skill_relation_graph(store, **kwargs)
+        return
+    async with lock_manager.relation_graph_lock:
+        update_skill_relation_graph(store, **kwargs)
+
+
 async def _run_credit_pre_refine_targets(
     *,
     store: ArtifactStore,
@@ -2155,6 +2344,7 @@ async def _run_credit_pre_refine_targets(
     round_index: int,
     task_index: int,
     tag: str,
+    dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
 ) -> List[Dict[str, Any]]:
     pre_refine_targets = _credit_pre_refine_target_names(task_credit_events, target_names)
     if not pre_refine_targets:
@@ -2204,6 +2394,7 @@ async def _run_credit_pre_refine_targets(
         model_name=model_name,
         artifact_names=pre_refine_targets,
         credit_context_by_skill=credit_context_by_skill,
+        dependency_context_by_skill=dependency_context_by_skill,
         audit_context={
             "phase": "micro_credit_pre_refine",
             "round_index": round_index,
@@ -2285,6 +2476,8 @@ async def _run_micro_maintenance(
     task_index: int,
     tag: str,
     credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    lock_manager: SkillMaintenanceLockManager | None = None,
 ) -> Dict[str, Any]:
     token_start = maintenance_token_event_count()
     changed_case_targets = _unique_ordered(str(row.get("skill_name") or "") for row in credit_bundle_cases)
@@ -2302,6 +2495,9 @@ async def _run_micro_maintenance(
         "refine_decisions": [],
         "static_dependency_validation": [],
         "credit_bundle_cases": copy.deepcopy(list(credit_bundle_cases)),
+        "credit_negative_bundle_cases": [
+            copy.deepcopy(row) for row in credit_bundle_cases if row.get("polarity") == "negative"
+        ],
         "run_overlap_refactor": False,
         "run_extractor_trl": False,
         "run_pending_revocation": False,
@@ -2322,6 +2518,7 @@ async def _run_micro_maintenance(
         round_index=round_index,
         task_index=task_index,
         tag=tag,
+        dependency_context_by_skill=dependency_context_by_skill,
     )
     tested = await _run_bundle_test_and_refine_targets(
         store=store,
@@ -2341,6 +2538,8 @@ async def _run_micro_maintenance(
         tag=tag,
         phase="micro",
         credit_context_by_skill=credit_context_by_skill,
+        dependency_context_by_skill=dependency_context_by_skill,
+        lock_manager=lock_manager,
         run_refine=True,
         max_repair_rounds=max_repair_rounds,
     )
@@ -2350,6 +2549,40 @@ async def _run_micro_maintenance(
     report["static_dependency_validation"] = validate_skill_static_dependencies(store, targets)
     report["token_breakdown"] = _token_breakdown_delta(token_start)
     return report
+
+
+async def _run_locked_micro_maintenance(
+    *,
+    lock_manager: SkillMaintenanceLockManager,
+    store: ArtifactStore,
+    target_names: Sequence[str],
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    target_names = _unique_ordered(target_names)
+    if not target_names:
+        return await _run_micro_maintenance(store=store, **kwargs)
+    async with lock_manager.micro_semaphore:
+        reference_names = _reference_skill_names_for_targets(store, target_names)
+        before_refs = await lock_manager.snapshot_skill_versions(store, reference_names)
+        dependency_context = _dependency_context_projection(store, target_names)
+        async with lock_manager.target_write_locks(target_names):
+            report = await _run_micro_maintenance(
+                store=store,
+                dependency_context_by_skill=dependency_context,
+                lock_manager=lock_manager,
+                **kwargs,
+            )
+        after_refs = await lock_manager.snapshot_skill_versions(store, reference_names)
+        changed_refs = _mark_targets_stale_for_changed_refs(
+            store=store,
+            target_names=target_names,
+            before_refs=before_refs,
+            after_refs=after_refs,
+        )
+        if changed_refs:
+            report["stale_dependency_changes"] = copy.deepcopy(changed_refs)
+        report["locked_targets"] = list(target_names)
+        return report
 
 
 async def _run_macro_maintenance(
@@ -2505,6 +2738,7 @@ async def _run_related_evolve_experiment(
     micro_maintenance_step: int = 1,
     macro_maintenance_step: int = 10,
     test_concurrency: int = 1,
+    train_window_concurrency: int = 1,
 ) -> Dict[str, Any]:
     reset_maintenance_token_stats()
     effective_epochs = max(1, int(epochs if epochs is not None else 1))
@@ -2513,12 +2747,15 @@ async def _run_related_evolve_experiment(
     micro_maintenance_step = max(1, int(micro_maintenance_step or 1))
     macro_maintenance_step = max(1, int(macro_maintenance_step or 10))
     test_concurrency = max(1, int(test_concurrency or 1))
+    train_window_concurrency = max(1, int(train_window_concurrency or 1))
+    micro_concurrency = max(1, _env_int("BFCL_MICRO_CONCURRENCY", 4))
     train_tasks, test_tasks = _tasks_from_manifest(manifest, cache_dir=cache_dir, data_source=data_source)
     strict_embeddings = os.environ.get("BFCL_STRICT_SEGMENT_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes"}
     segment_index = SegmentVectorIndex(strict_embeddings=strict_embeddings)
     round_reports: List[Dict[str, Any]] = []
     checkpoint = _phase_partial_path(output_path, "checkpoint") if checkpoint_path is None else checkpoint_path
     store = ArtifactStore()
+    maintenance_locks = SkillMaintenanceLockManager(micro_concurrency=micro_concurrency)
     role_feedback = _normalize_role_feedback_memory(None)
     if use_handwritten_skills:
         for artifact in default_bfcl_skill_store().all():
@@ -2588,6 +2825,11 @@ async def _run_related_evolve_experiment(
                 ]
                 micro_maintenance_reports = list(resumed_round_state.get("micro_maintenance_reports") or [])
                 maintenance_windows = list(resumed_round_state.get("maintenance_windows") or [])
+                prefetched_train_details = {
+                    int(row.get("task_index")): dict(row or {})
+                    for row in (resumed_round_state.get("prefetched_train_details") or [])
+                    if isinstance(row, dict) and row.get("detail") and str(row.get("task_index", "")).lstrip("-").isdigit()
+                }
                 online_refactor_budget = _online_refactor_budget_from_env()
                 role_feedback = _normalize_role_feedback_memory(resumed_round_state.get("role_feedback") or role_feedback)
                 start_task_index = int(resumed_round_state.get("next_task_index") or 0)
@@ -2602,13 +2844,43 @@ async def _run_related_evolve_experiment(
                 window_segments = []
                 micro_maintenance_reports = []
                 maintenance_windows = []
+                prefetched_train_details = {}
                 online_refactor_budget = _online_refactor_budget_from_env()
                 start_task_index = 0
             resumed_round_state = None
-            for task_index in range(start_task_index, len(train_tasks)):
-                task = train_tasks[task_index]
-                details = await _run_bfcl_baseline(
-                    [task],
+            pending_micro_jobs: List[Tuple[int, List[str], Dict[str, Any]]] = []
+
+            async def flush_pending_micro_jobs() -> None:
+                nonlocal pending_micro_jobs, micro_maintenance_reports
+                if not pending_micro_jobs:
+                    return
+                tasks = [
+                    asyncio.create_task(
+                        _run_locked_micro_maintenance(
+                            lock_manager=maintenance_locks,
+                            store=store,
+                            target_names=target_names,
+                            **micro_kwargs,
+                        )
+                    )
+                    for _idx, target_names, micro_kwargs in pending_micro_jobs
+                ]
+                completed = await asyncio.gather(*tasks)
+                for (idx, _target_names, _micro_kwargs), report in sorted(zip(pending_micro_jobs, completed), key=lambda item: item[0][0]):
+                    row = dict(report or {})
+                    row.setdefault("task_index", idx)
+                    micro_maintenance_reports.append(row)
+                pending_micro_jobs = []
+
+            async def precompute_window_records(
+                *,
+                window_start: int,
+                window_end: int,
+            ) -> Dict[int, Dict[str, Any]]:
+                rollout_tasks = train_tasks[window_start:window_end]
+                snapshot_artifacts = [copy.deepcopy(artifact) for artifact in store.all()]
+                rollout_details = await _run_bfcl_baseline(
+                    rollout_tasks,
                     1,
                     llm_config,
                     tools,
@@ -2627,13 +2899,148 @@ async def _run_related_evolve_experiment(
                     temperature=temperature,
                     synthetic_continue=synthetic_continue,
                     explicit_skill_tool=explicit_skill_tool,
-                    phase=f"related_train_epoch_{round_index}",
+                    phase=f"related_train_epoch_{round_index}_window_{window_start}_{window_end - 1}",
+                    concurrency=train_window_concurrency,
                 )
-                detail = details[0]
+
+                async def precompute_one(offset: int, detail: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+                    absolute_task_index = window_start + offset
+                    current_task = train_tasks[absolute_task_index]
+                    candidate_names = _mentioned_skill_names(detail)
+                    candidate_artifacts = [
+                        copy.deepcopy(artifact)
+                        for artifact in snapshot_artifacts
+                        if artifact.name in set(candidate_names)
+                    ]
+                    credit_rows: List[Dict[str, Any]] = []
+                    if candidate_names and candidate_artifacts:
+                        credit_payload = await assign_skill_credit_llm(
+                            detail=detail,
+                            candidate_artifacts=candidate_artifacts,
+                            llm_config=llm_config,
+                            model_name=model_name,
+                            audit_context={
+                                "phase": "online_credit_assignment",
+                                "experiment": tag,
+                                "round_index": round_index,
+                                "task_id": current_task.task_id,
+                                "task_index": absolute_task_index,
+                                "window_concurrent": True,
+                            },
+                        )
+                        credit_rows = _credit_event_records(
+                            detail=detail,
+                            credit_payload=credit_payload,
+                            round_index=round_index,
+                            task_index=absolute_task_index,
+                        )
+                    results = [_result_from_dict(run).as_dict() for run in detail.get("runs", [])]
+                    extracted = await extract_bfcl_skill_artifacts_llm(
+                        results,
+                        tool_schemas=tools,
+                        existing_artifacts=[],
+                        extractor_rules=(role_feedback.get("extractor") or {}).get("rules") if extractor_trl_enabled else [],
+                        llm_config=llm_config,
+                        model_name=model_name,
+                        audit_context={
+                            "phase": "online_extract",
+                            "experiment": tag,
+                            "round_index": round_index,
+                            "task_id": current_task.task_id,
+                            "task_index": absolute_task_index,
+                            "window_concurrent": True,
+                        },
+                    )
+                    extracted = _mark_prior_artifacts_pending(
+                        extracted,
+                        round_index=round_index,
+                        task_index=absolute_task_index,
+                        task_id=current_task.task_id,
+                    )
+                    extraction_rows = _extraction_event_records(
+                        detail=detail,
+                        extracted_artifacts=extracted,
+                        round_index=round_index,
+                        task_index=absolute_task_index,
+                    )
+                    segments = _extract_task_segments(detail)
+                    return absolute_task_index, {
+                        "task_index": absolute_task_index,
+                        "detail": detail,
+                        "candidate_names": candidate_names,
+                        "credit_events": credit_rows,
+                        "new_artifacts": [artifact.as_dict() for artifact in extracted],
+                        "extraction_events": extraction_rows,
+                        "new_segments": [segment.as_dict() for segment in segments],
+                    }
+
+                sem = asyncio.Semaphore(train_window_concurrency)
+
+                async def guarded(offset: int, detail: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+                    async with sem:
+                        return await precompute_one(offset, detail)
+
+                records = await asyncio.gather(
+                    *[guarded(offset, detail) for offset, detail in enumerate(rollout_details)]
+                )
+                return {idx: record for idx, record in records}
+
+            for task_index in range(start_task_index, len(train_tasks)):
+                task = train_tasks[task_index]
+                if train_window_concurrency > 1 and task_index not in prefetched_train_details:
+                    window_end = min(
+                        len(train_tasks),
+                        ((task_index // macro_maintenance_step) + 1) * macro_maintenance_step,
+                    )
+                    prefetched_train_details.update(
+                        await precompute_window_records(
+                            window_start=task_index,
+                            window_end=window_end,
+                        )
+                    )
+                prefetched_record: Dict[str, Any] | None = None
+                if task_index in prefetched_train_details:
+                    prefetched_record = dict(prefetched_train_details.pop(task_index))
+                    detail = dict(prefetched_record.get("detail") or {})
+                else:
+                    details = await _run_bfcl_baseline(
+                        [task],
+                        1,
+                        llm_config,
+                        tools,
+                        store,
+                        adapter_mode="official",
+                        model_name=model_name,
+                        execution_backend=execution_backend,
+                        prompt_style=prompt_style,
+                        tool_api_style=tool_api_style,
+                        top_k_skills=top_k_skills,
+                        min_skill_score=min_skill_score,
+                        skill_injection_mode=skill_injection_mode,
+                        max_steps_per_turn=max_steps_per_turn,
+                        partial_output=None,
+                        max_task_seconds=max_task_seconds,
+                        temperature=temperature,
+                        synthetic_continue=synthetic_continue,
+                        explicit_skill_tool=explicit_skill_tool,
+                        phase=f"related_train_epoch_{round_index}",
+                        concurrency=1,
+                    )
+                    detail = details[0]
                 train_details.append(detail)
                 window_train_details.append(detail)
-                candidate_names = _mentioned_skill_names(detail)
-                if candidate_names:
+                candidate_names = list(prefetched_record.get("candidate_names") or []) if prefetched_record else _mentioned_skill_names(detail)
+                if prefetched_record is not None:
+                    recent_credit_events = [dict(item or {}) for item in (prefetched_record.get("credit_events") or []) if isinstance(item, dict)]
+                    credit_events.extend(recent_credit_events)
+                    if recent_credit_events:
+                        _apply_credit_case_evidence(store=store, credit_events=credit_events)
+                    credit_bundle_cases = _apply_credit_bundle_case_suggestions(
+                        store=store,
+                        detail=detail,
+                        credit_events=recent_credit_events,
+                    ) if recent_credit_events else []
+                elif candidate_names:
                     candidate_artifacts = [artifact for artifact in store.all() if artifact.name in set(candidate_names)]
                     if candidate_artifacts:
                         credit_payload = await assign_skill_credit_llm(
@@ -2649,53 +3056,56 @@ async def _run_related_evolve_experiment(
                                 "task_index": task_index,
                             },
                         )
-                        credit_events.extend(
-                            _credit_event_records(
-                                detail=detail,
-                                credit_payload=credit_payload,
-                                round_index=round_index,
-                                task_index=task_index,
-                            )
+                        recent_credit_events = _credit_event_records(
+                            detail=detail,
+                            credit_payload=credit_payload,
+                            round_index=round_index,
+                            task_index=task_index,
                         )
+                        credit_events.extend(recent_credit_events)
                         _apply_credit_case_evidence(store=store, credit_events=credit_events)
                         credit_bundle_cases = _apply_credit_bundle_case_suggestions(
                             store=store,
                             detail=detail,
-                            credit_events=[
-                                event for event in credit_events if event.get("task_id") == task.task_id
-                            ],
+                            credit_events=recent_credit_events,
                         )
                     else:
+                        recent_credit_events = []
                         credit_bundle_cases = []
                 else:
+                    recent_credit_events = []
                     credit_bundle_cases = []
-                update_skill_relation_graph(
-                    store,
+                await _update_skill_relation_graph_locked(
+                    lock_manager=maintenance_locks,
+                    store=store,
                     retrieved=candidate_names,
                     used=_used_skill_names(detail),
                 )
-                results = [_result_from_dict(run).as_dict() for run in detail.get("runs", [])]
-                new_artifacts = await extract_bfcl_skill_artifacts_llm(
-                    results,
-                    tool_schemas=tools,
-                    existing_artifacts=[],
-                    extractor_rules=(role_feedback.get("extractor") or {}).get("rules") if extractor_trl_enabled else [],
-                    llm_config=llm_config,
-                    model_name=model_name,
-                    audit_context={
-                        "phase": "online_extract",
-                        "experiment": tag,
-                        "round_index": round_index,
-                        "task_id": task.task_id,
-                        "task_index": task_index,
-                    },
-                )
-                new_artifacts = _mark_prior_artifacts_pending(
-                    new_artifacts,
-                    round_index=round_index,
-                    task_index=task_index,
-                    task_id=task.task_id,
-                )
+                if prefetched_record is not None:
+                    new_artifacts = ArtifactStore(prefetched_record.get("new_artifacts") or []).all()
+                else:
+                    results = [_result_from_dict(run).as_dict() for run in detail.get("runs", [])]
+                    new_artifacts = await extract_bfcl_skill_artifacts_llm(
+                        results,
+                        tool_schemas=tools,
+                        existing_artifacts=[],
+                        extractor_rules=(role_feedback.get("extractor") or {}).get("rules") if extractor_trl_enabled else [],
+                        llm_config=llm_config,
+                        model_name=model_name,
+                        audit_context={
+                            "phase": "online_extract",
+                            "experiment": tag,
+                            "round_index": round_index,
+                            "task_id": task.task_id,
+                            "task_index": task_index,
+                        },
+                    )
+                    new_artifacts = _mark_prior_artifacts_pending(
+                        new_artifacts,
+                        round_index=round_index,
+                        task_index=task_index,
+                        task_id=task.task_id,
+                    )
                 for artifact in new_artifacts:
                     store.add_pending(artifact)
                 if new_artifacts:
@@ -2705,22 +3115,33 @@ async def _run_related_evolve_experiment(
                         segment_embeddings={},
                     )
                 if new_artifacts:
-                    update_skill_relation_graph(
-                        store,
+                    await _update_skill_relation_graph_locked(
+                        lock_manager=maintenance_locks,
+                        store=store,
                         derived_from={
                             artifact.name: candidate_names
                             for artifact in new_artifacts
                         },
                     )
-                extraction_events.extend(
-                    _extraction_event_records(
-                        detail=detail,
-                        extracted_artifacts=new_artifacts,
-                        round_index=round_index,
-                        task_index=task_index,
+                if prefetched_record is not None:
+                    extraction_events.extend(
+                        [dict(item or {}) for item in (prefetched_record.get("extraction_events") or []) if isinstance(item, dict)]
                     )
-                )
-                new_segments = _extract_task_segments(detail)
+                    new_segments = [
+                        TraceSegment(**dict(item))
+                        for item in (prefetched_record.get("new_segments") or [])
+                        if isinstance(item, dict)
+                    ]
+                else:
+                    extraction_events.extend(
+                        _extraction_event_records(
+                            detail=detail,
+                            extracted_artifacts=new_artifacts,
+                            round_index=round_index,
+                            task_index=task_index,
+                        )
+                    )
+                    new_segments = _extract_task_segments(detail)
                 window_segments.extend(new_segments)
                 segment_index.add_segments(new_segments, round_index=round_index, task_id=task.task_id)
                 new_segment_embeddings = segment_index.embedding_map(
@@ -2733,9 +3154,6 @@ async def _run_related_evolve_experiment(
                     segment_embeddings=new_segment_embeddings,
                 )
                 current_credit_context = _credit_context_by_skill(credit_events)
-                recent_credit_events = [
-                    event for event in credit_events if event.get("task_id") == task.task_id
-                ]
                 micro_targets = _unique_ordered([*candidate_names, *_strong_credit_targets(recent_credit_events)])
                 micro_report: Dict[str, Any] = {
                     "phase": "micro",
@@ -2753,35 +3171,46 @@ async def _run_related_evolve_experiment(
                     ],
                 }
                 if micro_targets and ((task_index + 1) % micro_maintenance_step == 0):
-                    micro_report = await _run_micro_maintenance(
-                        store=store,
-                        detail=detail,
-                        task_credit_events=recent_credit_events,
-                        credit_bundle_cases=credit_bundle_cases,
-                        relevant_skill_names=micro_targets,
-                        tools=tools,
-                        llm_config=llm_config,
-                        model_name=model_name,
-                        execution_backend=execution_backend,
-                        prompt_style=prompt_style,
-                        tool_api_style=tool_api_style,
-                        max_steps_per_turn=max_steps_per_turn,
-                        max_task_seconds=max_task_seconds,
-                        temperature=temperature,
-                        synthetic_continue=synthetic_continue,
-                        explicit_skill_tool=explicit_skill_tool,
-                        round_index=round_index,
-                        task_index=task_index,
-                        tag=tag,
-                        credit_context_by_skill=current_credit_context,
-                    )
-                    micro_report.update({"phase": "micro", "task_id": task.task_id, "task_index": task_index})
-                    micro_report["credit_bundle_cases"] = copy.deepcopy(credit_bundle_cases)
-                    micro_report["credit_negative_bundle_cases"] = [
-                        copy.deepcopy(row) for row in credit_bundle_cases if row.get("polarity") == "negative"
-                    ]
-                micro_maintenance_reports.append(micro_report)
+                    micro_kwargs = {
+                        "detail": detail,
+                        "task_credit_events": recent_credit_events,
+                        "credit_bundle_cases": credit_bundle_cases,
+                        "relevant_skill_names": micro_targets,
+                        "tools": tools,
+                        "llm_config": llm_config,
+                        "model_name": model_name,
+                        "execution_backend": execution_backend,
+                        "prompt_style": prompt_style,
+                        "tool_api_style": tool_api_style,
+                        "max_steps_per_turn": max_steps_per_turn,
+                        "max_task_seconds": max_task_seconds,
+                        "temperature": temperature,
+                        "synthetic_continue": synthetic_continue,
+                        "explicit_skill_tool": explicit_skill_tool,
+                        "round_index": round_index,
+                        "task_index": task_index,
+                        "tag": tag,
+                        "credit_context_by_skill": current_credit_context,
+                    }
+                    if train_window_concurrency > 1 and micro_concurrency > 1:
+                        pending_micro_jobs.append((task_index, list(micro_targets), micro_kwargs))
+                    else:
+                        micro_report = await _run_locked_micro_maintenance(
+                            lock_manager=maintenance_locks,
+                            store=store,
+                            target_names=micro_targets,
+                            **micro_kwargs,
+                        )
+                        micro_report.update({"phase": "micro", "task_id": task.task_id, "task_index": task_index})
+                        micro_report["credit_bundle_cases"] = copy.deepcopy(credit_bundle_cases)
+                        micro_report["credit_negative_bundle_cases"] = [
+                            copy.deepcopy(row) for row in credit_bundle_cases if row.get("polarity") == "negative"
+                        ]
+                        micro_maintenance_reports.append(micro_report)
+                else:
+                    micro_maintenance_reports.append(micro_report)
                 if (task_index + 1) % macro_maintenance_step == 0:
+                    await flush_pending_micro_jobs()
                     macro_report = await _run_macro_maintenance(
                         store=store,
                         train_details=window_train_details,
@@ -2829,6 +3258,8 @@ async def _run_related_evolve_experiment(
                     maintenance_windows.append(macro_report)
                     window_train_details = []
                     window_segments = []
+                if pending_micro_jobs:
+                    continue
                 current_round_state = {
                     "round_index": round_index,
                     "next_task_index": task_index + 1,
@@ -2840,6 +3271,10 @@ async def _run_related_evolve_experiment(
                     "online_refactor_attempts": online_refactor_attempts,
                     "extraction_events": extraction_events,
                     "credit_events": credit_events,
+                    "prefetched_train_details": [
+                        dict(record)
+                        for _idx, record in sorted(prefetched_train_details.items())
+                    ],
                     "role_feedback": role_feedback,
                     "seen_refactor_cliques": [list(item) for item in sorted(seen_refactor_cliques)],
                     "online_refactor_budget_remaining": online_refactor_budget,
@@ -2866,6 +3301,7 @@ async def _run_related_evolve_experiment(
                         checkpoint_path=checkpoint,
                     ),
                 )
+            await flush_pending_micro_jobs()
             if window_train_details or window_segments:
                 final_macro = await _run_macro_maintenance(
                     store=store,
@@ -3023,6 +3459,8 @@ async def _run_related_evolve_experiment(
                 "maintenance_windows": copy.deepcopy(maintenance_windows),
                 "macro_maintenance_step": macro_maintenance_step,
                 "micro_maintenance_step": micro_maintenance_step,
+                "train_window_concurrency": train_window_concurrency,
+                "micro_concurrency": micro_concurrency,
                 "refactor_segment_coverage": copy.deepcopy(round_maintenance.get("refactor_segment_coverage") or []),
                 "online_refactor_attempts": _project_online_refactor_attempts(online_refactor_attempts)
                 if output_detail_level == "compact" else online_refactor_attempts,
@@ -3112,6 +3550,8 @@ async def _run_related_evolve_experiment(
             "micro_maintenance_step": micro_maintenance_step,
             "macro_maintenance_step": macro_maintenance_step,
             "test_concurrency": test_concurrency,
+            "train_window_concurrency": train_window_concurrency,
+            "micro_concurrency": micro_concurrency,
             "top_k_skills": top_k_skills,
             "min_skill_score": min_skill_score,
             "skill_injection_mode": skill_injection_mode,
@@ -3123,6 +3563,8 @@ async def _run_related_evolve_experiment(
         "epochs": effective_epochs,
         "micro_maintenance_step": micro_maintenance_step,
         "macro_maintenance_step": macro_maintenance_step,
+        "train_window_concurrency": train_window_concurrency,
+        "micro_concurrency": micro_concurrency,
         "maintenance_windows": [
             window
             for report in round_reports
@@ -3210,8 +3652,10 @@ async def _run_related_baseline(
     synthetic_continue: bool,
     explicit_skill_tool: bool,
     tag: str,
+    test_concurrency: int = 1,
 ) -> Dict[str, Any]:
     _, test_tasks = _tasks_from_manifest(manifest, cache_dir=cache_dir, data_source=data_source)
+    test_concurrency = max(1, int(test_concurrency or 1))
     details = await _run_bfcl_baseline(
         test_tasks,
         1,
@@ -3232,6 +3676,7 @@ async def _run_related_baseline(
         synthetic_continue=synthetic_continue,
         explicit_skill_tool=explicit_skill_tool,
         phase="related_baseline_test",
+        concurrency=test_concurrency,
     )
     summary = _aggregate("bfcl_v3", "related_task_baseline", tag, llm_config, len(manifest.get("train_task_ids") or []), details)
     return {
@@ -3251,6 +3696,7 @@ async def _run_related_baseline(
             "skill_injection_mode": "none",
             "max_steps_per_turn": max_steps_per_turn,
             "max_task_seconds": max_task_seconds,
+            "test_concurrency": test_concurrency,
         },
         "manifest": manifest,
         "n_test": len(details),
@@ -3279,6 +3725,7 @@ async def main_async() -> None:
     parser.add_argument("--micro-maintenance-step", type=int, default=1)
     parser.add_argument("--macro-maintenance-step", type=int, default=10)
     parser.add_argument("--test-concurrency", type=int, default=int(os.environ.get("BFCL_RELATED_TEST_CONCURRENCY", "1") or "1"))
+    parser.add_argument("--train-window-concurrency", type=int, default=int(os.environ.get("BFCL_RELATED_TRAIN_WINDOW_CONCURRENCY", "1") or "1"))
     parser.add_argument("--execution-backend", choices=["official", "local_mock", "auto"], default="official")
     parser.add_argument("--prompt-style", choices=["native", "official", "academic"], default="native")
     parser.add_argument(
@@ -3390,6 +3837,7 @@ async def main_async() -> None:
             synthetic_continue=args.synthetic_continue,
             explicit_skill_tool=args.explicit_skill_tool,
             tag=args.tag,
+            test_concurrency=args.test_concurrency,
         )
         out = resolved_output
     else:
@@ -3424,6 +3872,7 @@ async def main_async() -> None:
             micro_maintenance_step=args.micro_maintenance_step,
             macro_maintenance_step=args.macro_maintenance_step,
             test_concurrency=args.test_concurrency,
+            train_window_concurrency=args.train_window_concurrency,
         )
         out = resolved_output
 

@@ -33,15 +33,21 @@
 - `academic/paper/RELATED_WORK_SURVEY.md`
   - Skill 自进化近期文献调研
   - 维护逐篇对比、related work 素材、当前项目定位和后续差异化方向
+  - 2026-05-12 已补入 PSN、SkillMOO、AgentOptimizer；当前论文 novelty 应收缩到 test-grounded repository population selection，而不是泛称 skill evolution / refactoring / cost-aware optimization
 - `academic/paper/BENCHMARK_SURVEY.md`
   - 同期工作相关 benchmark 调研
   - 维护各 benchmark 的任务形态、反馈信号、skill format、工程成本和实验优先级
 - `academic/paper/related_work_notes/`
   - 每篇同期工作的独立中文笔记
   - `README.md` 提供按技术路线组织的索引
+  - 新增强相关笔记：
+    - `psn.md`：programmatic skill network、fault localization、maturity gating、rollback refactoring
+    - `skillmoo.md`：skill bundle pass rate / cost 多目标优化
+    - `agentoptimizer.md`：functions as learnable agent weights
 - `academic/paper/paper.md`
   - 当前论文草稿
   - `Related Work` 已同步近期 skill evolution 调研
+  - 当前主张：多次 LLM sampling 产生候选 skill 后，用 valid-set utility、token/cost、retrieval noise、redundancy、dependency risk 和 maintenance cost 做 repository-level selection
 - `academic/refactoring_lab/planning_replay_benchmark.py`
   - replay benchmark 实现
 - `academic/refactoring_lab/experiments/planning_replay_cases.json`

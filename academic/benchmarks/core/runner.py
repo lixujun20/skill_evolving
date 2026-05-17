@@ -41,7 +41,13 @@ from academic.benchmarks.bfcl.skills import (
     write_bfcl_handwritten_skills,
 )
 from academic.benchmarks.core.registry import BENCHMARK_REGISTRY
-from academic.benchmarks.spreadsheet.adapter import load_spreadsheet_tasks, run_spreadsheet_task
+from academic.benchmarks.core.evolution import OnlineSkillEvolutionRunner
+from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig
+from academic.benchmarks.spreadsheet.adapter import (
+    SpreadsheetMaintenanceAdapter,
+    load_spreadsheet_tasks,
+    run_spreadsheet_task,
+)
 from academic.benchmarks.core.types import (
     BenchmarkResult,
     SkillArtifact,
@@ -81,6 +87,7 @@ async def main_async() -> None:
     )
     parser.add_argument("--n-runs", type=int, default=1)
     parser.add_argument("--n-train-runs", type=int, default=1)
+    parser.add_argument("--test-concurrency", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--tag", default="smoke")
     parser.add_argument("--refresh-data", action="store_true")
@@ -295,7 +302,47 @@ async def main_async() -> None:
             n_test=n_test,
             refresh=args.refresh_data,
         )
-        details = await _run_spreadsheet_baseline(test, args.n_runs, args.llm_config, store)
+        if args.mode == "evolve":
+            runner = OnlineSkillEvolutionRunner(
+                adapter=SpreadsheetMaintenanceAdapter(),
+                config=MaintenanceRunConfig(
+                    llm_config=args.llm_config,
+                    model_name=args.model_name,
+                    tag=args.tag,
+                    n_train_runs=args.n_train_runs,
+                    n_test_runs=args.n_runs,
+                    micro_maintenance_step=1,
+                    macro_maintenance_step=10,
+                    test_concurrency=args.test_concurrency,
+                    max_task_seconds=args.max_task_seconds,
+                    top_k_skills=args.top_k_skills,
+                ),
+            )
+            summary = await runner.run(
+                train_tasks=train,
+                test_tasks=test,
+                seed_store=store,
+                rounds=1,
+            )
+            summary["elapsed_s"] = round(time.monotonic() - t0, 3)
+            out = args.output or RESULTS_DIR / f"{args.benchmark}_{args.tag}_{args.mode}.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(summary, ensure_ascii=False, indent=2))
+            compact_summary = {
+                k: v
+                for k, v in summary.items()
+                if k not in {"train_details", "test_details", "skills"}
+            }
+            print(json.dumps(compact_summary, ensure_ascii=False, indent=2))
+            print(f"Saved detail: {out}")
+            return
+        details = await _run_spreadsheet_baseline(
+            test,
+            args.n_runs,
+            args.llm_config,
+            store,
+            model_name=args.model_name,
+        )
     else:
         raise ValueError(f"Benchmark {args.benchmark} is registry-only for now")
 
@@ -604,6 +651,7 @@ async def _run_spreadsheet_baseline(
     n_runs: int,
     llm_config: str,
     store: ArtifactStore,
+    model_name: str | None = None,
 ) -> List[Dict[str, Any]]:
     details = []
     for task in tasks:
@@ -612,6 +660,7 @@ async def _run_spreadsheet_baseline(
             result = await run_spreadsheet_task(
                 task,
                 llm_config=llm_config,
+                model_name=model_name,
                 artifact_store=store,
             )
             item = result.as_dict()

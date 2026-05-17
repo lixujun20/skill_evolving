@@ -1127,6 +1127,147 @@ Ablation 4: refinement (with vs. without)
 
 
 
+## Appendix A. Benchmark Details
+
+### A.1 BFCL v3: Function Calling and Multi-Turn Tool Use
+
+Berkeley Function Calling Leaderboard (BFCL) was introduced by the UC Berkeley
+Gorilla team as a benchmark for evaluating whether language models can select
+and invoke external functions correctly. The official BFCL description frames
+function calling as the ability to map a natural language request into one or
+more valid API/tool invocations, including correct function names, argument
+schemas, values, ordering, and cases where no function should be called. The
+ICML 2025 paper, *The Berkeley Function Calling Leaderboard (BFCL): From Tool
+Use to Agentic Evaluation of Large Language Models*, further positions BFCL as
+a response to the lack of standard, scalable evaluation for real-world tool use.
+The benchmark covers serial and parallel function calls, multiple programming
+languages, AST-based evaluation, executable evaluation, and later versions add
+more realistic multi-turn and multi-step agentic settings.
+
+In this paper, we use BFCL v3 as the primary benchmark for online skill
+evolution because it stresses exactly the type of behavior a skill repository is
+supposed to improve: repeated argument binding, ordering-sensitive workflows,
+schema obedience, state tracking across turns, and tool-use recovery after
+errors. A BFCL task is not simply a question-answer pair. It provides a
+conversation, a tool environment, and an official expected call trace. The
+model must produce calls that are both semantically appropriate and compatible
+with the tool schema. This makes BFCL a useful setting for measuring whether a
+skill helps the executor call tools more reliably, or whether it pollutes the
+prompt and causes extra or malformed calls.
+
+Our local BFCL related-task split uses a curated subset of BFCL v3 multi-turn
+tasks. The current recommended setting is a deterministic 150/50 split: 150
+training tasks for online evolution and 50 held-out tasks for frozen-store
+evaluation. Training is serial because the skill repository, overlap graph, and
+feedback memory are mutated after each task. Held-out evaluation is read-only
+and can run concurrently. The related-task manifest ranks examples by repeated
+tool-family patterns, lookup/action mixtures, path length, and multi-turn
+argument-binding failure modes.
+
+One representative BFCL training task is `multi_turn_base_118`, a TradingBot
+workflow. The user first asks to inspect a stock watchlist, then remove the
+first stock, then buy 100 shares of AAPL at the current market price, then
+inspect the latest order, and finally cancel that order. The expected trace is:
+
+```text
+turn 1: get_watchlist()
+turn 2: remove_stock_from_watchlist(symbol='NVDA')
+turn 3: get_stock_info(symbol='AAPL')
+        place_order(order_type='Buy', symbol='AAPL', price=227.16, amount=100)
+turn 4: get_order_details(order_id=12446)
+turn 5: cancel_order(order_id=12446)
+```
+
+This example tests several reusable behaviors. The executor must bind the
+watchlist item `NVDA` from the first call into the remove operation; it must
+lookup the current AAPL price before placing a market-price order; and it must
+carry the returned order id into later inspection and cancellation calls. A
+useful skill for this region is not "always buy AAPL", but a narrower workflow
+rule: when a trading request asks for current-market execution, first retrieve
+the stock information, then place the order using the observed price, and
+preserve the generated order identifier for subsequent order-management turns.
+This is why our credit assigner creates focused bundle fragments around the
+relevant tool-call subsequence instead of turning the entire conversation into a
+single coarse regression case.
+
+Another held-out example, `multi_turn_base_51`, combines two tool families:
+vehicle control and messaging. The expected trace locks all doors, starts the
+engine only after pressing the brake pedal, checks tire pressure and finds a
+nearby tire shop, then logs into the message API and sends a specific message
+from `USR001` to `USR002`. This tests cross-domain tool selection and
+precondition ordering. A skill that teaches "press brake before startEngine" can
+help the vehicle subtask, but it should not influence the later message API
+turn. This motivates our attribution-scope field in credit assignment and our
+dependency-aware refiner: a local vehicle workflow should be refined or tested
+on the vehicle fragment, not on the unrelated messaging fragment.
+
+### A.2 SpreadsheetBench: Real-World Spreadsheet Manipulation
+
+SpreadsheetBench was introduced in *SpreadsheetBench: Towards Challenging
+Real World Spreadsheet Manipulation* by Ma et al. and accepted to the NeurIPS
+2024 Datasets and Benchmarks track. The benchmark targets realistic Excel-like
+spreadsheet manipulation rather than simplified table QA. Its tasks are derived
+from real online spreadsheet forum questions, where users describe messy
+workbooks, attempted solutions, formatting constraints, multiple sheets,
+non-standard relational tables, and desired output regions. The paper argues
+that existing spreadsheet benchmarks often use synthetic or simplified
+instructions, while real spreadsheet work requires interpreting layout,
+formulas, formatting, and ambiguous user intent.
+
+The original SpreadsheetBench contains 912 real-world instructions and proposes
+an online-judge-style evaluation: the model should produce a robust solution,
+typically executable code, that can be applied to spreadsheet test cases and
+compared against golden workbooks. Our repository uses the
+`SpreadsheetBench-Verified 400` subset. Each task contains an instruction, an
+input workbook, a golden workbook, and an answer sheet/range. The local adapter
+asks the model to write Python `openpyxl` code that modifies a copied workbook
+and saves an output file. The verifier then compares the declared answer range
+between the produced workbook and the golden workbook. This setup turns
+spreadsheet manipulation into a concrete artifact-editing benchmark: the model
+must actually update cells and formatting, not merely describe a formula in
+natural language.
+
+One representative complex task in our local split is `56427`. The instruction
+asks the agent to transpose values from column G into columns H:S whenever
+column B marks a new group, using the runner count in column C to decide how
+many consecutive values to copy. It also asks the agent to preserve blanks,
+shade `H2:S28` with color `#E2EFD`, remove decimals from whole values, and
+center-align cells to the right of column G. The answer range is `H2:S28`.
+This sample stresses several spreadsheet-specific issues: group detection,
+sequential row traversal, blank preservation, numeric formatting, fill colors,
+and layout preservation. In our smoke run, the benchmark pipeline successfully
+called the model, extracted Python code, executed it, and compared the output,
+but the generated code failed because it used the short color string `E2EFD`
+instead of an openpyxl-compatible aRGB color string. This is a
+typical SpreadsheetBench failure: the high-level data transformation can be
+mostly understood while a low-level spreadsheet API contract still breaks the
+execution.
+
+A simpler single-cell task is `31628`. The input workbook has dates in
+`A1:A11`; the instruction asks for the number of the last day in the final date
+entry to be written as a static value in `B1`, while preserving column A. The
+expected answer range is the single cell `B1`. This task is useful as a small
+case because it isolates basic workbook loading, date parsing, static-value
+writing, saving, and answer-range verification. During local smoke testing, it
+also exposed a verifier edge case: a single-cell range such as `B1` is returned
+by openpyxl as a `Cell` object rather than a two-dimensional range. We fixed the
+verifier to treat single-cell ranges as one checked coordinate. This kind of
+failure is exactly why SpreadsheetBench is useful for our method: robust skills
+need to cover both user-facing spreadsheet workflows and API-level details such
+as openpyxl range handling, color encodings, formula objects, and workbook
+serialization.
+
+Together, BFCL and SpreadsheetBench cover complementary agentic failure modes.
+BFCL evaluates structured tool calling under explicit schemas and multi-turn
+state. SpreadsheetBench evaluates artifact manipulation where the model must
+write executable code against a rich external file format and pass cell-level
+comparison. BFCL skills often look like workflow cards or function-contract
+rules; SpreadsheetBench skills often look like executable API idioms, such as
+"normalize Excel color fills to aRGB before assigning `PatternFill`" or
+"handle single-cell and rectangular ranges separately." This contrast lets us
+test whether the skill evolution system can maintain different skill types
+without collapsing all evidence into one prompt-patching mechanism.
+
 ## 5. Discussion
 
 ## 6. Conclusion
@@ -1134,6 +1275,9 @@ Ablation 4: refinement (with vs. without)
 ## References
 
 - Anthropic. Agent Skills documentation. <https://docs.claude.com/en/docs/agents-and-tools/agent-skills>
+- Shishir G. Patil, Huanzhi Mao, Fanjia Yan, Charlie Ji, Vishnu Suresh, Ion Stoica, and Joseph E. Gonzalez. The Berkeley Function Calling Leaderboard (BFCL): From Tool Use to Agentic Evaluation of Large Language Models. ICML 2025. <https://icml.cc/virtual/2025/poster/46593>
+- Fanjia Yan, Huanzhi Mao, Charlie Cheng-Jie Ji, Ion Stoica, Joseph E. Gonzalez, Tianjun Zhang, and Shishir G. Patil. Berkeley Function-Calling Leaderboard. Gorilla Blog, 2024. <https://gorilla.cs.berkeley.edu/blogs/8_berkeley_function_calling_leaderboard.html>
+- Zeyao Ma, Bohan Zhang, Jing Zhang, Jifan Yu, Xiaokang Zhang, Xiaohan Zhang, Sijia Luo, Xi Wang, and Jie Tang. SpreadsheetBench: Towards Challenging Real World Spreadsheet Manipulation. NeurIPS 2024 Datasets and Benchmarks Spotlight. <https://openreview.net/forum?id=KYxzmRLF6i>
 - Yinjie Wang et al. OpenClaw-RL: Train Any Agent Simply by Talking. arXiv:2603.10165, 2026.
 - Jingwei Ni et al. Trace2Skill: Distill Trajectory-Local Lessons into Transferable Agent Skills. arXiv:2603.25158, 2026.
 - Hanrong Zhang et al. CoEvoSkills: Self-Evolving Agent Skills via Co-Evolutionary Verification. arXiv:2604.01687, 2026.

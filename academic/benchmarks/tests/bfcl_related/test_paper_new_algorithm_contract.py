@@ -34,7 +34,7 @@ from academic.skill_repository.refactor_overlap import (
     skill_to_overlap_segment,
 )
 from academic.skill_repository.store import ArtifactStore
-from academic.skill_repository.types import SkillArtifact, SkillTestCaseRun, SkillTestResult
+from academic.skill_repository.types import SkillArtifact, SkillBundleCase, SkillTestCaseRun, SkillTestResult
 
 
 def _fake_task(task_id: str):
@@ -345,6 +345,69 @@ def test_credit_assignment_focus_turn_slices_official_task_fragment() -> None:
     assert fragment["expected"] == [["remove_stock_from_watchlist(symbol='NVDA')"]]
     assert fragment["focus_turn_indices"] == [1]
     assert fragment["source_turn_indices"] == [1]
+
+
+def test_credit_bundle_append_enforces_total_case_budget(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_BUNDLE_CASE_LIMIT_PER_POLARITY", "6")
+    monkeypatch.setenv("BFCL_BUNDLE_MAX_TOTAL_CASES", "4")
+    artifact = SkillArtifact(
+        name="watchlist_symbol_rule",
+        kind="interface_contract_card",
+        description="Use symbol.",
+        body="Use symbol.",
+    )
+    artifact.bundle.positive_cases = [
+        SkillBundleCase(case_id=f"watchlist_symbol_rule:positive:{idx}", source="manual", prompt=f"p{idx}")
+        for idx in range(2)
+    ]
+    artifact.bundle.negative_cases = [
+        SkillBundleCase(case_id=f"watchlist_symbol_rule:negative:{idx}", source="manual", prompt=f"n{idx}")
+        for idx in range(2)
+    ]
+    store = ArtifactStore([artifact])
+    detail = {
+        "task_id": "multi_turn_base_3",
+        "task": {
+            "task_id": "multi_turn_base_3",
+            "question": [
+                [{"role": "user", "content": "Remove NVDA from watchlist."}],
+            ],
+            "expected": [["remove_stock_from_watchlist(symbol='NVDA')"]],
+            "input_artifacts": {"initial_config": {"watchlist": ["NVDA"]}},
+            "metadata": {"involved_classes": ["TradingBot"]},
+        },
+    }
+    events = [
+        {
+            "task_id": "multi_turn_base_3",
+            "skill_name": "watchlist_symbol_rule",
+            "judgment": "harmful",
+            "effect_type": "schema_harm",
+            "confidence": 0.95,
+            "reason": "Wrong argument alias on removal turn.",
+            "used": True,
+            "bundle_case_suggestions": [
+                {
+                    "skill_name": "watchlist_symbol_rule",
+                    "polarity": "negative",
+                    "reason": "Only the removal turn is relevant.",
+                    "source_task_id": "multi_turn_base_3",
+                    "focus_turn_indices": [0],
+                    "expected_contract": "remove_stock_from_watchlist must use symbol",
+                    "task_fragment_policy": "reuse_official_fragment",
+                }
+            ],
+        }
+    ]
+
+    added = _apply_credit_bundle_case_suggestions(store=store, detail=detail, credit_events=events)
+
+    skill = store.get("watchlist_symbol_rule")
+    assert added and skill is not None
+    assert len(skill.bundle.all_cases()) == 4
+    assert any(case.source == "credit_assigner_negative" for case in skill.bundle.negative_cases)
+    assert skill.bundle.fixtures["bundle_trimmed"] is True
+    assert skill.bundle.fixtures["bundle_case_budget"]["total_limit"] == 4
 
 
 def test_paper_new_committed_posterior_refactor_promotes_pending_skill() -> None:

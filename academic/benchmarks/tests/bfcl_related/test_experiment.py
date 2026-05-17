@@ -1,6 +1,9 @@
+import asyncio
+import copy
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock
@@ -8,6 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from academic.benchmarks.bfcl.related.experiment import (
+    SkillMaintenanceLockManager,
     _aggregate_skill_credit,
     _apply_skill_credit_filter,
     _build_extractor_feedback_rows,
@@ -24,7 +28,10 @@ from academic.benchmarks.bfcl.related.experiment import (
     _promote_pending_from_refactor_report,
     _role_feedback_projection,
     _restore_current_round_state,
+    _run_locked_micro_maintenance,
+    _update_skill_relation_graph_locked,
     _write_current_round_sidecars,
+    _run_related_baseline,
     _run_related_evolve_experiment,
     rebuild_checkpoint_from_sidecars,
     build_analysis_artifacts,
@@ -35,7 +42,7 @@ from academic.benchmarks.bfcl.related.manifest import (
     validate_curated_manifest,
 )
 from academic.benchmarks.bfcl.related.segment_index import SegmentVectorIndex
-from academic.skill_repository.types import SkillArtifact
+from academic.skill_repository.types import SkillArtifact, SkillTestResult
 from academic.skill_repository.refactor_overlap import OverlapGraphState, TraceSegment
 from academic.skill_repository.store import ArtifactStore
 
@@ -128,6 +135,481 @@ def test_pending_skill_can_be_promoted_from_committed_refactor_report() -> None:
     assert promoted.status == "active"
     assert promoted.metadata["is_promoted"] is True
     assert promoted.retrieval_enabled() is True
+
+
+async def test_locked_micro_maintenance_parallelizes_disjoint_targets(monkeypatch) -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(name=f"skill_{idx}", kind="rule_card", description="d", body="b")
+            for idx in range(4)
+        ]
+    )
+    locks = SkillMaintenanceLockManager(micro_concurrency=4)
+    active = 0
+    max_active = 0
+
+    async def fake_micro(**kwargs):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return {
+            "phase": "micro",
+            "task_index": kwargs["task_index"],
+            "maintenance_targets": list(kwargs["relevant_skill_names"]),
+            "maintenance_test_results": [],
+            "refine_decisions": [],
+        }
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment._run_micro_maintenance", fake_micro)
+
+    await asyncio.gather(
+        *[
+            _run_locked_micro_maintenance(
+                lock_manager=locks,
+                store=store,
+                target_names=[f"skill_{idx}"],
+                detail={"task_id": f"task_{idx}"},
+                task_credit_events=[],
+                credit_bundle_cases=[],
+                relevant_skill_names=[f"skill_{idx}"],
+                tools=[],
+                llm_config="test",
+                model_name=None,
+                execution_backend="official",
+                prompt_style="native",
+                tool_api_style="auto",
+                max_steps_per_turn=1,
+                max_task_seconds=1.0,
+                temperature=None,
+                synthetic_continue=False,
+                explicit_skill_tool=False,
+                round_index=0,
+                task_index=idx,
+                tag="lock_test",
+                credit_context_by_skill={},
+            )
+            for idx in range(4)
+        ]
+    )
+
+    assert max_active == 4
+
+
+async def test_locked_micro_maintenance_serializes_same_target(monkeypatch) -> None:
+    store = ArtifactStore([SkillArtifact(name="skill_a", kind="rule_card", description="d", body="b")])
+    locks = SkillMaintenanceLockManager(micro_concurrency=4)
+    active_by_skill: Dict[str, int] = {}
+    max_active_by_skill: Dict[str, int] = {}
+
+    async def fake_micro(**kwargs):
+        name = kwargs["relevant_skill_names"][0]
+        active_by_skill[name] = active_by_skill.get(name, 0) + 1
+        max_active_by_skill[name] = max(max_active_by_skill.get(name, 0), active_by_skill[name])
+        await asyncio.sleep(0.03)
+        active_by_skill[name] -= 1
+        return {
+            "phase": "micro",
+            "task_index": kwargs["task_index"],
+            "maintenance_targets": [name],
+            "maintenance_test_results": [],
+            "refine_decisions": [],
+        }
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment._run_micro_maintenance", fake_micro)
+
+    await asyncio.gather(
+        *[
+            _run_locked_micro_maintenance(
+                lock_manager=locks,
+                store=store,
+                target_names=["skill_a"],
+                detail={"task_id": f"task_{idx}"},
+                task_credit_events=[],
+                credit_bundle_cases=[],
+                relevant_skill_names=["skill_a"],
+                tools=[],
+                llm_config="test",
+                model_name=None,
+                execution_backend="official",
+                prompt_style="native",
+                tool_api_style="auto",
+                max_steps_per_turn=1,
+                max_task_seconds=1.0,
+                temperature=None,
+                synthetic_continue=False,
+                explicit_skill_tool=False,
+                round_index=0,
+                task_index=idx,
+                tag="lock_test",
+                credit_context_by_skill={},
+            )
+            for idx in range(5)
+        ]
+    )
+
+    assert max_active_by_skill["skill_a"] == 1
+
+
+async def test_locked_micro_marks_target_stale_when_reference_changes(monkeypatch) -> None:
+    skill_a = SkillArtifact(name="skill_a", kind="rule_card", description="d", body="b")
+    skill_a.dependencies = ["skill_b"]
+    skill_b = SkillArtifact(name="skill_b", kind="rule_card", description="d", body="b")
+    store = ArtifactStore([skill_a, skill_b])
+    locks = SkillMaintenanceLockManager(micro_concurrency=2)
+    micro_started = asyncio.Event()
+    release_micro = asyncio.Event()
+
+    async def fake_micro(**kwargs):
+        micro_started.set()
+        await release_micro.wait()
+        return {
+            "phase": "micro",
+            "task_index": kwargs["task_index"],
+            "maintenance_targets": ["skill_a"],
+            "maintenance_test_results": [],
+            "refine_decisions": [],
+        }
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment._run_micro_maintenance", fake_micro)
+    task = asyncio.create_task(
+        _run_locked_micro_maintenance(
+            lock_manager=locks,
+            store=store,
+            target_names=["skill_a"],
+            detail={"task_id": "task_0"},
+            task_credit_events=[],
+            credit_bundle_cases=[],
+            relevant_skill_names=["skill_a"],
+            tools=[],
+            llm_config="test",
+            model_name=None,
+            execution_backend="official",
+            prompt_style="native",
+            tool_api_style="auto",
+            max_steps_per_turn=1,
+            max_task_seconds=1.0,
+            temperature=None,
+            synthetic_continue=False,
+            explicit_skill_tool=False,
+            round_index=0,
+            task_index=0,
+            tag="lock_test",
+            credit_context_by_skill={},
+        )
+    )
+    await micro_started.wait()
+    store.get("skill_b").version += 1
+    release_micro.set()
+    report = await task
+
+    updated = store.get("skill_a")
+    assert updated is not None
+    assert updated.stale is True
+    assert updated.metadata["stale_due_to_dependency_change"] is True
+    assert report["stale_dependency_changes"][0]["skill_name"] == "skill_b"
+
+
+async def test_relation_graph_update_uses_short_global_lock(monkeypatch) -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="skill_a", kind="rule_card", description="a", body="a"),
+            SkillArtifact(name="skill_b", kind="rule_card", description="b", body="b"),
+        ]
+    )
+    locks = SkillMaintenanceLockManager(micro_concurrency=2)
+    saw_locked = []
+
+    def fake_update(store, **kwargs):
+        saw_locked.append(locks.relation_graph_lock.locked())
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment.update_skill_relation_graph", fake_update)
+
+    await asyncio.gather(
+        *[
+            _update_skill_relation_graph_locked(
+                lock_manager=locks,
+                store=store,
+                retrieved=["skill_a", "skill_b"],
+            )
+            for _ in range(8)
+        ]
+    )
+
+    assert saw_locked == [True] * 8
+
+
+async def test_locked_micro_high_concurrency_with_mock_llm_actions_and_dependency_stale(monkeypatch) -> None:
+    skills = [
+        SkillArtifact(name=f"skill_{idx}", kind="rule_card", description=f"skill {idx}", body=f"body {idx}")
+        for idx in range(15)
+    ]
+    dependency = SkillArtifact(name="skill_dep", kind="rule_card", description="shared dependency", body="dep body")
+    skills[1].dependencies = ["skill_dep"]
+    skills[2].dependencies = ["skill_dep"]
+    skills[3].dependencies = ["skill_1"]
+    store = ArtifactStore([*skills, dependency])
+    locks = SkillMaintenanceLockManager(micro_concurrency=15)
+    active_replay = 0
+    active_refine = 0
+    max_active_replay = 0
+    max_active_refine = 0
+    refine_actions: List[Dict[str, Any]] = []
+    dependent_refine_started = asyncio.Event()
+
+    async def mutate_dependency_during_refine() -> None:
+        await asyncio.wait_for(dependent_refine_started.wait(), timeout=1.0)
+        async with locks.target_write_locks(["skill_dep"]):
+            artifact = store.get("skill_dep")
+            assert artifact is not None
+            updated = copy.deepcopy(artifact)
+            updated.body = f"{artifact.body}\nmock dependency rewrite"
+            updated.metadata["mock_llm_action"] = "rewrite_dependency"
+            store.add(updated)
+
+    async def fake_execute_bfcl_bundle_tests(artifact, **kwargs):
+        nonlocal active_replay, max_active_replay
+        active_replay += 1
+        max_active_replay = max(max_active_replay, active_replay)
+        await asyncio.sleep(0.04)
+        active_replay -= 1
+        return SkillTestResult(
+            result_id=f"mock_replay:{artifact.name}:v{artifact.version}",
+            skill_name=artifact.name,
+            skill_version=artifact.version,
+            bundle_id=artifact.bundle.bundle_id or f"{artifact.name}.bundle",
+            bundle_version=artifact.bundle.bundle_version,
+            run_label="mock_bundle_unit",
+            aggregate={"pass_all_tests": False, "n_regressed": 1, "n_improved": 0},
+            integration_failures=[{"mock_failure": "schema_contract", "skill_name": artifact.name}],
+        )
+
+    async def fake_refine_bfcl_skill_store_llm(store, *, maintenance_test_results, artifact_names, **kwargs):
+        nonlocal active_refine, max_active_refine
+        active_refine += 1
+        max_active_refine = max(max_active_refine, active_refine)
+        try:
+            name = list(artifact_names)[0]
+            if name in {"skill_1", "skill_2"}:
+                dependent_refine_started.set()
+                delay = 0.16
+            else:
+                delay = 0.05
+            await asyncio.sleep(delay)
+            artifact = store.get(name)
+            assert artifact is not None
+            updated = copy.deepcopy(artifact)
+            updated.body = f"{artifact.body}\nmock rewrite for {name}"
+            updated.metadata["mock_llm_action"] = "rewrite"
+            updated.metadata["mock_refine_reason"] = "bundle regression from mock replay"
+            store.add(updated)
+            current = store.get(name)
+            action = {
+                "skill_name": name,
+                "action": "rewrite",
+                "reason": "mock LLM chose rewrite after failing bundle replay",
+                "version_before": artifact.version,
+                "version_after": current.version if current else artifact.version,
+                "mock_llm": True,
+            }
+            refine_actions.append(action)
+            return [action]
+        finally:
+            active_refine -= 1
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment.execute_bfcl_bundle_tests",
+        fake_execute_bfcl_bundle_tests,
+    )
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment.refine_bfcl_skill_store_llm",
+        fake_refine_bfcl_skill_store_llm,
+    )
+
+    started = time.perf_counter()
+    dependency_mutation_task = asyncio.create_task(mutate_dependency_during_refine())
+    reports = await asyncio.gather(
+        *[
+            _run_locked_micro_maintenance(
+                lock_manager=locks,
+                store=store,
+                target_names=[f"skill_{idx}"],
+                detail={"task_id": f"task_{idx}"},
+                task_credit_events=[],
+                credit_bundle_cases=[{"skill_name": f"skill_{idx}", "case_id": f"case_{idx}", "polarity": "negative"}],
+                relevant_skill_names=[f"skill_{idx}"],
+                tools=[],
+                llm_config="mock",
+                model_name="mock-model",
+                execution_backend="official",
+                prompt_style="native",
+                tool_api_style="auto",
+                max_steps_per_turn=1,
+                max_task_seconds=1.0,
+                temperature=None,
+                synthetic_continue=False,
+                explicit_skill_tool=False,
+                round_index=0,
+                task_index=idx,
+                tag="high_concurrency_lock_test",
+                credit_context_by_skill={},
+            )
+            for idx in range(15)
+        ]
+    )
+    await dependency_mutation_task
+    elapsed = time.perf_counter() - started
+
+    assert len(reports) == 15
+    assert {row["refine_decisions"][0]["action"] for row in reports} == {"rewrite"}
+    assert len(refine_actions) == 15
+    assert all((store.get(f"skill_{idx}") or SkillArtifact(name="", kind="", description="", body="")).version >= 2 for idx in range(15))
+    assert (store.get("skill_1") or skills[1]).stale is True
+    assert (store.get("skill_1") or skills[1]).metadata["stale_due_to_dependency_change"] is True
+    assert max_active_replay >= 12
+    assert max_active_refine >= 10
+    assert elapsed < 0.75
+
+
+async def test_locked_micro_mock_llm_sleep_shows_parallel_speedup(monkeypatch) -> None:
+    async def fake_execute_bfcl_bundle_tests(artifact, **kwargs):
+        await asyncio.sleep(0.03)
+        return SkillTestResult(
+            result_id=f"mock_replay:{artifact.name}:v{artifact.version}",
+            skill_name=artifact.name,
+            skill_version=artifact.version,
+            bundle_id=artifact.bundle.bundle_id or f"{artifact.name}.bundle",
+            bundle_version=artifact.bundle.bundle_version,
+            run_label="mock_bundle_unit",
+            aggregate={"pass_all_tests": False, "n_regressed": 1, "n_improved": 0},
+            integration_failures=[{"mock_failure": "needs_rewrite", "skill_name": artifact.name}],
+        )
+
+    async def fake_refine_bfcl_skill_store_llm(store, *, artifact_names, **kwargs):
+        await asyncio.sleep(0.05)
+        name = list(artifact_names)[0]
+        artifact = store.get(name)
+        assert artifact is not None
+        updated = copy.deepcopy(artifact)
+        updated.body = f"{artifact.body}\nmock llm rewrite"
+        updated.metadata["mock_llm_action"] = "rewrite"
+        store.add(updated)
+        current = store.get(name)
+        return [
+            {
+                "skill_name": name,
+                "action": "rewrite",
+                "reason": "mock LLM slept then rewrote",
+                "version_before": artifact.version,
+                "version_after": current.version if current else artifact.version,
+            }
+        ]
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment.execute_bfcl_bundle_tests",
+        fake_execute_bfcl_bundle_tests,
+    )
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment.refine_bfcl_skill_store_llm",
+        fake_refine_bfcl_skill_store_llm,
+    )
+
+    async def run_batch(concurrency: int) -> float:
+        store = ArtifactStore(
+            [
+                SkillArtifact(name=f"sleep_skill_{idx}", kind="rule_card", description="d", body="b")
+                for idx in range(15)
+            ]
+        )
+        locks = SkillMaintenanceLockManager(micro_concurrency=concurrency)
+        started = time.perf_counter()
+        reports = await asyncio.gather(
+            *[
+                _run_locked_micro_maintenance(
+                    lock_manager=locks,
+                    store=store,
+                    target_names=[f"sleep_skill_{idx}"],
+                    detail={"task_id": f"sleep_task_{idx}"},
+                    task_credit_events=[],
+                    credit_bundle_cases=[{"skill_name": f"sleep_skill_{idx}", "case_id": f"sleep_case_{idx}", "polarity": "negative"}],
+                    relevant_skill_names=[f"sleep_skill_{idx}"],
+                    tools=[],
+                    llm_config="mock",
+                    model_name="mock-model",
+                    execution_backend="official",
+                    prompt_style="native",
+                    tool_api_style="auto",
+                    max_steps_per_turn=1,
+                    max_task_seconds=1.0,
+                    temperature=None,
+                    synthetic_continue=False,
+                    explicit_skill_tool=False,
+                    round_index=0,
+                    task_index=idx,
+                    tag=f"sleep_speedup_{concurrency}",
+                    credit_context_by_skill={},
+                )
+                for idx in range(15)
+            ]
+        )
+        elapsed = time.perf_counter() - started
+        assert len(reports) == 15
+        assert {row["refine_decisions"][0]["action"] for row in reports} == {"rewrite"}
+        assert all((store.get(f"sleep_skill_{idx}") or SkillArtifact(name="", kind="", description="", body="")).version >= 2 for idx in range(15))
+        return elapsed
+
+    parallel_elapsed = await run_batch(concurrency=15)
+    serial_elapsed = await run_batch(concurrency=1)
+
+    assert parallel_elapsed < 0.35
+    assert serial_elapsed > 1.0
+    assert serial_elapsed / parallel_elapsed >= 4.0
+
+
+async def test_run_related_baseline_forwards_test_concurrency(monkeypatch) -> None:
+    manifest = {"train_task_ids": ["train_1"], "test_task_ids": ["test_1", "test_2"]}
+    fake_test_tasks = [
+        type("Task", (), {"task_id": "test_1", "metadata": {}})(),
+        type("Task", (), {"task_id": "test_2", "metadata": {}})(),
+    ]
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment._tasks_from_manifest",
+        lambda manifest, cache_dir, data_source: ([], fake_test_tasks),
+    )
+    calls: List[Dict[str, Any]] = []
+
+    async def fake_run_bfcl_baseline(tasks, *args, **kwargs):
+        calls.append({"tasks": list(tasks), "kwargs": dict(kwargs)})
+        return []
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment._run_bfcl_baseline",
+        fake_run_bfcl_baseline,
+    )
+
+    payload = await _run_related_baseline(
+        manifest=manifest,
+        cache_dir=Path("/home/lixujun/skill_evolving/data/benchmarks/bfcl_v3"),
+        llm_config="local_claude_proxy",
+        model_name="claude-sonnet-4-5",
+        tools=[],
+        data_source="bfcl_eval_bundle",
+        execution_backend="official",
+        prompt_style="native",
+        tool_api_style="auto",
+        max_steps_per_turn=20,
+        max_task_seconds=180.0,
+        temperature=None,
+        synthetic_continue=False,
+        explicit_skill_tool=False,
+        tag="tag",
+        test_concurrency=4,
+    )
+
+    assert calls[0]["kwargs"]["concurrency"] == 4
+    assert calls[0]["kwargs"]["phase"] == "related_baseline_test"
+    assert payload["config_summary"]["test_concurrency"] == 4
 
 
 def test_unpromoted_pending_skills_are_revoked_without_deleting_lineage() -> None:
@@ -1153,6 +1635,107 @@ async def test_run_related_evolve_experiment_rejects_incomplete_resume_state(mon
             extractor_trl_enabled=False,
             experiment_variant="test",
         )
+
+
+async def test_run_related_evolve_experiment_prefetches_train_window_concurrently(monkeypatch, tmp_path: Path) -> None:
+    train_tasks = [type("Task", (), {"task_id": f"train_{idx}", "metadata": {}})() for idx in range(4)]
+    test_tasks = [type("Task", (), {"task_id": "test_1", "metadata": {}})()]
+    manifest = {
+        "train_task_ids": [task.task_id for task in train_tasks],
+        "test_task_ids": ["test_1"],
+    }
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment._tasks_from_manifest",
+        lambda manifest, cache_dir, data_source: (train_tasks, test_tasks),
+    )
+    calls: List[Dict[str, Any]] = []
+
+    async def fake_run_bfcl_baseline(tasks, *args, **kwargs):
+        calls.append({"task_ids": [task.task_id for task in tasks], "concurrency": kwargs.get("concurrency"), "phase": kwargs.get("phase")})
+        return [
+            {
+                "task_id": task.task_id,
+                "task": {"task_id": task.task_id, "metadata": {}},
+                "n_runs": 1,
+                "n_success": 1,
+                "avg_score": 1.0,
+                "runs": [
+                    {
+                        "task_id": task.task_id,
+                        "success": True,
+                        "score": 1.0,
+                        "metrics": {
+                            "official_valid": True,
+                            "retrieved_skills": [],
+                            "prompt_injected_skills": [],
+                            "tool_injected_skills": [],
+                            "used_skills": [],
+                            "called_skill_tools": [],
+                            "call_errors": [],
+                            "n_model_steps": 1,
+                            "total_tokens": 10,
+                        },
+                        "trace": {"tool_calls": [], "turns": [], "messages": [], "debug_events": []},
+                        "run_idx": 0,
+                    }
+                ],
+            }
+            for task in tasks
+        ]
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment._run_bfcl_baseline", fake_run_bfcl_baseline)
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment.extract_bfcl_skill_artifacts_llm", AsyncMock(return_value=[]))
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment._extract_task_segments", lambda detail: [])
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment._run_macro_maintenance",
+        AsyncMock(return_value={
+            "maintenance_targets": [],
+            "maintenance_test_results": [],
+            "refine_decisions": [],
+            "overlap_refactor": {"attempts": [], "refactor_segment_coverage": []},
+            "refactor_segment_coverage": [],
+            "static_dependency_validation": [],
+            "token_breakdown": {},
+        }),
+    )
+
+    payload = await _run_related_evolve_experiment(
+        manifest=manifest,
+        cache_dir=Path("/home/lixujun/skill_evolving/data/benchmarks/bfcl_v3"),
+        llm_config="local_claude_proxy",
+        model_name="claude-sonnet-4-5",
+        tools=[],
+        rounds=1,
+        data_source="bfcl_eval_bundle",
+        execution_backend="official",
+        prompt_style="native",
+        tool_api_style="auto",
+        top_k_skills=2,
+        min_skill_score=0.0,
+        skill_injection_mode="prompt_only",
+        max_steps_per_turn=12,
+        max_task_seconds=30.0,
+        temperature=None,
+        synthetic_continue=False,
+        explicit_skill_tool=False,
+        tag="tag",
+        save_skills=None,
+        use_handwritten_skills=False,
+        checkpoint_path=tmp_path / "checkpoint.json",
+        output_path=tmp_path / "out.json",
+        output_detail_level="compact",
+        extractor_trl_enabled=False,
+        experiment_variant="test_window_concurrency",
+        macro_maintenance_step=2,
+        train_window_concurrency=4,
+    )
+
+    train_calls = [call for call in calls if str(call["phase"]).startswith("related_train_epoch_")]
+    assert [call["task_ids"] for call in train_calls] == [["train_0", "train_1"], ["train_2", "train_3"]]
+    assert [call["concurrency"] for call in train_calls] == [4, 4]
+    assert payload["config_summary"]["train_window_concurrency"] == 4
+    assert payload["rounds"][0]["train_details"][0]["task_id"] == "train_0"
+    assert payload["rounds"][0]["train_details"][-1]["task_id"] == "train_3"
 
 
 async def test_run_related_evolve_experiment_emits_role_feedback(monkeypatch, tmp_path: Path) -> None:

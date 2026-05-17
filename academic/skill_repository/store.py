@@ -530,12 +530,23 @@ class ArtifactStore:
         scored.sort(key=lambda item: (item[0], *item[1]), reverse=True)
         selected_rows: List[Dict[str, Any]] = []
         selected_names = set()
+        selected_candidate_groups: set[str] = set()
         for rank, (score, rerank, artifact, row) in enumerate(scored, start=1):
             row["rank"] = rank
-            selected = rank <= top_k and score >= float(min_score)
+            candidate_group_id = str(artifact.metadata.get("candidate_group_id") or "").strip()
+            is_alternative_candidate = (
+                bool(candidate_group_id)
+                and str(artifact.metadata.get("candidate_group_role") or "").strip() == "alternative"
+            )
+            group_suppressed = is_alternative_candidate and candidate_group_id in selected_candidate_groups
+            selected = len(selected_rows) < top_k and score >= float(min_score) and not group_suppressed
             row["selected"] = selected
+            if group_suppressed:
+                row["filter_reason"] = "candidate_group_alternative_suppressed"
             if selected:
                 selected_names.add(artifact.name)
+                if is_alternative_candidate:
+                    selected_candidate_groups.add(candidate_group_id)
                 selected_rows.append(
                     {
                         "name": artifact.name,
@@ -547,6 +558,7 @@ class ArtifactStore:
                         "tag_matches": list(row.get("tag_matches") or []),
                         "rerank": list(rerank),
                         "retrieval_backend": row.get("retrieval_backend") or self.retrieval_backend_name,
+                        "candidate_group_id": candidate_group_id,
                     }
                 )
         for row in candidates:

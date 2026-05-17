@@ -99,6 +99,13 @@ def _env_int(name: str, default: int) -> int:
         return int(default)
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class _AsyncRWLock:
     def __init__(self) -> None:
         self._condition = asyncio.Condition()
@@ -278,6 +285,12 @@ def _extraction_event_records(
                 "status": artifact.status,
                 "is_pending_skill": bool(artifact.metadata.get("is_pending_skill") or artifact.status == "pending"),
                 "is_promoted": bool(artifact.metadata.get("is_promoted")),
+                "candidate_group_id": artifact.metadata.get("candidate_group_id"),
+                "candidate_group_role": artifact.metadata.get("candidate_group_role"),
+                "candidate_sample_index": artifact.metadata.get("candidate_sample_index"),
+                "candidate_sample_count": artifact.metadata.get("candidate_sample_count"),
+                "competition_status": artifact.metadata.get("competition_status"),
+                "competes_with": list(artifact.metadata.get("competes_with") or []),
                 "allowed_tools": list(artifact.metadata.get("allowed_tools") or []),
                 "source_task_ids": list(artifact.metadata.get("source_task_ids") or []),
             }
@@ -871,6 +884,157 @@ def _mark_prior_artifacts_pending(
     return pending
 
 
+def _candidate_group_id(*, round_index: int, task_index: int, task_id: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9_]+", "_", str(task_id or "task")).strip("_")[:64] or "task"
+    return f"extract:r{round_index}:t{task_index}:{slug}"
+
+
+def _unique_candidate_name(
+    *,
+    original_name: str,
+    round_index: int,
+    task_index: int,
+    sample_index: int,
+    existing_names: set[str],
+    always_suffix: bool = False,
+) -> str:
+    base = re.sub(r"[^a-zA-Z0-9_]+", "_", str(original_name or "candidate_skill")).strip("_") or "candidate_skill"
+    if not always_suffix and base not in existing_names:
+        existing_names.add(base)
+        return base
+    prefix = f"{base}__candidate_r{round_index}_t{task_index}_s{sample_index}"
+    name = prefix
+    suffix = 1
+    while name in existing_names:
+        suffix += 1
+        name = f"{prefix}_{suffix}"
+    existing_names.add(name)
+    return name
+
+
+def _mark_candidate_competition_artifacts(
+    artifacts: Sequence[SkillArtifact],
+    *,
+    round_index: int,
+    task_index: int,
+    task_id: str,
+    sample_count: int,
+    existing_names: Iterable[str],
+    trial_retrieval: bool = True,
+) -> List[SkillArtifact]:
+    group_id = _candidate_group_id(round_index=round_index, task_index=task_index, task_id=task_id)
+    seen_names = {str(name or "").strip() for name in existing_names if str(name or "").strip()}
+    prepared: List[SkillArtifact] = []
+    for artifact in artifacts:
+        original_name = str(artifact.name or "").strip()
+        sample_index = int(artifact.metadata.get("candidate_sample_index") or 0)
+        artifact.name = _unique_candidate_name(
+            original_name=original_name,
+            round_index=round_index,
+            task_index=task_index,
+            sample_index=sample_index,
+            existing_names=seen_names,
+            always_suffix=True,
+        )
+        if original_name and original_name != artifact.name:
+            artifact.metadata["candidate_original_name"] = original_name
+            artifact.metadata["candidate_for_existing_skill"] = original_name
+        artifact.status = "trial" if trial_retrieval else "pending"
+        artifact.metadata["is_pending_skill"] = not trial_retrieval
+        artifact.metadata["is_promoted"] = bool(trial_retrieval)
+        artifact.metadata["promotion_state"] = "trial" if trial_retrieval else "pending"
+        artifact.metadata["competition_status"] = "trial"
+        artifact.metadata["candidate_group_id"] = group_id
+        artifact.metadata["candidate_group_role"] = "alternative"
+        artifact.metadata["candidate_sample_count"] = int(sample_count)
+        artifact.metadata["candidate_sample_index"] = sample_index
+        artifact.metadata["prior_extraction_round_index"] = round_index
+        artifact.metadata["prior_extraction_task_index"] = task_index
+        artifact.metadata["prior_extraction_task_id"] = task_id
+        artifact.metadata.setdefault("source", "llm_trace_extraction")
+        if trial_retrieval:
+            artifact.metadata.pop("retrieval_disabled_reason", None)
+        else:
+            artifact.metadata["retrieval_disabled_reason"] = "pending_prior_candidate"
+        prepared.append(artifact)
+    names = [artifact.name for artifact in prepared]
+    for artifact in prepared:
+        competitors = [name for name in names if name != artifact.name]
+        artifact.metadata["competes_with"] = competitors
+        relation = dict(artifact.metadata.get("skill_relation_graph") or {})
+        relation["conflicts_with"] = _unique_ordered([*list(relation.get("conflicts_with") or []), *competitors])
+        artifact.metadata["skill_relation_graph"] = relation
+    return prepared
+
+
+async def _extract_candidate_skill_samples(
+    *,
+    results: List[Dict[str, Any]],
+    tool_schemas: Iterable[Dict[str, Any]] | None,
+    existing_artifacts: Iterable[SkillArtifact] | None,
+    extractor_rules: Iterable[Dict[str, Any]] | None,
+    llm_config: str,
+    model_name: str | None,
+    audit_context: Dict[str, Any],
+    competition_enabled: bool,
+    sample_count: int,
+    trial_retrieval: bool,
+    existing_names: Iterable[str],
+) -> List[SkillArtifact]:
+    if not competition_enabled or int(sample_count or 1) <= 1:
+        extracted = await extract_bfcl_skill_artifacts_llm(
+            results,
+            tool_schemas=tool_schemas,
+            existing_artifacts=existing_artifacts,
+            extractor_rules=extractor_rules,
+            llm_config=llm_config,
+            model_name=model_name,
+            audit_context=audit_context,
+        )
+        return _mark_prior_artifacts_pending(
+            extracted,
+            round_index=int(audit_context.get("round_index") or 0),
+            task_index=int(audit_context.get("task_index") or 0),
+            task_id=str(audit_context.get("task_id") or ""),
+        )
+    all_artifacts: List[SkillArtifact] = []
+    sample_count = max(1, int(sample_count or 1))
+    for sample_index in range(sample_count):
+        sample_rules = [
+            *list(extractor_rules or []),
+            {
+                "rule_id": f"candidate_sample_{sample_index + 1}",
+                "focus": "candidate_sampling",
+                "text": (
+                    f"This is independent candidate sample {sample_index + 1}/{sample_count}. "
+                    "Prefer a distinct precise abstraction supported by evidence; return no artifacts "
+                    "instead of paraphrasing another likely candidate."
+                ),
+            },
+        ]
+        extracted = await extract_bfcl_skill_artifacts_llm(
+            results,
+            tool_schemas=tool_schemas,
+            existing_artifacts=existing_artifacts,
+            extractor_rules=sample_rules,
+            llm_config=llm_config,
+            model_name=model_name,
+            audit_context={**dict(audit_context or {}), "candidate_sample_index": sample_index, "candidate_sample_count": sample_count},
+        )
+        for artifact in extracted:
+            artifact.metadata["candidate_sample_index"] = sample_index
+        all_artifacts.extend(extracted)
+    return _mark_candidate_competition_artifacts(
+        all_artifacts,
+        round_index=int(audit_context.get("round_index") or 0),
+        task_index=int(audit_context.get("task_index") or 0),
+        task_id=str(audit_context.get("task_id") or ""),
+        sample_count=sample_count,
+        existing_names=existing_names,
+        trial_retrieval=trial_retrieval,
+    )
+
+
 def _pending_skill_names_from_refactor_attempt(attempt: Dict[str, Any]) -> List[str]:
     names: List[str] = []
     payload = dict(attempt.get("llm_payload") or {})
@@ -1056,6 +1220,205 @@ def _build_extractor_feedback_rows(
         )
     )
     return rows[:24]
+
+
+def _build_candidate_group_feedback_rows(
+    *,
+    extraction_events: Sequence[Dict[str, Any]],
+    train_details: Sequence[Dict[str, Any]],
+    credit_events: Sequence[Dict[str, Any]],
+    maintenance_test_results: Sequence[Dict[str, Any]] | None = None,
+) -> List[Dict[str, Any]]:
+    groups: Dict[str, Dict[str, Any]] = {}
+    member_to_group: Dict[str, str] = {}
+    for event in extraction_events:
+        group_id = str(event.get("candidate_group_id") or "").strip()
+        if not group_id:
+            continue
+        name = str(event.get("artifact_name") or event.get("skill_name") or "").strip()
+        if not name:
+            continue
+        group = groups.setdefault(
+            group_id,
+            {
+                "feedback_type": "candidate_group",
+                "candidate_group_id": group_id,
+                "source_task_ids": [],
+                "members": {},
+            },
+        )
+        source_task_id = str(event.get("source_task_id") or "").strip()
+        if source_task_id and source_task_id not in group["source_task_ids"]:
+            group["source_task_ids"].append(source_task_id)
+        member = group["members"].setdefault(
+            name,
+            {
+                "skill_name": name,
+                "description": event.get("description") or "",
+                "kind": event.get("kind") or "",
+                "sample_index": event.get("candidate_sample_index"),
+                "status": event.get("status") or "",
+                "retrieved_count": 0,
+                "injected_count": 0,
+                "used_count": 0,
+                "helpful_count": 0,
+                "harmful_count": 0,
+                "neutral_count": 0,
+                "uncertain_count": 0,
+                "bundle_failures": 0,
+                "bundle_passes": 0,
+                "task_ids": [],
+                "notes": [],
+            },
+        )
+        member_to_group[name] = group_id
+    if not groups:
+        return []
+    for detail in train_details:
+        task_id = str(detail.get("task_id") or "").strip()
+        run = _first_run(detail)
+        metrics = dict(run.get("metrics") or {})
+        retrieved = {str(item).strip() for item in (metrics.get("retrieved_skills") or []) if str(item).strip()}
+        injected = {
+            str(item).strip()
+            for item in [
+                *list(metrics.get("prompt_injected_skills") or []),
+                *list(metrics.get("tool_injected_skills") or []),
+            ]
+            if str(item).strip()
+        }
+        used = {
+            str(item).strip()
+            for item in [
+                *list(metrics.get("used_skills") or []),
+                *list(metrics.get("called_skill_tools") or []),
+            ]
+            if str(item).strip()
+        }
+        for name, group_id in member_to_group.items():
+            member = groups[group_id]["members"].get(name)
+            if not member:
+                continue
+            present = False
+            if name in retrieved:
+                member["retrieved_count"] += 1
+                present = True
+            if name in injected:
+                member["injected_count"] += 1
+                present = True
+            if name in used:
+                member["used_count"] += 1
+                present = True
+            if present and task_id and task_id not in member["task_ids"]:
+                member["task_ids"].append(task_id)
+    for event in credit_events:
+        name = str(event.get("skill_name") or "").strip()
+        group_id = member_to_group.get(name)
+        if not group_id:
+            continue
+        member = groups[group_id]["members"].get(name)
+        if not member:
+            continue
+        judgment = str(event.get("judgment") or "uncertain").strip().lower() or "uncertain"
+        if judgment in {"helpful", "harmful", "neutral"}:
+            member[f"{judgment}_count"] += 1
+        else:
+            member["uncertain_count"] += 1
+        reason = str(event.get("reason") or "").strip()
+        if reason:
+            note = f"{judgment}:{reason}"
+            if note not in member["notes"]:
+                member["notes"].append(note)
+    for result in maintenance_test_results or []:
+        name = str(result.get("skill_name") or "").strip()
+        group_id = member_to_group.get(name)
+        if not group_id:
+            continue
+        member = groups[group_id]["members"].get(name)
+        if not member:
+            continue
+        aggregate = dict(result.get("aggregate") or {})
+        passed = aggregate.get("pass_all_tests", aggregate.get("passed"))
+        if passed is True:
+            member["bundle_passes"] += 1
+        elif passed is False:
+            member["bundle_failures"] += 1
+    rows: List[Dict[str, Any]] = []
+    for group in groups.values():
+        members = []
+        for member in group["members"].values():
+            score = (
+                int(member["helpful_count"]) * 3
+                + int(member["used_count"]) * 2
+                + int(member["injected_count"])
+                + int(member["bundle_passes"]) * 2
+                - int(member["harmful_count"]) * 3
+                - int(member["bundle_failures"]) * 2
+            )
+            row = {**member, "winner_score": score}
+            row["task_ids"] = sorted(str(item) for item in row.get("task_ids") or [] if str(item))
+            row["notes"] = list(row.get("notes") or [])[:4]
+            members.append(row)
+        members.sort(key=lambda item: (-int(item.get("winner_score") or 0), str(item.get("skill_name") or "")))
+        winner = members[0]["skill_name"] if members else ""
+        rows.append(
+            {
+                "feedback_type": "candidate_group",
+                "candidate_group_id": group["candidate_group_id"],
+                "source_task_ids": sorted(str(item) for item in group.get("source_task_ids") or [] if str(item)),
+                "winner": winner,
+                "losers": [item["skill_name"] for item in members[1:]],
+                "members": members,
+                "comparison_summary": (
+                    "winner selected by higher helpful/use/bundle signal minus harmful/failure signal"
+                    if winner
+                    else "no winner"
+                ),
+            }
+        )
+    rows.sort(key=lambda item: (str(item.get("candidate_group_id") or "")))
+    return rows[:24]
+
+
+def _apply_candidate_group_competition_decisions(
+    *,
+    store: ArtifactStore,
+    group_feedback_rows: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    decisions: List[Dict[str, Any]] = []
+    for group in group_feedback_rows:
+        winner = str(group.get("winner") or "").strip()
+        members = [dict(item or {}) for item in (group.get("members") or []) if isinstance(item, dict)]
+        if not winner or len(members) < 2:
+            continue
+        winner_score = max(
+            int(item.get("winner_score") or 0)
+            for item in members
+            if str(item.get("skill_name") or "").strip() == winner
+        )
+        for member in members:
+            name = str(member.get("skill_name") or "").strip()
+            artifact = store.get(name)
+            if artifact is None:
+                continue
+            score = int(member.get("winner_score") or 0)
+            if name == winner:
+                artifact.metadata["competition_status"] = "winner"
+                artifact.metadata["promotion_state"] = "competition_winner"
+                artifact.metadata["is_promoted"] = True
+                if artifact.status == "trial":
+                    artifact.status = "active"
+                decisions.append({"skill_name": name, "candidate_group_id": group.get("candidate_group_id"), "action": "winner", "winner_score": score})
+                continue
+            artifact.metadata["competition_status"] = "loser"
+            artifact.metadata["competition_lost_to"] = winner
+            action = "marked_loser"
+            if winner_score - score >= 3 and int(member.get("harmful_count") or 0) >= int(member.get("helpful_count") or 0):
+                artifact.status = "archived"
+                artifact.metadata["archived_reason"] = "candidate_group_loser"
+                action = "archived_loser"
+            decisions.append({"skill_name": name, "candidate_group_id": group.get("candidate_group_id"), "action": action, "winner": winner, "winner_score": score})
+    return decisions
 
 
 def _extract_task_segments(detail: Dict[str, Any]) -> List[TraceSegment]:
@@ -2759,6 +3122,9 @@ async def _run_related_evolve_experiment(
     macro_maintenance_step: int = 10,
     test_concurrency: int = 1,
     train_window_concurrency: int = 1,
+    candidate_competition_enabled: bool = False,
+    candidate_sample_count: int = 1,
+    candidate_trial_retrieval: bool = True,
 ) -> Dict[str, Any]:
     reset_maintenance_token_stats()
     effective_epochs = max(1, int(epochs if epochs is not None else 1))
@@ -2769,6 +3135,14 @@ async def _run_related_evolve_experiment(
     test_concurrency = max(1, int(test_concurrency or 1))
     train_window_concurrency = max(1, int(train_window_concurrency or 1))
     micro_concurrency = max(1, _env_int("BFCL_MICRO_CONCURRENCY", 4))
+    candidate_competition_enabled = bool(
+        candidate_competition_enabled or _env_bool("BFCL_CANDIDATE_COMPETITION_ENABLED", False)
+    )
+    candidate_sample_count = max(
+        1,
+        int(os.environ.get("BFCL_CANDIDATE_SAMPLE_COUNT", str(candidate_sample_count)) or candidate_sample_count),
+    )
+    candidate_trial_retrieval = bool(candidate_trial_retrieval and _env_bool("BFCL_CANDIDATE_TRIAL_RETRIEVAL", True))
     train_tasks, test_tasks = _tasks_from_manifest(manifest, cache_dir=cache_dir, data_source=data_source)
     strict_embeddings = os.environ.get("BFCL_STRICT_SEGMENT_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes"}
     segment_index = SegmentVectorIndex(strict_embeddings=strict_embeddings)
@@ -2955,8 +3329,8 @@ async def _run_related_evolve_experiment(
                             task_index=absolute_task_index,
                         )
                     results = [_result_from_dict(run).as_dict() for run in detail.get("runs", [])]
-                    extracted = await extract_bfcl_skill_artifacts_llm(
-                        results,
+                    extracted = await _extract_candidate_skill_samples(
+                        results=results,
                         tool_schemas=tools,
                         existing_artifacts=[],
                         extractor_rules=(role_feedback.get("extractor") or {}).get("rules") if extractor_trl_enabled else [],
@@ -2970,12 +3344,10 @@ async def _run_related_evolve_experiment(
                             "task_index": absolute_task_index,
                             "window_concurrent": True,
                         },
-                    )
-                    extracted = _mark_prior_artifacts_pending(
-                        extracted,
-                        round_index=round_index,
-                        task_index=absolute_task_index,
-                        task_id=current_task.task_id,
+                        competition_enabled=candidate_competition_enabled,
+                        sample_count=candidate_sample_count,
+                        trial_retrieval=candidate_trial_retrieval,
+                        existing_names=[artifact.name for artifact in store.all()],
                     )
                     extraction_rows = _extraction_event_records(
                         detail=detail,
@@ -3105,8 +3477,8 @@ async def _run_related_evolve_experiment(
                     new_artifacts = ArtifactStore(prefetched_record.get("new_artifacts") or []).all()
                 else:
                     results = [_result_from_dict(run).as_dict() for run in detail.get("runs", [])]
-                    new_artifacts = await extract_bfcl_skill_artifacts_llm(
-                        results,
+                    new_artifacts = await _extract_candidate_skill_samples(
+                        results=results,
                         tool_schemas=tools,
                         existing_artifacts=[],
                         extractor_rules=(role_feedback.get("extractor") or {}).get("rules") if extractor_trl_enabled else [],
@@ -3119,15 +3491,16 @@ async def _run_related_evolve_experiment(
                             "task_id": task.task_id,
                             "task_index": task_index,
                         },
-                    )
-                    new_artifacts = _mark_prior_artifacts_pending(
-                        new_artifacts,
-                        round_index=round_index,
-                        task_index=task_index,
-                        task_id=task.task_id,
+                        competition_enabled=candidate_competition_enabled,
+                        sample_count=candidate_sample_count,
+                        trial_retrieval=candidate_trial_retrieval,
+                        existing_names=[artifact.name for artifact in store.all()],
                     )
                 for artifact in new_artifacts:
-                    store.add_pending(artifact)
+                    if candidate_competition_enabled and artifact.metadata.get("candidate_group_id") and artifact.status == "trial":
+                        store.add(artifact)
+                    else:
+                        store.add_pending(artifact)
                 if new_artifacts:
                     update_overlap_graph_state(
                         overlap_state,
@@ -3392,6 +3765,20 @@ async def _run_related_evolve_experiment(
                 train_details=train_details,
                 maintenance_test_results=round_maintenance.get("maintenance_test_results") or [],
             )
+            candidate_group_feedback_rows = _build_candidate_group_feedback_rows(
+                extraction_events=extraction_events,
+                train_details=train_details,
+                credit_events=credit_events,
+                maintenance_test_results=round_maintenance.get("maintenance_test_results") or [],
+            ) if candidate_competition_enabled else []
+            candidate_group_decisions = _apply_candidate_group_competition_decisions(
+                store=store,
+                group_feedback_rows=candidate_group_feedback_rows,
+            ) if candidate_competition_enabled else []
+            extractor_trl_rows = [
+                *({"feedback_type": "skill", **dict(row)} for row in extractor_feedback_rows),
+                *candidate_group_feedback_rows,
+            ] if candidate_competition_enabled else extractor_feedback_rows
             credit_summary = _aggregate_skill_credit(credit_events, store=store)
             credit_filter_threshold = max(1, int(os.environ.get("BFCL_CREDIT_FILTER_THRESHOLD", "2") or "2"))
             credit_filter_decisions = _apply_skill_credit_filter(
@@ -3402,7 +3789,7 @@ async def _run_related_evolve_experiment(
             if extractor_trl_enabled:
                 extractor_feedback_update = await update_extractor_rules_from_feedback_llm(
                     current_rules=(role_feedback.get("extractor") or {}).get("rules"),
-                    feedback_rows=extractor_feedback_rows,
+                    feedback_rows=extractor_trl_rows,
                     llm_config=llm_config,
                     model_name=model_name,
                     max_rules=_ROLE_FEEDBACK_RULE_LIMIT,
@@ -3426,7 +3813,9 @@ async def _run_related_evolve_experiment(
                                     "round_index": round_index,
                                     "summary": extractor_feedback_update.get("summary") or "",
                                     "rules": copy.deepcopy(extractor_feedback_update.get("rules") or []),
-                                    "n_feedback_rows": len(extractor_feedback_rows),
+                                    "n_feedback_rows": len(extractor_trl_rows),
+                                    "n_skill_feedback_rows": len(extractor_feedback_rows),
+                                    "n_candidate_group_feedback_rows": len(candidate_group_feedback_rows),
                                     "trl_enabled": True,
                                 },
                             ][-12:],
@@ -3446,7 +3835,9 @@ async def _run_related_evolve_experiment(
                                     "round_index": round_index,
                                     "summary": "extractor_trl_disabled:no_rule_update",
                                     "rules": copy.deepcopy((role_feedback.get("extractor") or {}).get("rules") or []),
-                                    "n_feedback_rows": len(extractor_feedback_rows),
+                                    "n_feedback_rows": len(extractor_trl_rows),
+                                    "n_skill_feedback_rows": len(extractor_feedback_rows),
+                                    "n_candidate_group_feedback_rows": len(candidate_group_feedback_rows),
                                     "trl_enabled": False,
                                 },
                             ][-12:],
@@ -3474,6 +3865,8 @@ async def _run_related_evolve_experiment(
                 "token_breakdown": _token_breakdown_delta(round_token_start),
                 "role_feedback": _role_feedback_projection(role_feedback),
                 "extractor_feedback_rows": copy.deepcopy(extractor_feedback_rows),
+                "candidate_group_feedback_rows": copy.deepcopy(candidate_group_feedback_rows),
+                "candidate_group_decisions": copy.deepcopy(candidate_group_decisions),
                 "extraction_events": copy.deepcopy(extraction_events),
                 "credit_events": copy.deepcopy(credit_events),
                 "skill_credit_summary": copy.deepcopy(credit_summary),
@@ -3487,6 +3880,11 @@ async def _run_related_evolve_experiment(
                 "micro_maintenance_step": micro_maintenance_step,
                 "train_window_concurrency": train_window_concurrency,
                 "micro_concurrency": micro_concurrency,
+                "candidate_competition": {
+                    "enabled": bool(candidate_competition_enabled),
+                    "sample_count": int(candidate_sample_count),
+                    "trial_retrieval": bool(candidate_trial_retrieval),
+                },
                 "refactor_segment_coverage": copy.deepcopy(round_maintenance.get("refactor_segment_coverage") or []),
                 "online_refactor_attempts": _project_online_refactor_attempts(online_refactor_attempts)
                 if output_detail_level == "compact" else online_refactor_attempts,
@@ -3578,6 +3976,9 @@ async def _run_related_evolve_experiment(
             "test_concurrency": test_concurrency,
             "train_window_concurrency": train_window_concurrency,
             "micro_concurrency": micro_concurrency,
+            "candidate_competition_enabled": bool(candidate_competition_enabled),
+            "candidate_sample_count": int(candidate_sample_count),
+            "candidate_trial_retrieval": bool(candidate_trial_retrieval),
             "top_k_skills": top_k_skills,
             "min_skill_score": min_skill_score,
             "skill_injection_mode": skill_injection_mode,
@@ -3591,6 +3992,11 @@ async def _run_related_evolve_experiment(
         "macro_maintenance_step": macro_maintenance_step,
         "train_window_concurrency": train_window_concurrency,
         "micro_concurrency": micro_concurrency,
+        "candidate_competition": {
+            "enabled": bool(candidate_competition_enabled),
+            "sample_count": int(candidate_sample_count),
+            "trial_retrieval": bool(candidate_trial_retrieval),
+        },
         "maintenance_windows": [
             window
             for report in round_reports
@@ -3611,6 +4017,16 @@ async def _run_related_evolve_experiment(
         "token_breakdown": experiment_token_breakdown,
         "role_feedback": _role_feedback_projection(role_feedback),
         "pending_skill_summary": _pending_skill_summary(store),
+        "candidate_group_feedback_rows": [
+            row
+            for report in round_reports
+            for row in (report.get("candidate_group_feedback_rows") or [])
+        ],
+        "candidate_group_decisions": [
+            row
+            for report in round_reports
+            for row in (report.get("candidate_group_decisions") or [])
+        ],
         "skill_credit_events": [
             item
             for report in round_reports
@@ -3752,6 +4168,13 @@ async def main_async() -> None:
     parser.add_argument("--macro-maintenance-step", type=int, default=10)
     parser.add_argument("--test-concurrency", type=int, default=int(os.environ.get("BFCL_RELATED_TEST_CONCURRENCY", "1") or "1"))
     parser.add_argument("--train-window-concurrency", type=int, default=int(os.environ.get("BFCL_RELATED_TRAIN_WINDOW_CONCURRENCY", "1") or "1"))
+    parser.add_argument("--enable-candidate-competition", action="store_true", default=_env_bool("BFCL_CANDIDATE_COMPETITION_ENABLED", False))
+    parser.add_argument("--candidate-sample-count", type=int, default=int(os.environ.get("BFCL_CANDIDATE_SAMPLE_COUNT", "1") or "1"))
+    parser.add_argument(
+        "--disable-candidate-trial-retrieval",
+        action="store_true",
+        help="Keep sampled candidate groups pending instead of exposing trial candidates to retrieval.",
+    )
     parser.add_argument("--execution-backend", choices=["official", "local_mock", "auto"], default="official")
     parser.add_argument("--prompt-style", choices=["native", "official", "academic"], default="native")
     parser.add_argument(
@@ -3899,6 +4322,9 @@ async def main_async() -> None:
             macro_maintenance_step=args.macro_maintenance_step,
             test_concurrency=args.test_concurrency,
             train_window_concurrency=args.train_window_concurrency,
+            candidate_competition_enabled=args.enable_candidate_competition,
+            candidate_sample_count=args.candidate_sample_count,
+            candidate_trial_retrieval=not args.disable_candidate_trial_retrieval,
         )
         out = resolved_output
 

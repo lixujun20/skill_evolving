@@ -22,6 +22,9 @@ from academic.benchmarks.bfcl.related.experiment import (
     _load_saved_details,
     _mentioned_skill_names,
     _micro_write_target_names,
+    _mark_candidate_competition_artifacts,
+    _build_candidate_group_feedback_rows,
+    _apply_candidate_group_competition_decisions,
     _mark_prior_artifacts_pending,
     _normalize_role_feedback_memory,
     _pending_skill_summary,
@@ -81,6 +84,140 @@ def test_segment_vector_index_records_rows_without_embeddings_when_not_strict() 
     stats = index.stats()
     assert stats["n_segments"] == 1
     assert stats["strict_embeddings"] is False
+
+
+def test_candidate_competition_marks_group_and_trial_metadata() -> None:
+    artifacts = [
+        SkillArtifact(name="airport_lookup_rule", kind="rule_card", description="airport booking lookup", body="lookup airport"),
+        SkillArtifact(name="airport_lookup_rule", kind="rule_card", description="airport booking lookup variant", body="lookup airport variant"),
+    ]
+
+    prepared = _mark_candidate_competition_artifacts(
+        artifacts,
+        round_index=0,
+        task_index=7,
+        task_id="multi_turn_base_7",
+        sample_count=2,
+        existing_names={"airport_lookup_rule"},
+        trial_retrieval=True,
+    )
+
+    assert len(prepared) == 2
+    assert {artifact.metadata["candidate_group_id"] for artifact in prepared} == {"extract:r0:t7:multi_turn_base_7"}
+    assert all(artifact.status == "trial" for artifact in prepared)
+    assert all(artifact.retrieval_enabled() for artifact in prepared)
+    assert all(artifact.metadata["candidate_group_role"] == "alternative" for artifact in prepared)
+    assert prepared[0].name != prepared[1].name
+    assert all("airport_lookup_rule" in artifact.metadata.get("candidate_original_name", "") for artifact in prepared)
+    assert all(artifact.metadata.get("competes_with") for artifact in prepared)
+
+
+def test_retrieval_selects_at_most_one_trial_candidate_per_group() -> None:
+    group_id = "extract:r0:t1:task"
+    store = ArtifactStore(
+        [
+            SkillArtifact(
+                name="candidate_a",
+                kind="rule_card",
+                description="airport booking lookup candidate",
+                body="airport booking lookup",
+                status="trial",
+                metadata={"candidate_group_id": group_id, "candidate_group_role": "alternative"},
+            ),
+            SkillArtifact(
+                name="candidate_b",
+                kind="rule_card",
+                description="airport booking lookup candidate alternative",
+                body="airport booking lookup",
+                status="trial",
+                metadata={"candidate_group_id": group_id, "candidate_group_role": "alternative"},
+            ),
+            SkillArtifact(
+                name="independent_skill",
+                kind="rule_card",
+                description="airport booking lookup independent",
+                body="airport booking lookup",
+            ),
+        ]
+    )
+
+    audit = store.retrieve_audit("airport booking lookup", top_k=3)
+    selected_names = [row["name"] for row in audit["selected"]]
+
+    assert len([name for name in selected_names if name in {"candidate_a", "candidate_b"}]) == 1
+    assert "independent_skill" in selected_names
+    suppressed = [
+        row for row in audit["candidates"]
+        if row["name"] in {"candidate_a", "candidate_b"} and row.get("filter_reason") == "candidate_group_alternative_suppressed"
+    ]
+    assert suppressed
+
+
+def test_candidate_group_feedback_selects_winner_and_marks_loser() -> None:
+    group_id = "extract:r0:t2:task"
+    extraction_events = [
+        {
+            "artifact_name": "skill_win",
+            "skill_name": "skill_win",
+            "candidate_group_id": group_id,
+            "candidate_sample_index": 0,
+            "source_task_id": "task_source",
+            "description": "precise winner",
+            "kind": "rule_card",
+            "status": "trial",
+        },
+        {
+            "artifact_name": "skill_lose",
+            "skill_name": "skill_lose",
+            "candidate_group_id": group_id,
+            "candidate_sample_index": 1,
+            "source_task_id": "task_source",
+            "description": "broad loser",
+            "kind": "rule_card",
+            "status": "trial",
+        },
+    ]
+    train_details = [
+        {
+            "task_id": "task_eval",
+            "runs": [
+                {
+                    "metrics": {
+                        "retrieved_skills": ["skill_win", "skill_lose"],
+                        "prompt_injected_skills": ["skill_win"],
+                        "used_skills": ["skill_win"],
+                        "official_valid": True,
+                    }
+                }
+            ],
+        }
+    ]
+    credit_events = [
+        {"skill_name": "skill_win", "judgment": "helpful", "reason": "matched exact schema"},
+        {"skill_name": "skill_lose", "judgment": "harmful", "reason": "scope too broad"},
+    ]
+
+    rows = _build_candidate_group_feedback_rows(
+        extraction_events=extraction_events,
+        train_details=train_details,
+        credit_events=credit_events,
+        maintenance_test_results=[],
+    )
+
+    assert rows[0]["winner"] == "skill_win"
+    assert rows[0]["losers"] == ["skill_lose"]
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="skill_win", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id, "candidate_group_role": "alternative"}),
+            SkillArtifact(name="skill_lose", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id, "candidate_group_role": "alternative"}),
+        ]
+    )
+    decisions = _apply_candidate_group_competition_decisions(store=store, group_feedback_rows=rows)
+
+    assert store.get("skill_win").status == "active"
+    assert store.get("skill_win").metadata["competition_status"] == "winner"
+    assert store.get("skill_lose").metadata["competition_status"] == "loser"
+    assert any(row["action"] == "winner" for row in decisions)
 
 
 def test_prior_extraction_adds_pending_skills_that_do_not_retrieve() -> None:

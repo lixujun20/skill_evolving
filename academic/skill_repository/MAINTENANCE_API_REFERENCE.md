@@ -169,6 +169,7 @@ class SkillArtifact:
     description: str
     body: str
     metadata: Dict[str, Any]
+    tags: List[str]
     version: int
     usage_count: int
     success_count: int
@@ -194,6 +195,14 @@ class SkillArtifact:
 - `retrieval_text()`
 - `prompt_block()`
 - `as_dict()`
+
+`tags` 是受控检索标签，只允许三类前缀：
+
+- `domain:*`，例如 `domain:TicketAPI`
+- `tool:*`，例如 `tool:create_ticket`
+- `intent:*`，例如 `intent:reuse_id`
+
+旧字段 `metadata.domains`、`metadata.allowed_tools`、`metadata.intent_keywords` 会在进入 `ArtifactStore` 时自动派生成等价 tags；非法/free-form tag 不进入检索。
 
 ## 2. Store API
 
@@ -249,15 +258,20 @@ retrieve_audit(
       "predicate_passed": true,
       "filter_reason": "",
       "score": 0.31,
+      "base_score": 0.19,
+      "tag_score": 0.12,
+      "tag_matches": ["tool:create_ticket"],
       "rank": 1,
       "selected": true
     }
   ],
   "selected": [
-    {"name": "skill", "rank": 1, "score": 0.31}
+    {"name": "skill", "rank": 1, "score": 0.31, "base_score": 0.19, "tag_score": 0.12}
   ]
 }
 ```
+
+检索分数为 `base_score + tag_score`。`base_score` 是原 token cosine；`tag_score` 来自 `debug_context.query_tags` 或 query 文本派生的受控标签命中，不做硬过滤。
 
 ### 2.3 Stale 与 rollback
 
@@ -396,7 +410,7 @@ resolve_stale_skill_llm(
 
 代码位置：
 
-- `academic/benchmarks/bfcl_llm_maintenance.py`
+- `academic/benchmarks/bfcl/maintenance/adapter.py`
 
 ### 4.1 `execute_bfcl_bundle_tests`
 
@@ -573,6 +587,23 @@ compact_debug_event_for_player(...)
 - pages
 - flow cards
 
+V2 前端依赖字段清单：
+
+| 字段 | V2 用途 |
+| --- | --- |
+| `kind` | 决定 `/maintenance` 与 `/method-tests` 的默认筛选和页面语义。 |
+| `experiment.id/title/subtitle/folder_name/kind` | 顶部 context bar、左侧 experiment list。 |
+| `overview_metrics[].label/value/tone/help` | overview 和 Inspector 指标卡。 |
+| `files.result_json/readme/suite_readme/role_log` | Inspector 文件来源说明和 raw detail。 |
+| `artifacts[]` | 左侧 Artifacts folder、artifact Inspector、payload modal。 |
+| `artifacts[].name/kind/description/status/version/body/interface/bundle/lineage/history` | skill store、interface、body、bundle、版本变化和 lineage 展示。 |
+| `pages[].page_id/label/title/status_tone/summary_metrics` | 文件树页面、当前页标题和指标。 |
+| `pages[].flow_cards[]` | React Flow role 节点、flow chip、Inspector role card。 |
+| `flow_cards[].type/title/subtitle/tone/role` | 节点归类和摘要。 |
+| `flow_cards[].detail.input/output/debug_raw` | role 输入、输出和 debug raw 展示。 |
+| `maintenance_test.detail.unit_case_runs[]` | case run with/without skill、tokens、steps、accuracy、validity、unavailable reason。 |
+| `method_case.detail.given/model_output/algorithm_output/assertions` | `/method-tests` 的方法级验证视图。 |
+
 ### 6.3 `GET /api/maintenance/player?id=...`
 
 返回 state player trace：
@@ -601,6 +632,17 @@ compact_debug_event_for_player(...)
 | `frames[].consumed_slots` | 当前 role 消费的数据槽 |
 | `frames[].produced_slots` | 当前 role 产生的数据槽 |
 | `frames[].condition_result` | pass/fail/update/rollback 等分支结果 |
+
+V2 前端额外使用：
+
+| 字段 | V2 用途 |
+| --- | --- |
+| `frames[].index/name/summary` | player caption 和 slider position。 |
+| `frames[].is_marker_candidate` | marker rail 的 major marker。 |
+| `frames[].role_group/action_kind` | active React Flow role node 和 Next Role 跳转。 |
+| `frames[].changed_elements/highlighted_elements` | Inspector raw frame tree。 |
+| `frames[].delta.event` | frame delta 和 last event tree。 |
+| `initial_elements` + `element_deltas` | 保留给后续更细粒度节点状态；当前 V2 主要用 role-level highlight。 |
 
 frame action 映射：
 
@@ -642,7 +684,53 @@ frame action 映射：
 
 ## 7. Frontend Model
 
-### 7.1 Maintenance Lab
+### 7.1 Maintenance Lab V2
+
+文件：
+
+- `academic/webapp/frontend`
+- build 输出：`academic/webapp/static/maintenance-v2`
+- Flask template：`academic/webapp/templates/maintenance.html`
+
+核心设计：
+
+- React + Vite + TypeScript。
+- React Flow 绘制固定工业 role graph：retriever、executor、extractor、bundle builder、unit tester、refiner、skill store。
+- `/maintenance` 和 `/method-tests` 共享同一 app；后者根据 route 默认筛选 method validation cases。
+- V2 只消费 HTTP API view model，不直接读取 result JSON。
+- `JsonTree` 默认折叠 raw payload，避免大段裸 JSON。
+- `/refactor-graph` 不并入 React V2，仍是独立页面；该页面消费 `/api/refactor-graph` 的 `frames` 和 `skill_events`。
+
+### 7.2 Refactor Graph API Fields
+
+`GET /api/refactor-graph?id=<experiment_id>` 返回：
+
+- `frames`: 只包含 evolve timeline frames。每帧对应一个 `task_overlap_graph_updated`，用于时间轴和图状态。
+- `frames[].output.segments`: 当前 prefix 的 trace segments。
+- `frames[].output.overlap_graph.edges`: segment similarity edges，`weight/text_score/error_score/shared_ngrams/shared_error_ngrams` 用于边颜色、数字和 inspector。
+- `frames[].output.store_state.skills`: 当前 skill library 摘要，用于 macro skill nodes。
+- `skill_events`: extractor/refactor/commit events 的归一化列表，用于右侧 inspector。
+- `skill_events[].related_skills`: `{old,new,updated}` 名称列表。
+- `skill_events[].new_skills`, `old_skills`, `updated_skills`: diff 面板使用的 skill payload。
+- `skill_events[].llm_input`, `llm_output`, `decision`: LLM refactor 输入输出和 `decision.reason`。
+
+状态：
+
+- `selectedExperimentId`
+- `detail`
+- `player`
+- `selection`
+- `selectedNodeId`
+- `frameIndex`
+- `modal`
+
+Adapter：
+
+- `buildFileTree(detail)`：把 pages/artifacts 转成 filesystem-style tree。
+- `buildFlowModel(detail, pageId, player, frameIndex)`：把 flow cards 转成 role graph node buckets。
+- `roleFromCard(card)`：按 card type/role/title 映射到 role group。
+
+### 7.2 Legacy Maintenance Lab
 
 文件：
 
@@ -665,7 +753,9 @@ frame action 映射：
 - artifact：skill/bundle/test result 详情。
 - docs：实验关联文档。
 
-### 7.2 Docs Viewer
+该文件不再作为 `/maintenance` 和 `/method-tests` 主入口。保留它是为了兼容历史脚本检查和后续迁移参考。
+
+### 7.3 Docs Viewer
 
 文件：
 
@@ -736,7 +826,7 @@ frame action 映射：
 真实 GLM 维护实验入口：
 
 ```bash
-python -m academic.benchmarks.bfcl_real_maintenance_probe --experiment exp2 --timeout-s 900
+python -m academic.benchmarks.bfcl.legacy.real_maintenance_probe --experiment exp2 --timeout-s 900
 ```
 
 默认目录由当前日期决定：
@@ -749,7 +839,7 @@ academic/results/real_glm_maintenance_YYYY-MM-DD/full_logs/
 可通过环境变量固定：
 
 ```bash
-SKILL_MAINTENANCE_DATE=2026-05-11 python -m academic.benchmarks.bfcl_real_maintenance_probe --experiment exp2 --timeout-s 900
+SKILL_MAINTENANCE_DATE=2026-05-11 python -m academic.benchmarks.bfcl.legacy.real_maintenance_probe --experiment exp2 --timeout-s 900
 ```
 
 这保证 result JSON、role audit log、debug event JSONL 使用同一个日期目录，前端才能把 experiment detail 和 player trace 对齐。
@@ -776,7 +866,7 @@ SKILL_MAINTENANCE_DATE=2026-05-11 python -m academic.benchmarks.bfcl_real_mainte
 
 ```bash
 python -m pytest academic/method_validation/tests -q
-python -m py_compile academic/skill_repository/*.py academic/benchmarks/bfcl_llm_maintenance.py academic/webapp/app.py
+python -m py_compile academic/skill_repository/*.py academic/benchmarks/bfcl/maintenance/adapter.py academic/webapp/app.py
 node --check academic/webapp/static/maintenance.js
 node --check academic/webapp/static/maintenance_docs.js
 ```

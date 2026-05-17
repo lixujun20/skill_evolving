@@ -12,7 +12,7 @@ from academic.method_validation.assertions import (
     make_skill,
     should_micro_refactor,
 )
-from academic.skill_repository.store import ArtifactStore
+from academic.skill_repository.store import ArtifactStore, HybridEmbeddingRetrievalBackend
 from academic.skill_repository.types import DependencyPin, SkillLineage
 
 
@@ -137,6 +137,115 @@ def test_ret_c04_compact_store_reduces_duplicate_prompt_cost() -> None:
     assert_archived_not_retrieved(after, "known filename diff", "dup_c")
 
 
+def test_ret_c05_controlled_tags_are_normalized_and_derived_from_metadata() -> None:
+    store = ArtifactStore()
+    store.add(
+        make_skill(
+            "tagged_ticket_rule",
+            metadata={
+                "domains": ["TicketAPI"],
+                "allowed_tools": ["create_ticket"],
+                "intent_keywords": ["exact schema"],
+            },
+        )
+    )
+    store.add(
+        make_skill(
+            "invalid_freeform_tag_rule",
+            metadata={"domains": ["TravelAPI"]},
+        )
+    )
+    invalid = store.get("invalid_freeform_tag_rule")
+    assert invalid is not None
+    invalid.tags = ["random freeform", "pattern:too_broad", "domain:TravelAPI"]
+    store.add(invalid)
+
+    ticket = store.get("tagged_ticket_rule")
+    travel = store.get("invalid_freeform_tag_rule")
+    assert ticket is not None
+    assert "domain:TicketAPI" in ticket.tags
+    assert "tool:create_ticket" in ticket.tags
+    assert "intent:exact_schema" in ticket.tags
+    assert travel is not None
+    assert "domain:TravelAPI" in travel.tags
+    assert all(tag.split(":", 1)[0] in {"domain", "tool", "intent"} for tag in travel.tags)
+
+
+def test_ret_c06_tag_weighting_ranks_same_text_same_domain_skill_first() -> None:
+    store = ArtifactStore(
+        [
+            make_skill(
+                "ticket_argument_rule",
+                body="Use exact schema names for action requests.",
+                metadata={"domains": ["TicketAPI"], "allowed_tools": ["create_ticket"], "intent_keywords": ["schema"]},
+            ),
+            make_skill(
+                "travel_argument_rule",
+                body="Use exact schema names for action requests.",
+                metadata={"domains": ["TravelAPI"], "allowed_tools": ["book_flight"], "intent_keywords": ["schema"]},
+            ),
+        ]
+    )
+    audit = store.retrieve_audit(
+        "Use exact schema names for this action request.",
+        top_k=2,
+        debug_context={"query_tags": ["domain:TicketAPI", "tool:create_ticket", "intent:schema"]},
+    )
+    assert audit["selected"][0]["name"] == "ticket_argument_rule"
+    assert audit["selected"][0]["tag_score"] > audit["selected"][1]["tag_score"]
+    assert "tool:create_ticket" in audit["selected"][0]["tag_matches"]
+
+
+def test_ret_c06b_expected_tools_context_is_ignored_by_retriever() -> None:
+    store = ArtifactStore(
+        [
+            make_skill(
+                "ticket_argument_rule",
+                body="Use exact schema names for action requests.",
+                metadata={"domains": ["TicketAPI"], "allowed_tools": ["create_ticket"], "intent_keywords": ["schema"]},
+            )
+        ]
+    )
+    audit = store.retrieve_audit(
+        "Use exact schema names for this action request.",
+        top_k=1,
+        debug_context={"expected_tools": ["create_ticket"]},
+    )
+    assert "tool:create_ticket" not in audit["context"].get("query_tags", [])
+    assert "tool:create_ticket" not in audit["selected"][0]["tag_matches"]
+
+
+def test_ret_c07_min_score_threshold_blocks_low_confidence_cross_domain_hits() -> None:
+    store = ArtifactStore(
+        [
+            make_skill(
+                "trading_symbol_rule",
+                body="Do not call get_symbol_by_name when the user already provides a stock symbol directly.",
+                metadata={"domains": ["TradingBot"], "allowed_tools": ["get_symbol_by_name"], "intent_keywords": ["stock", "symbol"]},
+            ),
+            make_skill(
+                "vehicle_start_rule",
+                body="Before startEngine, lock doors and pressBrakePedal with the exact required value.",
+                metadata={"domains": ["VehicleControlAPI"], "allowed_tools": ["startEngine", "pressBrakePedal"], "intent_keywords": ["engine", "brake"]},
+            ),
+        ]
+    )
+    no_threshold = store.retrieve_audit(
+        "Please start the engine after checking the doors and brake state.",
+        top_k=2,
+        min_score=0.0,
+        debug_context={"query_tags": ["domain:VehicleControlAPI"]},
+    )
+    gated = store.retrieve_audit(
+        "Please start the engine after checking the doors and brake state.",
+        top_k=2,
+        min_score=0.15,
+        debug_context={"query_tags": ["domain:VehicleControlAPI"]},
+    )
+    assert "trading_symbol_rule" in {row["name"] for row in no_threshold["selected"]}
+    assert [row["name"] for row in gated["selected"]] == ["vehicle_start_rule"]
+
+
 def test_ref_c05_major_update_requires_lineage() -> None:
     artifact = make_skill("major_skill", version_kind="major")
     artifact.lineage = SkillLineage(
@@ -189,3 +298,38 @@ def test_int_c03e_dependency_chain_stales_downstream_on_upstream_update() -> Non
     store.add(make_skill("id_getter", body="Get id first with new interface.", version_kind="major"))
     assert store.get("id_consumer").stale is True  # type: ignore[union-attr]
 
+
+def test_retrieval_backend_hybrid_embedding_is_auditable_without_external_api() -> None:
+    def fake_embed(text: str):
+        lowered = text.lower()
+        if "vehicle" in lowered or "engine" in lowered or "brake" in lowered:
+            return [1.0, 0.0, 0.0]
+        if "trading" in lowered or "stock" in lowered:
+            return [0.0, 1.0, 0.0]
+        return [0.5, 0.5, 0.0]
+
+    store = ArtifactStore(
+        [
+            make_skill(
+                "vehicle_engine_rule",
+                body="For vehicle engine tasks, press the brake before starting the engine.",
+                metadata={"domains": ["VehicleControlAPI"], "allowed_tools": ["startEngine"]},
+            ),
+            make_skill(
+                "trading_stock_rule",
+                body="For trading tasks, use the explicit stock symbol directly.",
+                metadata={"domains": ["TradingBot"], "allowed_tools": ["place_order"]},
+            ),
+        ],
+        retrieval_backend=HybridEmbeddingRetrievalBackend(embedding_fn=fake_embed),
+    )
+
+    audit = store.retrieve_audit(
+        "Vehicle engine start with brake",
+        top_k=2,
+        debug_context={"query_tags": ["domain:VehicleControlAPI"]},
+    )
+
+    assert audit["retrieval_backend"] == "hybrid_embedding"
+    assert audit["selected"][0]["name"] == "vehicle_engine_rule"
+    assert audit["selected"][0]["embedding_score"] is not None

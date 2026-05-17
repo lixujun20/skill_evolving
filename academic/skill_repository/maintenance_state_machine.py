@@ -412,6 +412,13 @@ def _compact_skill_artifacts_for_store(skills: List[Dict[str, Any]] | None) -> L
 
 def _compact_test_like(item: Dict[str, Any]) -> Dict[str, Any]:
     unit_runs = item.get("unit_case_runs") or []
+    integration_failures = item.get("integration_failures") or []
+    if isinstance(integration_failures, (int, float)):
+        n_integration_failures = int(integration_failures)
+    elif isinstance(integration_failures, list):
+        n_integration_failures = len(integration_failures)
+    else:
+        n_integration_failures = 1 if integration_failures else 0
     return {
         "result_id": item.get("result_id"),
         "skill_name": item.get("skill_name"),
@@ -422,7 +429,7 @@ def _compact_test_like(item: Dict[str, Any]) -> Dict[str, Any]:
         "counterfactual": _compact_event_value(item.get("counterfactual") or {}, depth=0),
         "n_unit_case_runs": len(unit_runs) if isinstance(unit_runs, list) else 0,
         "unit_case_runs": [_compact_case_run(run) for run in unit_runs[:PLAYER_EVENT_LIST_LIMIT] if isinstance(run, dict)] if isinstance(unit_runs, list) else [],
-        "n_integration_failures": len(item.get("integration_failures") or []),
+        "n_integration_failures": n_integration_failures,
     }
 
 
@@ -617,8 +624,11 @@ def build_player_trace_from_debug_events(
     debug events should use ``build_player_trace_from_pages``.
     """
 
-    state = _initial_player_state(run_id, artifacts=artifacts, pages=pages)
-    state.snapshot_frame(
+    # Structured runs should show store evolution over time.  Do not seed the
+    # init frame with final artifacts; store_update/extractor/bundle/refine
+    # events below reconstruct the store state frame by frame.
+    state = _initial_player_state(run_id, artifacts=[], pages=pages)
+    init_frame = state.snapshot_frame(
         name="init",
         action_kind="init",
         summary="Initial player state reconstructed before applying debug events.",
@@ -628,6 +638,15 @@ def build_player_trace_from_debug_events(
         source_mode="debug_events",
         is_marker_candidate=True,
     )
+    frames: List[Dict[str, Any]] = []
+    initial_elements = {
+        key: value.as_dict() if isinstance(value, PlayerElement) else value
+        for key, value in state.elements.items()
+    }
+    init_payload = init_frame.as_dict()
+    init_payload["elements"] = copy.deepcopy(initial_elements)
+    init_payload["element_deltas"] = copy.deepcopy(initial_elements)
+    frames.append(init_payload)
     seen_ids: Dict[str, int] = {}
     for idx, event in enumerate(debug_events or []):
         raw_id = str(event.get("event_id") or f"debug_event_{idx + 1:06d}")
@@ -635,29 +654,81 @@ def build_player_trace_from_debug_events(
         event_id = raw_id if seen_ids[raw_id] == 1 else f"{raw_id}#{seen_ids[raw_id]}"
         event = {**copy.deepcopy(event), "event_id": event_id}
         compact_event = compact_debug_event_for_player(event)
-        changed = _apply_debug_event_to_elements(state, event, idx)
         action_kind = _event_action_kind(event)
         semantics = _action_semantics(action_kind, {"event": event})
-        state.snapshot_frame(
+        role_id = _event_role_id(event)
+        changed = [role_id]
+        frame = PlayerFrame(
+            frame_id=f"{run_id}:frame:{len(frames):04d}",
+            index=len(frames),
             name=f"{action_kind}:{event_id}",
             action_kind=action_kind,
             summary=_event_summary(event),
-            changed_elements=changed,
-            delta={"event": compact_event},
             role_group=semantics["role_group"],
             consumed_slots=semantics["consumed_slots"],
             produced_slots=semantics["produced_slots"],
             condition_result=semantics["condition_result"],
             source_mode="debug_events",
             is_marker_candidate=semantics["is_marker_candidate"],
-        )
+            changed_elements=changed,
+            highlighted_elements=changed,
+            delta={"event": compact_event},
+            elements={},
+        ).as_dict()
+        frame["element_deltas"] = {
+            role_id: _player_element_event_stub(state.elements.get(role_id), role_id, compact_event)
+        }
+        frames.append(frame)
+        state.step_index += 1
     state.terminal = True
     state.phase = "terminal"
-    trace = state.as_trace(title=title, kind=kind)
-    trace["source_mode"] = "debug_events"
-    if len(trace.get("frames") or []) > DELTA_TRACE_FRAME_THRESHOLD:
-        trace = _delta_encode_trace(trace)
-    return trace
+    return {
+        "run_id": run_id,
+        "kind": kind,
+        "title": title or run_id,
+        "terminal": True,
+        "current_phase": state.phase,
+        "source_mode": "debug_events",
+        "snapshot_mode": "delta",
+        "initial_elements": initial_elements,
+        "elements": initial_elements,
+        "frames": frames,
+    }
+
+
+def _player_element_timeline_stub(element: PlayerElement) -> Dict[str, Any]:
+    state = element.state or {}
+    return {
+        "element_id": element.element_id,
+        "kind": element.kind,
+        "label": element.label,
+        "icon": element.icon,
+        "position": dict(element.position or {}),
+        "state": {
+            "status": state.get("status"),
+            "last_event_id": state.get("last_event_id"),
+            "last_event_type": state.get("last_event_type"),
+        },
+    }
+
+
+def _player_element_event_stub(element: PlayerElement | None, element_id: str, compact_event: Dict[str, Any]) -> Dict[str, Any]:
+    label = element.label if element else element_id.replace("role:", "").replace("_", " ").title()
+    icon = element.icon if element else "robot"
+    kind = element.kind if element else ("role" if element_id.startswith("role:") else "skill_store")
+    position = dict(element.position or {}) if element else {}
+    return {
+        "element_id": element_id,
+        "kind": kind,
+        "label": label,
+        "icon": icon,
+        "position": position,
+        "state": {
+            "status": "active",
+            "last_event_id": compact_event.get("event_id"),
+            "last_event_type": compact_event.get("event_type"),
+        },
+    }
 
 
 def build_player_trace(
@@ -798,6 +869,8 @@ def _event_action_kind(event: Dict[str, Any]) -> str:
         return "refiner_step"
     if event_type in {"store_update", "skill_delta", "fault_injection", "integration_cases_appended", "store_snapshot"}:
         return "skill_store_step"
+    if event_type in {"prompt_reinjection", "executor_watchdog_break"}:
+        return "executor_step"
     if event_type.startswith("experiment"):
         return "experiment_step"
     return "debug_event"
@@ -817,6 +890,8 @@ def _event_role_id(event: Dict[str, Any]) -> str:
         return "role:refiner"
     if action_kind == "skill_store_step":
         return "skill_store"
+    if action_kind == "experiment_step":
+        return "trace"
     return "role:executor"
 
 
@@ -901,6 +976,7 @@ def _apply_debug_event_to_elements(
                 y=285 + len([key for key in state.elements if key.startswith("bundle:")]) * 50,
             )
             changed.append(element_id)
+        _update_store_from_event(state, event, changed)
     elif event_type in {"unit_test_done", "post_refine_test_done"}:
         result = compact_event.get("output") or {}
         name = str(result.get("skill_name") or event.get("event_id") or idx)
@@ -915,7 +991,7 @@ def _apply_debug_event_to_elements(
             y=285 + len([key for key in state.elements if key.startswith("test_result:")]) * 42,
         )
         changed.append(element_id)
-    elif event_type == "refiner_done":
+    elif event_type in {"refiner_done", "integration_cases_appended"}:
         _update_store_from_event(state, event, changed)
     return changed
 
@@ -1082,7 +1158,7 @@ def _role_summary_items(
     elif role_name == "bundle_builder":
         rows.extend(
             [
-                {"label": "Targets", "value": ", ".join(output_payload.get("targets") or input_payload.get("targets") or []) or "none"},
+                {"label": "Targets", "value": _join_compact_values(output_payload.get("targets") or input_payload.get("targets") or []) or "none"},
                 {"label": "Bundles", "value": _bundle_summary(output_payload.get("bundles") or []) or "none"},
             ]
         )
@@ -1099,10 +1175,24 @@ def _role_summary_items(
         rows.extend(
             [
                 {"label": "Decisions", "value": _decision_summary(output_payload.get("decisions") or []) or "none"},
-                {"label": "Targets", "value": ", ".join(input_payload.get("selected_maintenance_targets") or input_payload.get("targets") or []) or "none"},
+                {"label": "Targets", "value": _join_compact_values(input_payload.get("selected_maintenance_targets") or input_payload.get("targets") or []) or "none"},
             ]
         )
     return [row for row in rows if row.get("value") not in (None, "")]
+
+
+def _join_compact_values(items: Any) -> str:
+    if not isinstance(items, list):
+        return _clip_text(items, 260) if items else ""
+    values: List[str] = []
+    for item in items[:PLAYER_EVENT_LIST_LIMIT]:
+        if isinstance(item, dict):
+            values.append(str(item.get("name") or item.get("skill_name") or item.get("id") or jsonish_compact(item)))
+        else:
+            values.append(str(item))
+    if len(items) > PLAYER_EVENT_LIST_LIMIT:
+        values.append(f"... +{len(items) - PLAYER_EVENT_LIST_LIMIT} more")
+    return ", ".join(values)
 
 
 def _join_names(items: List[Any]) -> str:
@@ -1158,6 +1248,7 @@ def _update_store_from_event(
         compact_store = compact_output.get("store_after") or compact_output.get("store_after_injection") or _compact_store_like(store_after)
         next_state["store_summary"] = copy.deepcopy(compact_store)
         next_state["skills"] = copy.deepcopy(compact_store.get("skills") or next_state.get("skills") or [])
+    _merge_store_skill_details(next_state, output)
     if output.get("new_skill_names") is not None:
         next_state["new_skill_names"] = copy.deepcopy(output.get("new_skill_names") or [])
     next_state["last_event"] = copy.deepcopy(compact_event)
@@ -1187,6 +1278,77 @@ def _update_store_from_event(
             y=430 + len([key for key in state.elements if key.startswith("skill:")]) * 42,
         )
         changed.append(element_id)
+
+
+def _merge_store_skill_details(store_state: Dict[str, Any], output: Dict[str, Any]) -> None:
+    """Attach rich artifact/bundle payloads to compact store rows when logged."""
+
+    skills = store_state.get("skills")
+    if not isinstance(skills, list):
+        return
+    by_name: Dict[str, Dict[str, Any]] = {
+        str(item.get("name") or item.get("skill_name") or ""): item
+        for item in skills
+        if isinstance(item, dict)
+    }
+    for artifact in output.get("artifacts") or output.get("skills_after_refine") or []:
+        if not isinstance(artifact, dict):
+            continue
+        name = str(artifact.get("name") or artifact.get("skill_name") or "")
+        if not name:
+            continue
+        row = by_name.setdefault(name, {"name": name})
+        bundle = artifact.get("bundle") if isinstance(artifact.get("bundle"), dict) else {}
+        row.update(
+            {
+                "name": name,
+                "kind": artifact.get("kind", row.get("kind", "")),
+                "description": artifact.get("description", row.get("description", "")),
+                "body": artifact.get("body") or artifact.get("implementation") or row.get("body", ""),
+                "interface": copy.deepcopy(artifact.get("interface") or row.get("interface") or {}),
+                "version": artifact.get("version", row.get("version")),
+                "version_kind": artifact.get("version_kind", row.get("version_kind", "")),
+                "status": artifact.get("status", row.get("status", "")),
+                "stale": artifact.get("stale", row.get("stale")),
+                "dependencies": copy.deepcopy(artifact.get("dependencies") or row.get("dependencies") or []),
+                "dependency_pins": copy.deepcopy(artifact.get("dependency_pins") or row.get("dependency_pins") or []),
+                "lineage": copy.deepcopy(artifact.get("lineage") or row.get("lineage") or {}),
+                "bundle_id": artifact.get("bundle_id") or bundle.get("bundle_id") or row.get("bundle_id", ""),
+                "bundle_version": artifact.get("bundle_version") or bundle.get("bundle_version") or row.get("bundle_version"),
+                "bundle": copy.deepcopy(bundle or row.get("bundle") or {}),
+            }
+        )
+        if bundle:
+            row["bundle_counts"] = {
+                "positive": len(bundle.get("positive_cases") or []),
+                "negative": len(bundle.get("negative_cases") or []),
+                "integration": len(bundle.get("integration_cases") or []),
+            }
+    for bundle in output.get("bundles") or []:
+        if not isinstance(bundle, dict):
+            continue
+        name = str(bundle.get("skill_name") or bundle.get("name") or "")
+        if not name:
+            continue
+        row = by_name.setdefault(name, {"name": name})
+        cases = bundle.get("cases") if isinstance(bundle.get("cases"), dict) else {}
+        row["bundle_id"] = bundle.get("bundle_id", row.get("bundle_id", ""))
+        row["bundle_version"] = bundle.get("bundle_version", row.get("bundle_version"))
+        row["bundle_counts"] = {
+            "positive": bundle.get("positive", len(cases.get("positive") or [])),
+            "negative": bundle.get("negative", len(cases.get("negative") or [])),
+            "integration": bundle.get("integration", len(cases.get("integration") or [])),
+        }
+        row["bundle"] = {
+            "bundle_id": bundle.get("bundle_id", ""),
+            "bundle_version": bundle.get("bundle_version"),
+            "positive_cases": copy.deepcopy(cases.get("positive") or []),
+            "negative_cases": copy.deepcopy(cases.get("negative") or []),
+            "integration_cases": copy.deepcopy(cases.get("integration") or []),
+            "maintenance_notes": bundle.get("maintenance_notes", ""),
+            "fixtures": copy.deepcopy(bundle.get("fixtures") or {}),
+        }
+    store_state["skills"] = [item for item in by_name.values() if item.get("name")]
 
 
 def _event_summary(event: Dict[str, Any]) -> str:

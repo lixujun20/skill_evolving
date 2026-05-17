@@ -18,8 +18,8 @@
 5. [llm_maintenance.py](llm_maintenance.py)
 6. [maintenance_state_machine.py](maintenance_state_machine.py)
 7. [debug_events.py](debug_events.py)
-8. [../benchmarks/bfcl.py](../benchmarks/bfcl.py)
-9. [../benchmarks/bfcl_llm_maintenance.py](../benchmarks/bfcl_llm_maintenance.py)
+8. [../benchmarks/bfcl/adapter.py](../benchmarks/bfcl/adapter.py)
+9. [../benchmarks/bfcl/maintenance/adapter.py](../benchmarks/bfcl/maintenance/adapter.py)
 10. [../webapp/app.py](../webapp/app.py)
 
 ## 核心设计
@@ -74,9 +74,9 @@ sequenceDiagram
 
 这些都属于 adapter 层，当前主要在：
 
-- [../benchmarks/bfcl.py](../benchmarks/bfcl.py)
-- [../benchmarks/bfcl_llm_maintenance.py](../benchmarks/bfcl_llm_maintenance.py)
-- [../benchmarks/bfcl_real_maintenance_probe.py](../benchmarks/bfcl_real_maintenance_probe.py)
+- [../benchmarks/bfcl/adapter.py](../benchmarks/bfcl/adapter.py)
+- [../benchmarks/bfcl/maintenance/adapter.py](../benchmarks/bfcl/maintenance/adapter.py)
+- [../benchmarks/bfcl/legacy/real_maintenance_probe.py](../benchmarks/bfcl/legacy/real_maintenance_probe.py)
 
 ## 当前状态机思路
 
@@ -119,7 +119,7 @@ debug event 到 player frame 的转换会做专用压缩：
 真实 GLM 探针入口：
 
 ```bash
-python -m academic.benchmarks.bfcl_real_maintenance_probe --experiment exp2 --timeout-s 900
+python -m academic.benchmarks.bfcl.legacy.real_maintenance_probe --experiment exp2 --timeout-s 900
 ```
 
 默认输出目录按日期生成：
@@ -130,7 +130,7 @@ python -m academic.benchmarks.bfcl_real_maintenance_probe --experiment exp2 --ti
 如果需要固定日期，设置：
 
 ```bash
-SKILL_MAINTENANCE_DATE=2026-05-11 python -m academic.benchmarks.bfcl_real_maintenance_probe --experiment exp2 --timeout-s 900
+SKILL_MAINTENANCE_DATE=2026-05-11 python -m academic.benchmarks.bfcl.legacy.real_maintenance_probe --experiment exp2 --timeout-s 900
 ```
 
 `exp2` 是当前推荐 smoke：覆盖手工 fault injection、bundle test、LLM refiner、post-repair verify，运行时间显著短于 exp3。
@@ -157,7 +157,7 @@ SKILL_MAINTENANCE_DATE=2026-05-11 python -m academic.benchmarks.bfcl_real_mainte
 
 ```bash
 python -m pytest academic/method_validation/tests -q
-python -m py_compile academic/skill_repository/*.py academic/benchmarks/bfcl_llm_maintenance.py academic/webapp/app.py
+python -m py_compile academic/skill_repository/*.py academic/benchmarks/bfcl/maintenance/adapter.py academic/webapp/app.py
 node --check academic/webapp/static/maintenance.js
 node --check academic/webapp/static/maintenance_docs.js
 python scripts/maintenance_player_mock_integration.py

@@ -22,6 +22,8 @@
 
 | 论文 | 笔记 | 核心定位 | 对我们的直接启发 |
 | --- | --- | --- | --- |
+| PSN | [psn.md](psn.md) | 把 executable skills 组织成可组合 programmatic network，支持 fault localization、maturity gating 和 rollback refactoring | 强覆盖长期 skill network 维护；我们需要把差异收缩到通用资产协议、unit utility、integration-derived tests 和 repository-level selection |
+| SkillMOO | [skillmoo.md](skillmoo.md) | 用 NSGA-II 对 agent skill bundles 做 pass rate / cost 多目标优化 | token/cost 应进入所有 with/without tests；repository selection 需要显式考虑冗余、噪声和预算 |
 | SkillClaw | [skillclaw.md](skillclaw.md) | 多用户 agent 生态中聚合跨用户轨迹，夜间演化并同步共享 skill pool | skill repository 应记录完整 action-feedback chain，并采用保守验证后发布 |
 | EvoSkill | [evoskill.md](evoskill.md) | 用 Pareto/frontier 与 held-out validation 控制 skill program 增长 | refactor_lab 可定位为 repository maintenance，而不是泛化 skill generation |
 | SkillX | [skillx.md](skillx.md) | 通过 merge/filter/update 和主动探索扩展 skill bank 覆盖 | skill 库需要去重、合并、剪枝和覆盖扩展，不能只累积新条目 |
@@ -30,6 +32,7 @@
 
 | 论文 | 笔记 | 核心定位 | 对我们的直接启发 |
 | --- | --- | --- | --- |
+| AgentOptimizer | [agentoptimizer.md](agentoptimizer.md) | 把 agent functions 当作 learnable weights，在不改 LLM 权重的情况下离线优化函数集合 | 说明外部能力层可被训练；我们的差异应是 versioned skill asset、测试驱动维护和群体选择，而不是“首次优化外部函数” |
 | SkillRL | [skillrl.md](skillrl.md) | 用 SFT + GRPO 让 policy 学会使用递归扩展的 SkillBank | 如果不训练 policy，就必须单独诊断 frozen model 是否真的会调用 skill |
 | D2Skill | [d2skill.md](d2skill.md) | task skill + step skill 双粒度 skill bank，用 paired rollout gap 估计 hindsight utility | 与我们的 Shapley-style skill value 最接近，可借鉴 with-skill / without-skill 对照 |
 | XSkill | [xskill.md](xskill.md) | 多模态 agent 中分离 action-level experience 与 task-level skill | 历史 trace 不必都沉淀为 skill，局部经验可作为 experience bank 分层管理 |
@@ -45,6 +48,7 @@
 - post-execute cross-trace refactoring：在完整 trace 后做跨历史经验的结构归纳；
 - correctness-preserving repository maintenance：抽取、合并、拆分、重写 skill 时保证功能不退化；
 - frozen-model skill value：用 answer、token、usage 和 paired ablation 估计 skill 边际贡献。
+- budgeted population selection：用有限 skill 预算最大化 valid-set utility，同时惩罚 token/cost、retrieval noise、redundancy 和 maintenance cost。
 
 ## 6. 论文专属 Subagent 映射
 

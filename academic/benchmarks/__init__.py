@@ -1,7 +1,7 @@
 """Benchmark adapters for the academic skill-evolving framework."""
 
-from academic.benchmarks.registry import BENCHMARK_REGISTRY, get_benchmark
-from academic.benchmarks.types import (
+from academic.benchmarks.core.registry import BENCHMARK_REGISTRY, get_benchmark
+from academic.benchmarks.core.types import (
     BenchmarkMetadata,
     BenchmarkResult,
     BenchmarkTask,

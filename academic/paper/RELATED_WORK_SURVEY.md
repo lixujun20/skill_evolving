@@ -1,6 +1,6 @@
 # Skill 自进化近期文献调研与本项目定位
 
-日期：2026-04-28
+日期：2026-05-12
 
 ## 1. 调研范围
 
@@ -10,7 +10,7 @@
 
  live 微信链接在当前环境中无法直接打开，因此本文以本地 HTML 为综述来源，并用 arXiv 页面/API 与 Anthropic 官方 Agent Skills 文档交叉核对。综述标题写“10 篇”，但 References 实际列出 11 篇论文，其中 `OpenClaw-RL` 更偏参数侧在线 RL，可作为旁支参照；其余 10 篇基本都直接讨论外部化 skill 的生成、演化、验证或治理。
 
-核心判断：这个方向已经很拥挤，不能再把“skill evolution”本身作为主要新颖性。当前更稳的定位是：先证明环境、模型、skill format 这些外围条件成立，再把方法贡献收缩到 post-execute cross-trace refactoring、correctness-preserving rewrite、skill value / coverage evaluation 这些更具体的问题上。
+核心判断：这个方向已经很拥挤，不能再把“skill evolution”本身作为主要新颖性。PSN 已经直接覆盖 programmatic skill network 的长期维护、fault localization、maturity gating 和 rollback refactoring；SkillMOO 已经把 skill bundle tuning 写成 pass rate / cost 的多目标优化；AgentOptimizer 更早把外部 functions 作为可学习权重。因此当前更稳的定位是：先证明环境、模型、skill format 这些外围条件成立，再把方法贡献收缩到 test-grounded repository population selection、post-execute cross-trace refactoring、correctness-preserving rewrite、skill value / coverage evaluation 这些更具体的问题上。
 
 ## 2. 文献全景
 
@@ -28,13 +28,13 @@
 
 ### 2.3 群体进化与 skill 治理
 
-代表工作是 `SkillClaw`、`EvoSkill` 和部分 `SkillX`。这些工作把 skill 库视为共享资产，不仅关心新增 skill，还关心 edit / merge / prune / rollback / capacity control。综述文章把这类趋势概括为 `SkillOps` 是合理的：成熟系统的竞争点不是生成速度，而是长期治理能力。
+代表工作是 `PSN`、`SkillMOO`、`SkillClaw`、`EvoSkill` 和部分 `SkillX`。这些工作把 skill 库视为共享资产，不仅关心新增 skill，还关心 edit / merge / prune / rollback / capacity control。PSN 把 executable skills 组织成 programmatic skill network，并在调用图上做 failure localization、成熟度门控和带 rollback 的结构重构；SkillMOO 则把 skill bundle edit search 形式化为多目标优化，用 pass rate 和 cost 选择 Pareto 更优候选。综述文章把这类趋势概括为 `SkillOps` 是合理的：成熟系统的竞争点不是生成速度，而是长期治理能力。
 
-对我们的影响：refactor_lab 的图结构、去冗余和 correctness-preserving rewrite 可以作为“skill repository maintenance”的具体切口，而不是泛泛声称会自进化。
+对我们的影响：refactor_lab 的图结构、去冗余和 correctness-preserving rewrite 可以作为“skill repository maintenance”的具体切口，但不能单独作为核心新颖性。更值得主打的是 repository-level selection：在多次 LLM sampling 产生的候选 skill population 中，用 valid-set utility、token/cost、retrieval noise、redundancy、coverage 和 maintenance cost 共同决定保留哪些 skill。
 
 ### 2.4 RL 场景下的 policy-skill 协同
 
-代表工作是 `SkillRL`、`D2Skill`、`XSkill`，以及旁支 `OpenClaw-RL`。`SkillRL` 和 `D2Skill` 通过训练或 RL 让 policy 学会使用 skill，`D2Skill` 还用 with-skill / without-skill rollout gap 构造 hindsight utility。`XSkill` 区分 action-level experience 和 task-level skill，说明不同粒度的外部知识应分流管理。`OpenClaw-RL` 不是外部 skill 演化主线，但它说明 next-state signal 可以成为在线学习反馈。
+代表工作是 `AgentOptimizer`、`SkillRL`、`D2Skill`、`XSkill`，以及旁支 `OpenClaw-RL`。AgentOptimizer 把 agent functions 作为 learnable weights，在不修改 LLM 权重的情况下离线优化函数集合；`SkillRL` 和 `D2Skill` 通过训练或 RL 让 policy 学会使用 skill，`D2Skill` 还用 with-skill / without-skill rollout gap 构造 hindsight utility。`XSkill` 区分 action-level experience 和 task-level skill，说明不同粒度的外部知识应分流管理。`OpenClaw-RL` 不是外部 skill 演化主线，但它说明 next-state signal 可以成为在线学习反馈。
 
 对我们的影响：我们前面观察到 GLM 不会调用 prompt 中拼接的代码 skill，并不是偶然小 bug，而是模型/接口假设不成立。若不训练 router、不提供 tool-native skill interface，只靠 prompt 拼接代码，很可能无法研究真正的 skill 效果。
 
@@ -48,9 +48,12 @@ Anthropic 官方 Agent Skills 文档将 skill 定义为 filesystem-based modular
 
 | 论文 | Skill 表示 | 环境/任务 | 更新机制 | 验证/反馈 | 对我们当前问题的启示 |
 | --- | --- | --- | --- | --- | --- |
+| AgentOptimizer | callable functions as learnable weights | 多个 LLM agent 下游任务 | LLM optimizer 新增/修改/删除 functions | offline training、rollback、early-stop | 外部能力层作为可学习对象已被提出；我们的差异应是 versioned skill asset、测试驱动维护和群体选择 |
 | OpenClaw-RL | 主要不是外部 skill，而是 policy 从 next-state signal 学习 | 对话、终端、GUI、SWE、tool-call | PRM judge + hindsight-guided on-policy distillation | next-state 中的 evaluative/directive signal | 不是主相关工作，但提示我们要充分利用执行后反馈，而不是只做自省式 extraction |
 | Trace2Skill | declarative skill directory / guide | spreadsheet、VisionQA、math reasoning | 多 agent 并行分析轨迹，再层级合并 | OOD transfer、跨模型迁移、任务表现 | 强覆盖了 trajectory-to-skill；我们的差异应落在 cross-trace refactoring 和 correctness-preserving maintenance |
 | CoEvoSkills | 多文件 skill package | SkillsBench、Claude Code、Codex 等 agent skill setting | skill generator 与 surrogate verifier 协同演化 | verifier 产生可执行反馈，不访问 ground-truth test content | 直接说明复杂 skill 不能用 tool-evolution 方法简单替代；也威胁我们原本的 skill generation 叙事 |
+| PSN | executable programmatic skill network | MineDojo、Crafter | REFLECT fault localization、maturity gating、structural refactoring | 环境反馈、调用图归因、rollback validation | 强覆盖长期 skill network maintenance；我们需要强调通用资产模型、bundle/result 分离和 repository-level selection |
+| SkillMOO | task-specific skill bundle | SkillsBench 软件工程任务 | LLM edits + NSGA-II survivor selection | pass rate、LLM inference cost、runtime | 直接覆盖 skill bundle 多目标优化；我们的 objective 必须更 repository-level，包含检索噪声、冗余和维护成本 |
 | SkillClaw | 共享 skill repository | 多用户 OpenClaw-like agent ecosystem、WildClawBench | 聚合跨用户轨迹，由 agentic evolver refine/create/skip | 多用户真实交互与验证后同步 | 说明环境应选有重复使用和多用户证据的场景；单人竞赛题不一定合适 |
 | EvoSkill | structured reusable skill folders，包含 workflow/code | OfficeQA、SealQA、BrowseComp transfer | failure analysis 后 create/edit skill | held-out validation + Pareto frontier | 强调 create/edit/prune/governance；我们的 refactor graph 可对齐为 repository maintenance |
 | SkillRL | hierarchical SkillBank | ALFWorld、WebShop、search-augmented tasks | trajectory distillation + adaptive retrieval + recursive RL evolution | RL reward、任务成功率、token footprint | 通过 policy training 缓解“模型不会用 skill”；我们若冻结模型，必须单独做模型 skill-use 诊断 |
@@ -91,6 +94,9 @@ Anthropic 官方 Agent Skills 文档将 skill 定义为 filesystem-based modular
 
 - “自动生成 skill”已经被 `Trace2Skill`、`SkillX`、`EvoSkill`、`CoEvoSkills` 覆盖。
 - “skill 会自我迭代”已经被 `SkillForge`、`Memento-Skills`、`SkillClaw` 覆盖。
+- “programmatic skill network 的 fault localization / maturity gating / rollback refactoring”已经被 `PSN` 强覆盖。
+- “skill bundle 的 pass rate / cost 多目标优化”已经被 `SkillMOO` 直接覆盖。
+- “不改模型权重而优化外部 functions”已经被 `AgentOptimizer` 覆盖。
 - “用历史轨迹提升后续 agent”已经被多篇 RL / memory / skill-bank 工作覆盖。
 - “多粒度 skill bank”已经被 `D2Skill`、`SkillX`、`XSkill` 覆盖。
 
@@ -100,7 +106,7 @@ Anthropic 官方 Agent Skills 文档将 skill 定义为 filesystem-based modular
 2. Post-execute cross-trace refactoring：不在 execute 前猜测 plan，而是在完整 trace 之后，与相似历史 trace / skill 做结构对齐、抽取或重构 reusable skill。
 3. Correctness-preserving skill rewrite：把 refactor_lab 的 graph clustering、helper extraction、test-preserving rewrite 做成 skill repository maintenance，而不是单次 skill generation。
 4. Frozen-model skill value：在不训练 policy 的情况下，用 answer、token、usage 和 Shapley-style marginal contribution 估计 skill 的端到端价值。
-5. Budgeted skill-set optimization：把“复用性”形式化为 query distribution 上的 coverage / redundancy / utility trade-off，而不是只看单个 skill 被调用几次。
+5. Budgeted skill-set optimization：把“复用性”形式化为 query distribution 上的 coverage / redundancy / utility trade-off，而不是只看单个 skill 被调用几次。相对 SkillMOO 的 bundle-level pass-rate/cost Pareto search，这里应进一步纳入 retrieval noise、duplicate skill rate、dependency risk、maintenance cost 和 integration-derived unit tests。
 6. Format ablation in one controlled setting：同一批任务、同一模型、同一 retrieval 下比较 code function、strategy doc、workflow card、document+scripts，直接回答什么 skill format 最有效。
 
 ### 5.3 推荐的近期实验顺序
@@ -136,3 +142,6 @@ Anthropic 官方 Agent Skills 文档将 skill 定义为 filesystem-based modular
 - Memento-Skills：<https://arxiv.org/abs/2603.18743>
 - SkillForge：<https://arxiv.org/abs/2604.08618>
 - XSkill：<https://arxiv.org/abs/2603.12056>
+- PSN / Evolving Programmatic Skill Networks：<https://arxiv.org/abs/2601.03509>
+- SkillMOO：<https://arxiv.org/abs/2604.09297>
+- AgentOptimizer：<https://arxiv.org/abs/2402.11359>

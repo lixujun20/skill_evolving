@@ -6,6 +6,7 @@ It provides:
 
 - trace -> skill artifact extraction
 - trace/failure -> skill-scoped bundle case distillation
+- trace -> per-skill credit assignment
 - test failure -> semantic refine / rollback / disable decisions
 - stale downstream -> lazy compatibility decision
 """
@@ -27,38 +28,178 @@ from academic.skill_repository.types import (
     SkillArtifact,
     SkillBundle,
     SkillBundleCase,
+    SkillEvidence,
     SkillInterface,
     SkillLineage,
 )
+from app.meta_agent_tool.str_replace_editor import StrReplaceEditor
+
+
+def _bundle_case_limit_per_polarity() -> int:
+    try:
+        return max(1, int(os.environ.get("BFCL_BUNDLE_CASE_LIMIT_PER_POLARITY", "2") or "2"))
+    except Exception:
+        return 2
 
 
 EXTRACT_SYSTEM = """\
-You maintain a benchmark-agnostic skill repository.
+You are the extractor role in a skill-repository maintenance system.
 
-Given successful and failed benchmark traces, extract reusable skill artifacts
-that can help future tasks. You are not limited to code functions. A skill may
-be a workflow card, rule card, interface convention, shared checklist, or an
-executable helper description.
+Input contract:
+- You receive only the current trace bundle, compact task/tool snapshots, and optional extractor rules of thumb.
+- Do not infer a skill from unrelated repository contents.
+- A trace may contain successful behavior, failed calls, retries, unused retrieved skills, and final checker feedback.
 
-Rules:
-1. Extract only skills with concrete causal evidence from the trace(s).
-2. Keep skills benchmark-agnostic in naming and contract as much as the evidence allows.
-3. The skill body must describe the actionable behavior precisely, not just the symptom.
-4. If a skill uses another known skill, list it in `dependencies`.
-5. Output only skills that are specific enough to be tested independently.
-6. Prefer one focused skill over one broad benchmark-summary artifact.
-7. When the evidence includes argument mismatches, wrong parameter names, unsupported path forms, extra calls, or stop-condition failures, prefer extracting the narrow corrective rule closest to the error site instead of a broad workflow summary.
-8. For function-calling traces, prioritize rules such as:
-   - exact parameter/argument naming,
-   - positional-vs-keyword conventions,
-   - unsupported path/value forms,
-   - unnecessary extra calls to avoid,
-   - precise state/id reuse requirements.
-9. When multiple independent error sites appear, prefer returning multiple narrow skills rather than one mixed skill.
-10. Use the task snapshot and expected calls when present to identify the exact local contract that failed.
-11. If a call error is about a specific tool, parameter name, positional-vs-keyword convention, or avoiding one extra call, the skill should name that exact local rule.
-12. When an extra exploratory call should be removed, prefer a positive local rule of the form "call Y directly with these literals/arguments" rather than only a negative ban on X.
-13. If nothing reusable is supported by evidence, return {"artifacts": []}.
+Software-engineering norms:
+1. Correctness first: extract only behavior causally supported by the trace evidence. A skill must preserve the tool schema, argument names, state dependencies, and task intent shown in evidence.
+2. Reusability second: prefer a small reusable invariant over a task-specific transcript. The skill should say when it applies and when it does not apply.
+3. Maintainability third: keep the contract focused, testable, and versionable. Split independent rules instead of mixing unrelated tool families or failure causes.
+4. Scope control: never transfer a rule across domains/tools unless the trace shows a shared invariant. If evidence is only local, encode the local domain/tool scope explicitly.
+5. Failure evidence is valuable: failed calls can reveal missing contracts, but the extracted rule must be the corrected behavior, not merely a ban or symptom label.
+6. If a retrieved skill appears unused, irrelevant, or harmful, do not copy its content into a new skill unless the trace independently supports it.
+7. If no reusable and testable behavior is supported, return {"artifacts": []}.
+8. Do not extract speculative shortcut skills from a single trace. For example, do not claim a lookup/search tool can be skipped unless the official expected calls, tool schema, or observed successful correction proves the skipped tool is unnecessary in that exact scope.
+9. Do not encode common-world knowledge, ticker mappings, hidden defaults, or benchmark-specific guesses unless the trace/tool result explicitly provides that value and the tool schema supports reusing it.
+10. A single-task extra-call observation is runtime feedback, not by itself a
+    reusable skill. If the only evidence is "the model made an extra lookup/time
+    check/search call and the official checker preferred fewer calls", return
+    no extraction or mark an existing skill for refinement through credit. Do
+    not create a new "skip X" skill unless at least two independent task
+    segments or an explicit tool/schema contract prove the shortcut.
+11. Never use broad domains such as "all", "generic", or "BFCL" to stretch a
+    skill. `metadata.domains` must name exact domains observed in evidence, and
+    `metadata.allowed_tools` must list only tools directly governed by the
+    extracted contract, not every tool that appeared in the task.
+
+Extraction checklist for each proposed skill:
+- evidence_span: which trace turn/call/error/result supports it.
+- scope: domains, allowed_tools, user intents, and non_applicability.
+- contract: exact preconditions, action rule, and expected effect.
+- maintainability: whether it should be a new skill, a refinement candidate for an existing named skill, or no extraction.
+
+Field semantics and empty-value rules:
+- `artifacts`: [] when evidence is local, speculative, already covered by an
+  existing skill, or only shows a one-off extra-call overhead.
+- `name`: narrow snake_case contract name. Do not name a broad shortcut such as
+  `skip_lookup_for_orders` from one task.
+- `kind`: use `interface_contract_card` for exact schema/argument repair,
+  `workflow_guardrail_card` for multi-turn/order/state workflows,
+  `atomic_tool_rule_card` for a local tool rule, and avoid `executable_tool`
+  unless the artifact is actually callable code.
+- `body`: must include applicability and non_applicability. If those cannot be
+  stated precisely, do not extract.
+- `interface.input_contract`: exact domain, required context, and state
+  preconditions observed in evidence.
+- `interface.output_contract`: exact tool call, argument contract, or workflow
+  effect. Do not use placeholders or hidden benchmark guesses.
+- `metadata.allowed_tools`: only tools whose usage/arguments/order are governed
+  by this skill. Do not dump the task's full tool list.
+- `metadata.domains`: exact observed domains only; never use "all" or
+  "generic".
+- `metadata.source_task_ids`: current official task ids supporting the skill.
+- `metadata.maintenance_action`: `new_skill` only for reusable/testable
+  contracts; `refine_existing` for evidence that should patch an existing
+  skill; `no_extraction` when the evidence should only be recorded.
+
+精品 one-shot examples. Match this level of specificity:
+
+Example A, function/interface contract:
+Trace evidence:
+- Task: "Remove NVDA from my watchlist."
+- Failed call: remove_stock_from_watchlist(stock="NVDA")
+- Tool schema excerpt: remove_stock_from_watchlist(symbol: string)
+- Corrected call observed or implied by checker: remove_stock_from_watchlist(symbol="NVDA")
+Good artifact:
+{
+  "name": "remove_watchlist_requires_symbol_argument",
+  "kind": "interface_contract_card",
+  "description": "Use the exact `symbol` parameter when removing an explicit ticker from a trading watchlist.",
+  "body": "When the user asks to remove an explicitly named ticker from a TradingBot watchlist, call remove_stock_from_watchlist(symbol=<ticker>). Do not use aliases such as stock, company, ticker_name, or company_name. This rule only applies when the target ticker/symbol is already explicit in the user request or prior state.",
+  "interface": {
+    "summary": "Trading watchlist removal argument contract.",
+    "usage": "Apply before calling remove_stock_from_watchlist for explicit ticker removal.",
+    "input_contract": {"domain": "TradingBot", "required_context": ["explicit ticker symbol"]},
+    "output_contract": {"tool_call": "remove_stock_from_watchlist(symbol=<ticker>)"},
+    "invocation_contract": {"injection_type": "informational"},
+    "compatibility_notes": "Do not apply to add_to_watchlist, company-name lookup, or order placement tasks."
+  },
+  "metadata": {
+    "domains": ["TradingBot"],
+    "allowed_tools": ["remove_stock_from_watchlist"],
+    "intent_keywords": ["watchlist", "remove", "explicit ticker", "schema"],
+    "forbid_keywords": ["company name unknown", "lookup symbol first"],
+    "evidence_span": "turn 0 failed call remove_stock_from_watchlist(stock='NVDA') against schema requiring symbol",
+    "scope": "TradingBot watchlist removal with explicit ticker.",
+    "non_applicability": "Do not use for stock orders, watchlist additions, or cases where only a company name is provided.",
+    "maintenance_action": "new_skill"
+  }
+}
+Bad artifact: "Always skip stock lookup before trading." It overgeneralizes one local argument contract into an unrelated workflow rule.
+
+Example B, workflow:
+Trace evidence:
+- Turn 0 books a flight and tool output returns {"booking_id": "B-742"}.
+- Turn 1 asks to cancel that booking.
+- Failed call: cancel_booking(flight="the Seattle booking")
+- Correct behavior: reuse booking_id from prior tool result and call cancel_booking(booking_id="B-742").
+Good artifact:
+{
+  "name": "cancel_travel_booking_reuses_prior_booking_id",
+  "kind": "workflow_guardrail_card",
+  "description": "Cancel travel bookings by reusing the canonical booking_id from prior booking or lookup results.",
+  "body": "For multi-turn TravelAPI cancellation, first identify the canonical booking_id from the previous booking result, invoice, or explicit user-provided id. Then call cancel_booking(booking_id=<id>). Do not pass natural-language flight descriptions, route names, traveler names, or invoice ids as substitutes. If no booking_id is available, retrieve or ask through the available TravelAPI workflow before canceling.",
+  "interface": {
+    "summary": "Travel cancellation id-reuse workflow.",
+    "usage": "Apply when a later turn refers back to a previously booked trip.",
+    "input_contract": {"domain": "TravelAPI", "required_context": ["prior booking_id or a way to retrieve it"]},
+    "output_contract": {"tool_call_order": ["resolve booking_id if needed", "cancel_booking(booking_id=<id>)"]},
+    "invocation_contract": {"injection_type": "workflow"},
+    "compatibility_notes": "Do not apply when the user gives a different booking id or asks about insurance/invoices only."
+  },
+  "metadata": {
+    "domains": ["TravelAPI"],
+    "allowed_tools": ["cancel_booking"],
+    "intent_keywords": ["cancel booking", "reuse id", "multi-turn reference"],
+    "forbid_keywords": ["insurance only", "invoice only"],
+    "evidence_span": "turn 1 cancellation failed with natural-language flight reference after turn 0 produced booking_id B-742",
+    "scope": "Multi-turn TravelAPI cancellation that refers to an earlier booking.",
+    "non_applicability": "Do not use for booking creation, support tickets, or cancellations with no resolvable booking_id.",
+    "maintenance_action": "new_skill"
+  }
+}
+Bad artifact: a broad travel checklist mentioning insurance, invoices, support, and budgets. Those behaviors were not evidenced by the cancellation failure.
+
+Example C, knowledge/rule:
+Trace evidence:
+- User provides two exact filenames and asks for their diff.
+- Extra exploratory calls find(".") and ls(".") occur before diff.
+- The final correct call is diff(file_name1="draft.txt", file_name2="final.txt").
+Good artifact:
+{
+  "name": "diff_explicit_filenames_directly",
+  "kind": "atomic_tool_rule_card",
+  "description": "When both filenames are explicit, call diff directly instead of exploring the filesystem.",
+  "body": "For GorillaFileSystem diff tasks, if the user already provides two exact filenames or paths and asks to compare them, call diff(file_name1=<first>, file_name2=<second>) directly. Avoid find, ls, grep, or cat unless a filename/path is missing, ambiguous, or the task asks for file contents rather than a diff.",
+  "interface": {
+    "summary": "Direct diff rule for explicit filenames.",
+    "usage": "Apply before using filesystem exploration tools in diff requests.",
+    "input_contract": {"domain": "GorillaFileSystem", "required_context": ["two explicit filenames", "diff/compare intent"]},
+    "output_contract": {"tool_call": "diff(file_name1=<first>, file_name2=<second>)"},
+    "invocation_contract": {"injection_type": "informational"},
+    "compatibility_notes": "Exploration tools remain valid when filenames are absent or ambiguous."
+  },
+  "metadata": {
+    "domains": ["GorillaFileSystem"],
+    "allowed_tools": ["diff"],
+    "intent_keywords": ["diff", "compare files", "explicit filenames"],
+    "forbid_keywords": ["find a file", "unknown filename", "search contents"],
+    "evidence_span": "extra find/ls calls preceded a successful diff on two filenames already present in the prompt",
+    "scope": "Filesystem diff tasks with two explicit file names.",
+    "non_applicability": "Do not ban find/ls globally; they are needed for missing or ambiguous filenames.",
+    "maintenance_action": "new_skill"
+  }
+}
+Bad artifact: "Never call find." It is an unsafe negative rule that would fail when filenames must actually be discovered.
 
 Return strict JSON:
 {
@@ -67,7 +208,7 @@ Return strict JSON:
       "name": "snake_case_name",
       "kind": "workflow_guardrail_card | atomic_tool_rule_card | interface_contract_card | planning_card | executable_tool | shared_subdoc",
       "description": "short summary",
-      "body": "actionable content",
+      "body": "actionable content with applicability and non-applicability",
       "interface": {
         "summary": "short interface summary",
         "usage": "when/how to use",
@@ -82,7 +223,11 @@ Return strict JSON:
         "intent_keywords": [],
         "forbid_keywords": [],
         "source_task_ids": [],
-        "source": "llm_trace_extraction"
+        "source": "llm_trace_extraction",
+        "evidence_span": "",
+        "scope": "",
+        "non_applicability": "",
+        "maintenance_action": "new_skill | refine_existing | no_extraction"
       },
       "dependencies": [],
       "dependency_pins": [],
@@ -92,6 +237,185 @@ Return strict JSON:
 }
 """
 
+EXTRACTOR_RULE_UPDATE_SYSTEM = """\
+You maintain a compact runtime-informed rulebook for the extractor role.
+
+You receive:
+- the current extractor rules of thumb
+- runtime evidence about previously extracted skills:
+  - whether they were retrieved / injected / used
+  - whether they helped or harmed official validity
+  - whether maintenance tests later failed
+
+Your job:
+1. Infer a small set of reusable extractor rules that improve future extraction quality.
+2. Prefer rules about scope control, local contract precision, anti-pollution, and reusable/generalizable skill boundaries.
+3. Use both positive and negative evidence. Harmful or noisy skills should push the rules toward narrower and better-grounded extraction.
+4. Keep at most {max_rules} active rules.
+5. Merge duplicates or near-duplicates instead of rephrasing the same point many times.
+6. Remove stale or weak rules if stronger replacements exist.
+7. Rules must be concise, imperative, and actionable by the extractor prompt.
+8. Do not emit role-management advice like "look at the evidence carefully"; emit concrete extraction behavior rules.
+
+Return strict JSON:
+{
+  "summary": "brief update rationale",
+  "rules": [
+    {
+      "rule_id": "extractor_rule_1",
+      "text": "one concise actionable rule",
+      "focus": "scope | contract | reuse | anti_pattern | evidence"
+    }
+  ]
+}
+"""
+
+CREDIT_ASSIGNMENT_SYSTEM = """\
+You are the credit-assignment and maintenance-attribution judge for a
+skill-evolving agent system.
+
+You receive one completed task trace together with the set of retrieved /
+injected / explicitly used skills. Your job is to judge each candidate skill's
+contribution to this one trace and emit executable maintenance evidence.
+
+Input contract:
+- You receive a compact task summary, retrieved/injected/used skill lists,
+  candidate skill compact projections, focused trace turns, tool calls/tool
+  errors, expected calls, official result, and token/step metrics.
+- You do not receive full raw traces, full debug events, the whole skill store,
+  or unrelated source/replay results. Do not ask for them or invent them.
+
+Important principles:
+1. Judge causality, not co-occurrence. A skill being retrieved or injected does
+   not mean it helped or harmed.
+2. Distinguish three cases carefully:
+   - helpful: the skill likely prevented an error, reduced unnecessary steps,
+     or improved correctness for this trace.
+   - harmful: the skill likely caused, amplified, or biased the model toward an
+     incorrect path, wrong schema, wrong literal, wrong workflow, or irrelevant
+     domain transfer.
+   - neutral: the skill was present but likely had no material effect.
+   - uncertain: there is not enough evidence to attribute clear effect.
+3. Prompt-only informational/workflow skills can still be harmful even when
+   `used_skills` is empty. You must reason from the actual trace, call errors,
+   and mismatch between skill scope and task context.
+4. Be conservative. Do not mark a skill as helpful or harmful without concrete
+   evidence from the task trace.
+5. Consider both knowledge-like skills (rules, workflow notes, references) and
+   function-like skills (tool-backed helpers, executable helpers). Their
+   attribution styles differ:
+   - knowledge/workflow skills often influence ordering, stop conditions,
+     parameter names, or literal reuse indirectly;
+   - function/executable skills often have more direct usage evidence.
+6. Prefer local evidence:
+   - exact tool calls produced
+   - missing / extra / argument-mismatch errors
+   - token / step overhead
+   - obvious domain mismatch between task and skill scope
+7. Irrelevant retrieved/injected skills are neutral or uncertain by default.
+   Mark harmful only with direct evidence: explicit use, explicit reference,
+   a tool/argument/order error matching the skill content, or a strong trace
+   signal that the skill caused the wrong path. Put weak prompt-pollution
+   suspicions in evidence.suspected_prompt_pollution instead of treating them
+   as negative credit.
+8. For each skill, recommend maintenance actions only when the attribution is
+   concrete. If harmful credit points to scope pollution, prefer narrowing
+   scope. If it points to schema/argument error, identify the exact contract.
+9. Suggest bundle cases only when the official task snapshot can be replayed.
+   Never invent expected tool calls. Every suggestion must identify the exact
+   task-local fragment by focus_turn_indices. If no compact replayable fragment
+   exists, set task_fragment_policy to no_replayable_fragment.
+10. Positive bundle suggestions require an explicit helpful effect type:
+   token_saving, schema_help, workflow_alignment, or correctness_gain.
+11. Negative bundle suggestions require harmful attribution. Integration
+   suggestions require a concrete cross-skill or contextual failure.
+
+Field semantics and empty-value rules:
+- `maintenance_actions`: skill-local actions only. Do not duplicate a top-level
+  action list. Use [] when the judgment is neutral/uncertain and no concrete
+  maintenance should run.
+- `refine_required`: true only when the current skill artifact should be edited
+  before bundle testing because the trace identifies a concrete schema, scope,
+  workflow, or integration fix.
+- `filter_candidate`: true only when the skill should be disabled/revoked or
+  removed from retrieval consideration, not merely because evidence is weak.
+- `evidence_strength`: strong means direct call/error/success evidence; medium
+  means trace behavior strongly matches skill content; weak means circumstantial
+  prompt or retrieval noise.
+- `attribution_scope`: `direct_use` for explicit tool/helper use,
+  `prompt_influence` for injected text likely steering behavior,
+  `retrieval_noise` for irrelevant context overhead, `integration_context` for
+  interaction between skills/context, and `none` when no causal scope is found.
+- `bundle_case_suggestions`: include only cases that can become replayable
+  focused official fragments. Use [] for neutral/uncertain judgments unless
+  there is a concrete integration diagnostic.
+- `focus_turn_indices`: turns whose official user prompt and expected calls are
+  sufficient to exercise the skill. Do not use the whole task by default.
+- `required_context_turn_indices`: earlier official turns required to make the
+  focused turn meaningful, such as a booking id, user preference, or object
+  created by a prior tool result. Leave [] when no prior state is needed.
+- `state_requirements`: minimal state facts required by the fragment, e.g.
+  {"booking_id": "from turn 0 tool result"}. Use {} if the official fragment is
+  self-contained.
+- `expected_contract`: prose describing what official expected calls/assertions
+  should verify. It is not a place to invent new tool calls.
+- `task_fragment_policy`: `reuse_official_fragment` only when
+  focus_turn_indices identify a compact official fragment. Use
+  `no_replayable_fragment` and empty focus/context arrays when the evidence
+  cannot be converted into a replayable task fragment.
+
+Return strict JSON:
+{
+  "task_summary": {
+    "task_id": "...",
+    "official_valid": true,
+    "score": 0.0,
+    "n_model_steps": 0,
+    "total_tokens": 0
+  },
+  "skill_judgments": [
+    {
+      "skill_name": "snake_case_name",
+      "judgment": "helpful | harmful | neutral | uncertain",
+      "effect_type": "correctness_gain | correctness_harm | token_saving | token_overhead | workflow_alignment | workflow_pollution | schema_help | schema_harm | domain_match | domain_mismatch | no_material_effect | unknown",
+      "confidence": 0.0,
+      "reason": "short evidence-grounded explanation",
+      "maintenance_actions": [
+        {
+          "action": "keep | narrow_scope | fix_schema_contract | refine_workflow | disable_candidate | add_bundle_case | record_evidence",
+          "reason": "why this action follows from the attribution",
+          "target_scope": "optional concise scope"
+        }
+      ],
+      "refine_required": false,
+      "filter_candidate": false,
+      "evidence_strength": "strong | medium | weak",
+      "attribution_scope": "direct_use | prompt_influence | retrieval_noise | integration_context | none",
+      "bundle_case_suggestions": [
+        {
+          "polarity": "positive | negative | integration",
+          "reason": "why this official task fragment should become a bundle case",
+          "source_task_id": "task id from the current official task",
+          "focus_turn_indices": [0],
+          "required_context_turn_indices": [],
+          "state_requirements": {},
+          "expected_contract": "short statement of what the case should assert, without inventing calls",
+          "task_fragment_policy": "reuse_official_fragment | no_replayable_fragment"
+        }
+      ],
+      "evidence": {
+        "retrieved": true,
+        "injected": true,
+        "used": false,
+        "relevant_turn_indices": [],
+        "related_tool_names": [],
+        "error_refs": [],
+        "trace_signals": []
+      }
+    }
+  ]
+}
+"""
 
 BUNDLE_SYSTEM = """\
 You distill long benchmark traces into lightweight, skill-scoped maintenance tests.
@@ -113,11 +437,36 @@ Rules:
 8. Cases should be lightweight enough to rerun repeatedly.
 9. Preserve the benchmark's interaction grain exactly. For BFCL-like function-calling tasks, one user turn may require multiple tool calls; keep those calls in the same `task_fragment.expected` turn as a nested list. Do not invent `next_turn_expected` or split same-turn calls across turns unless the original task has separate user turns.
 10. Bundle cases should test the target skill's local causal effect. If the evidence only says "avoid extra lookup X while directly calling Y and Z in this user turn", encode the expected calls for that same user turn as `[["Y(...)", "Z(...)"]]`.
-11. Keep the bundle compact. Return at most 1 positive case, at most 1 negative case, and at most 1 integration case.
+11. Keep the bundle compact. Return at most {bundle_limit} positive case(s), at most {bundle_limit} negative case(s), and at most {bundle_limit} integration case(s).
 12. Each case must contain only the minimal single-turn or two-turn fragment needed to test this skill. Do not copy full traces, full metrics, debug events, or unrelated input artifacts.
 13. Keep each `prompt` under 240 characters. Keep each user message under 500 characters. If fixture state is needed, include only the exact fields required by the skill.
 14. For BFCL-like function-calling cases, `context.task_fragment.question` must be an array of turns, and each turn must be an array of message objects with `role` and `content`.
-15. Return valid JSON that fits comfortably under 3500 output tokens. Do not include explanatory prose outside the schema.
+15. For BFCL-like expected calls, use only exact official tool names and exact schema parameter names from the source result. Do not invent aliases such as `company_name` when the schema uses `name`, and do not invent `stock` when the schema uses `symbol`.
+16. Do not use placeholders such as `<from_lookup>`, `<market_price>`, or non-literal expressions in `task_fragment.expected`; expected calls must be executable literal call strings.
+17. The task fragment must come from the same source domain and official task evidence as the target skill. Never borrow a cross-domain fragment or unrelated source task because it looks structurally similar.
+18. Return valid JSON that fits comfortably under 3500 output tokens. Do not include explanatory prose outside the schema.
+
+Field semantics and empty-value rules:
+- `case_id`: stable id scoped to this skill and polarity, e.g. `skill:positive:0`.
+- `source`: why the case exists. Use `train_positive`/`distilled_success` for
+  positive evidence, `integration_rewrite` for contextual failures, or `manual`
+  only for explicitly supplied human cases.
+- `prompt`: short human-readable case label, not a full trace dump.
+- `expected`: optional extra assertions outside BFCL official calls. Use {} when
+  the official `context.task_fragment.expected` is sufficient.
+- `context.task_fragment.question`: official user-turn messages for only the
+  focused fragment; preserve nested BFCL turn/message shape.
+- `context.task_fragment.expected`: official executable call strings for those
+  turns only; no aliases, placeholders, or guessed calls.
+- `context.task_fragment.input_artifacts` and `metadata`: copy only official
+  snapshot fields needed to replay the fragment. Do not synthesize a new domain.
+- `focus_turns`: turn indices included because the skill is exercised there.
+- `focus_tools`: exact official tool names exercised by the skill.
+- `source_task_id`: official source task id for the fragment.
+- `polarity`: `positive` means the skill should help; `negative` catches a bad
+  variant; `integration` catches a context/cross-skill failure.
+- `contrast_protocol`: booleans describing whether the case is meaningful with
+  and/or without the skill. Use both true for most regression-style cases.
 
 Return strict JSON:
 {
@@ -152,15 +501,95 @@ Return strict JSON:
 }
 """
 
+BUNDLE_SYSTEM = BUNDLE_SYSTEM.replace("{bundle_limit}", str(_bundle_case_limit_per_polarity()))
+
+
+BUNDLE_MAINTAIN_SYSTEM = """\
+You are a lightweight bundle maintenance agent.
+
+You receive one target skill, its current bundle, and incremental new evidence.
+The normal existing-skill path is intentionally trace-light: credit assignment
+has already selected harmful or useful cases, so do not ask for or depend on
+full source traces.
+Your job is to choose the cheapest safe maintenance action:
+- keep: reuse the current bundle as-is
+- patch: minimally edit the current bundle by adding/removing/updating only the few cases needed
+- rebuild: rewrite the bundle because the current one is too stale or mis-scoped
+
+Rules:
+1. Prefer `keep` when the existing bundle still matches the skill contract and new evidence adds nothing material.
+2. Prefer `patch` when a small number of case-level edits can absorb the new evidence.
+3. Use `rebuild` only when the existing bundle scope is wrong, contradictory, or too stale for local repair.
+4. Keep token use small. Do not copy unchanged cases into the patch payload.
+5. For `patch`, modify as little as possible:
+   - `add_cases`: new cases to append
+   - `drop_case_ids`: stale/harmful cases to remove
+   - `replace_cases`: exact case replacements by `case_id`, each with an explicit `bucket`
+6. Preserve the benchmark's turn semantics exactly.
+7. Treat credit-assigned negative cases and integration failures as high-priority counterexamples, but do not overfit to one noisy trace.
+8. Keep the final bundle compact: at most {bundle_limit} positive, {bundle_limit} negative, and {bundle_limit} integration case(s).
+9. For BFCL-like expected calls, use only exact official tool names and exact schema parameter names from the source result. Never invent aliases such as `company_name` or `stock`, and never use placeholders such as `<market_price>`.
+10. New cases must match the target skill's source/domain evidence and the
+   official task fragment selected by credit assignment. Never patch in a
+   cross-domain task fragment because it is convenient.
+11. Return strict JSON only.
+
+Field semantics and empty-value rules:
+- `action=keep`: use when the bundle already covers the contract or evidence is
+  weak; return empty patch arrays.
+- `action=patch`: use for incremental credit-suggested cases or exact repair of
+  malformed case fields. Do not copy unchanged cases.
+- `action=rebuild`: use only when the current bundle is fundamentally
+  mis-scoped or contradictory.
+- `patch.add_cases`: only new positive/negative/integration cases selected by
+  credit, integration failure, or validation failure.
+- `patch.drop_case_ids`: exact stale ids to remove; [] when none.
+- `patch.replace_cases`: complete replacement for the named case. Each item
+  must include the target `bucket`; [] when no case is replaced.
+- Case fields keep the same meanings as in the initial bundle builder:
+  `context.task_fragment.expected` is official executable call strings, while
+  top-level `expected` is only optional extra assertions.
+
+Return strict JSON:
+{
+  "action": "keep | patch | rebuild",
+  "reason": "brief rationale",
+  "maintenance_notes": "brief bundle rationale update",
+  "patch": {
+    "add_cases": {
+      "positive_cases": [],
+      "negative_cases": [],
+      "integration_cases": []
+    },
+    "drop_case_ids": [],
+    "replace_cases": [
+      {
+        "bucket": "positive_cases | negative_cases | integration_cases",
+        "case_id": "",
+        "source": "",
+        "prompt": "",
+        "expected": {},
+        "context": {},
+        "tags": [],
+        "polarity": "positive | negative | integration",
+        "contrast_protocol": {}
+      }
+    ]
+  }
+}
+"""
+
+BUNDLE_MAINTAIN_SYSTEM = BUNDLE_MAINTAIN_SYSTEM.replace("{bundle_limit}", str(_bundle_case_limit_per_polarity()))
+
 
 REFINE_SYSTEM = """\
 You are refining a versioned skill artifact after maintenance test failures.
 
 You receive:
 - the current skill artifact
-- its bound bundle
-- fresh test results
+- failed bundle cases / fresh test results
 - integration failures
+- recent credit assignment context for this skill
 - refinement history
 - neighboring dependency summaries
 
@@ -180,8 +609,38 @@ Rules:
 13. Keep the response compact. Do not copy unchanged artifact fields or unchanged bundle cases.
 14. If action is `keep`, return empty `{}` for `artifact` and a bundle with empty case arrays.
 15. If action is `refine_minor` or `refine_major`, return only changed fields. Keep `description` under 240 characters and `body` under 900 characters.
-16. If returning bundle updates, include at most 1 positive, 1 negative, and 1 integration case. Each case must be a minimal fragment, not a copied full trace.
+16. If returning bundle updates, include at most {bundle_limit} positive, {bundle_limit} negative, and {bundle_limit} integration case(s). Each case must be a minimal fragment, not a copied full trace.
 17. The entire response must fit under 3000 output tokens.
+18. Do not rewrite a broad skill because of an unrelated task regression. If credit attribution is weak or uncertain, default to `keep`.
+19. If harmful credit points to scope pollution, narrow applicability first instead of rewriting the whole function.
+20. If harmful credit points to schema or argument mismatch, fix the exact contract and preserve unrelated behavior.
+21. If this is a credit pre-refine and the credit context does not identify a concrete schema, scope, workflow, or dependency fix, choose `keep`.
+22. If failed bundle cases or integration failures contain `strict_contract_gate`
+    or with-skill `contract_failures`, do not claim the case validated the
+    current artifact. Choose `refine_minor`, `refine_major`, `disable`, or
+    `mark_stale` unless you explicitly identify the failed case as invalid or
+    unrelated to this skill. A post-bundle strict failure is not a reason to
+    keep by default.
+
+Field semantics and empty-value rules:
+- `decision.action`: `keep` means no semantic change; `refine_minor` means a
+  narrow compatible content/scope/interface correction; `refine_major` means a
+  contract migration; `rollback`, `disable`, `pin_dependency`, and `mark_stale`
+  are repository-control actions.
+- `decision.version_kind`: set consistently with the action. Use `minor` for
+  compatible edits, `major` for contract changes, `rollback` for rollback, and
+  `seed` only for newly created artifacts.
+- `decision.pinned_dependencies`: include only concrete upstream pins required
+  by a dependency conflict. Use [] otherwise.
+- `artifact`: when action is `keep`, return {}. For refine actions, include only
+  changed fields; omitted fields are inherited from the current artifact.
+- `artifact.interface`: explain exact usage, input contract, output contract,
+  invocation contract, and compatibility/non-applicability when those semantics
+  change.
+- `artifact.dependencies`: list only named skills that this skill actually calls
+  or semantically depends on. Use [] if unchanged or none.
+- `bundle`: return empty case arrays unless the skill contract changed or the
+  failed case itself must be repaired to match official turn semantics.
 
 Return strict JSON:
 {
@@ -223,6 +682,8 @@ Return strict JSON:
 }
 """
 
+REFINE_SYSTEM = REFINE_SYSTEM.replace("{bundle_limit}", str(_bundle_case_limit_per_polarity()))
+
 
 STALE_SYSTEM = """\
 You are performing lazy downstream compatibility handling for a stale skill.
@@ -262,6 +723,9 @@ Return strict JSON:
 """
 
 
+_MAINTENANCE_TOKEN_EVENTS: List[Dict[str, Any]] = []
+
+
 def _json_block(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
@@ -289,6 +753,211 @@ def _ensure_dict(value: Any) -> Dict[str, Any]:
     return {"value": value}
 
 
+def _normalize_feedback_rules(
+    raw_rules: Iterable[Dict[str, Any]] | None,
+    *,
+    max_rules: int = 5,
+    prefix: str = "extractor_rule",
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw_rules or []:
+        payload = dict(item or {})
+        text = str(payload.get("text") or "").strip()
+        if not text:
+            continue
+        dedupe_key = re.sub(r"\s+", " ", text).strip().lower()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        focus = str(payload.get("focus") or "").strip().lower() or "evidence"
+        out.append(
+            {
+                "rule_id": str(payload.get("rule_id") or f"{prefix}_{len(out) + 1}"),
+                "text": text,
+                "focus": focus,
+            }
+        )
+        if len(out) >= max_rules:
+            break
+    for idx, row in enumerate(out, start=1):
+        row["rule_id"] = f"{prefix}_{idx}"
+    return out
+
+
+def _extractor_rule_suffix(extractor_rules: Iterable[Dict[str, Any]] | None) -> str:
+    rules = _normalize_feedback_rules(extractor_rules)
+    if not rules:
+        return ""
+    lines = [
+        "",
+        "Runtime-informed extractor rules of thumb:",
+    ]
+    for row in rules:
+        lines.append(f"- [{row['focus']}] {row['text']}")
+    return "\n".join(lines)
+
+
+def _normalize_usage_payload(usage: Dict[str, Any] | None) -> Dict[str, int]:
+    payload = dict(usage or {})
+    prompt_tokens = int(payload.get("prompt_tokens") or 0)
+    completion_tokens = int(payload.get("completion_tokens") or 0)
+    total_tokens = int(payload.get("total_tokens") or (prompt_tokens + completion_tokens))
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+class JsonRoleClient:
+    """Polymorphic JSON LLM client used by maintenance roles."""
+
+    async def ask_json(
+        self,
+        *,
+        system: str,
+        user: str,
+        llm_config: str,
+        model_name: str | None,
+    ) -> Dict[str, Any]:
+        raise NotImplementedError
+
+
+class AnthropicJsonRoleClient(JsonRoleClient):
+    async def ask_json(
+        self,
+        *,
+        system: str,
+        user: str,
+        llm_config: str,
+        model_name: str | None,
+    ) -> Dict[str, Any]:
+        from app.config import config
+
+        cfg = config.llm.get(llm_config, config.llm["default"])
+        return await _ask_anthropic_json(
+            system=system,
+            user=user,
+            api_key=cfg.api_key,
+            base_url=cfg.base_url,
+            model=model_name or cfg.model,
+            max_tokens=int(cfg.max_tokens or 4096),
+        )
+
+
+class GenericJsonRoleClient(JsonRoleClient):
+    async def ask_json(
+        self,
+        *,
+        system: str,
+        user: str,
+        llm_config: str,
+        model_name: str | None,
+    ) -> Dict[str, Any]:
+        from app.llm import LLM
+
+        llm = LLM(config_name=llm_config)
+        before_prompt_tokens = int(getattr(llm, "total_input_tokens", 0) or 0)
+        before_completion_tokens = int(getattr(llm, "total_completion_tokens", 0) or 0)
+        response = await asyncio.wait_for(
+            llm.ask(
+                messages=[{"role": "user", "content": user}],
+                system_msgs=[{"role": "system", "content": system}],
+                force_json=True,
+                new_model=model_name,
+                temperature=0.0,
+            ),
+            timeout=LLM_CALL_TIMEOUT,
+        )
+        return {
+            "text": str(response or ""),
+            "usage": {
+                "prompt_tokens": int(getattr(llm, "total_input_tokens", 0) or 0) - before_prompt_tokens,
+                "completion_tokens": int(getattr(llm, "total_completion_tokens", 0) or 0) - before_completion_tokens,
+            },
+        }
+
+
+def _json_role_client(*, llm_config: str, model_name: str | None) -> JsonRoleClient:
+    from app.config import config
+
+    cfg = config.llm.get(llm_config, config.llm["default"])
+    model = model_name or cfg.model
+    if str(model or "").startswith("claude-") or "anthropic" in str(cfg.base_url or "") or "127.0.0.1:4000" in str(cfg.base_url or ""):
+        return AnthropicJsonRoleClient()
+    return GenericJsonRoleClient()
+
+
+def _record_maintenance_token_event(
+    *,
+    role: str,
+    llm_config: str,
+    model_name: str | None,
+    usage: Dict[str, Any] | None,
+    metadata: Dict[str, Any] | None,
+    duration_ms: int,
+    system_chars: int,
+    user_chars: int,
+) -> None:
+    normalized_usage = _normalize_usage_payload(usage)
+    event = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "role": str(role or "").strip(),
+        "phase": str((metadata or {}).get("phase") or "").strip(),
+        "llm_config": str(llm_config or "").strip(),
+        "model_name": model_name,
+        "prompt_tokens": normalized_usage["prompt_tokens"],
+        "completion_tokens": normalized_usage["completion_tokens"],
+        "total_tokens": normalized_usage["total_tokens"],
+        "duration_ms": int(duration_ms or 0),
+        "system_chars": int(system_chars or 0),
+        "user_chars": int(user_chars or 0),
+        "metadata": copy.deepcopy(dict(metadata or {})),
+    }
+    _MAINTENANCE_TOKEN_EVENTS.append(event)
+
+
+def reset_maintenance_token_stats() -> None:
+    _MAINTENANCE_TOKEN_EVENTS.clear()
+
+
+def maintenance_token_event_count() -> int:
+    return len(_MAINTENANCE_TOKEN_EVENTS)
+
+
+def snapshot_maintenance_token_stats(*, start_index: int = 0) -> Dict[str, Any]:
+    events = [copy.deepcopy(item) for item in _MAINTENANCE_TOKEN_EVENTS[start_index:]]
+
+    def _empty_row() -> Dict[str, Any]:
+        return {
+            "n_calls": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "duration_ms": 0,
+        }
+
+    summary = _empty_row()
+    by_role: Dict[str, Dict[str, Any]] = {}
+    by_phase: Dict[str, Dict[str, Any]] = {}
+    for event in events:
+        for row in (summary, by_role.setdefault(event["role"] or "unknown", _empty_row()), by_phase.setdefault(event["phase"] or "unscoped", _empty_row())):
+            row["n_calls"] += 1
+            row["prompt_tokens"] += int(event.get("prompt_tokens") or 0)
+            row["completion_tokens"] += int(event.get("completion_tokens") or 0)
+            row["total_tokens"] += int(event.get("total_tokens") or 0)
+            row["duration_ms"] += int(event.get("duration_ms") or 0)
+    return {
+        "start_index": int(start_index or 0),
+        "end_index": len(_MAINTENANCE_TOKEN_EVENTS),
+        "summary": summary,
+        "by_role": by_role,
+        "by_phase": by_phase,
+        "recent_events": events[-20:],
+    }
+
+
 async def _ask_json(
     *,
     system: str,
@@ -298,7 +967,6 @@ async def _ask_json(
     role: str = "llm_maintenance",
     metadata: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    from app.llm import LLM
     from app.config import config
 
     started = time.monotonic()
@@ -318,31 +986,28 @@ async def _ask_json(
         ),
         flush=True,
     )
-    if str(model or "").startswith("claude-") or "anthropic" in str(cfg.base_url or "") or "127.0.0.1:4000" in str(cfg.base_url or ""):
-        response = await asyncio.wait_for(
-            _ask_anthropic_json(
-                system=system,
-                user=user,
-                api_key=cfg.api_key,
-                base_url=cfg.base_url,
-                model=model,
-                max_tokens=int(cfg.max_tokens or 4096),
-            ),
-            timeout=LLM_CALL_TIMEOUT,
-        )
-    else:
-        llm = LLM(config_name=llm_config)
-        response = await asyncio.wait_for(
-            llm.ask(
-                messages=[{"role": "user", "content": user}],
-                system_msgs=[{"role": "system", "content": system}],
-                force_json=True,
-                new_model=model_name,
-                temperature=0.0,
-            ),
-            timeout=LLM_CALL_TIMEOUT,
-        )
+    response_payload = await asyncio.wait_for(
+        _json_role_client(llm_config=llm_config, model_name=model_name).ask_json(
+            system=system,
+            user=user,
+            llm_config=llm_config,
+            model_name=model_name,
+        ),
+        timeout=LLM_CALL_TIMEOUT,
+    )
+    response = str(response_payload.get("text") or "")
+    usage = _normalize_usage_payload(dict(response_payload.get("usage") or {}))
     duration_ms = int((time.monotonic() - started) * 1000)
+    _record_maintenance_token_event(
+        role=role,
+        llm_config=llm_config,
+        model_name=model_name,
+        usage=usage,
+        metadata=metadata,
+        duration_ms=duration_ms,
+        system_chars=len(system),
+        user_chars=len(user),
+    )
     print(
         json.dumps(
             {
@@ -350,6 +1015,9 @@ async def _ask_json(
                 "role": role,
                 "duration_ms": duration_ms,
                 "response_chars": len(str(response or "")),
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
             },
             ensure_ascii=False,
         ),
@@ -366,7 +1034,7 @@ async def _ask_json(
             user=user,
             raw_response=response,
             parsed_response=None,
-            metadata={**dict(metadata or {}), "parse_error": str(exc), "duration_ms": duration_ms},
+            metadata={**dict(metadata or {}), "parse_error": str(exc), "duration_ms": duration_ms, "usage": usage},
         )
         raise ValueError(f"LLM did not return valid JSON: {exc}\nRaw: {response[:1000]}") from exc
     if not isinstance(data, dict):
@@ -378,7 +1046,7 @@ async def _ask_json(
             user=user,
             raw_response=response,
             parsed_response=data,
-            metadata={**dict(metadata or {}), "type_error": type(data).__name__, "duration_ms": duration_ms},
+            metadata={**dict(metadata or {}), "type_error": type(data).__name__, "duration_ms": duration_ms, "usage": usage},
         )
         raise ValueError(f"Expected JSON object, got: {type(data).__name__}")
     _append_llm_audit_log(
@@ -389,7 +1057,7 @@ async def _ask_json(
         user=user,
         raw_response=response,
         parsed_response=data,
-        metadata={**dict(metadata or {}), "duration_ms": duration_ms},
+        metadata={**dict(metadata or {}), "duration_ms": duration_ms, "usage": usage},
     )
     return data
 
@@ -423,7 +1091,7 @@ async def _ask_anthropic_json(
     base_url: str,
     model: str,
     max_tokens: int,
-) -> str:
+) -> Dict[str, Any]:
     """Call Anthropic-compatible Messages API and return textual JSON.
 
     The BFCL executor already has native Anthropic tool-call support. This
@@ -441,7 +1109,8 @@ async def _ask_anthropic_json(
         endpoint = endpoint[:-3]
     import httpx
 
-    timeout = httpx.Timeout(90.0, connect=10.0)
+    timeout_s = float(os.environ.get("MAINTENANCE_ANTHROPIC_TIMEOUT", "300") or "300")
+    timeout = httpx.Timeout(timeout_s, connect=10.0)
     client = AsyncAnthropic(api_key=api_key, base_url=endpoint or None, timeout=timeout, max_retries=1)
     response = await client.messages.create(
         model=model,
@@ -460,7 +1129,17 @@ async def _ask_anthropic_json(
         text = getattr(block, "text", None)
         if text:
             parts.append(str(text))
-    return "\n".join(parts).strip()
+    usage_obj = getattr(response, "usage", None)
+    prompt_tokens = int(getattr(usage_obj, "input_tokens", 0) or 0)
+    completion_tokens = int(getattr(usage_obj, "output_tokens", 0) or 0)
+    return {
+        "text": "\n".join(parts).strip(),
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+    }
 
 
 def _append_llm_audit_log(
@@ -489,6 +1168,7 @@ def _append_llm_audit_log(
         "raw_response": raw_response,
         "parsed_response": parsed_response,
         "metadata": dict(metadata or {}),
+        "usage": _normalize_usage_payload(dict((metadata or {}).get("usage") or {})),
     }
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -507,7 +1187,12 @@ def _coerce_interface_payload(raw: Dict[str, Any] | None, fallback_summary: str 
 
 
 def _coerce_bundle_case_payload(raw: Dict[str, Any], fallback_case_id: str) -> SkillBundleCase:
-    payload = dict(raw or {})
+    if isinstance(raw, SkillBundleCase):
+        payload = raw.as_dict()
+    elif hasattr(raw, "as_dict") and not isinstance(raw, dict):
+        payload = dict(raw.as_dict() or {})
+    else:
+        payload = dict(raw or {})
     return SkillBundleCase(
         case_id=str(payload.get("case_id") or fallback_case_id),
         source=str(payload.get("source") or "llm_distilled"),
@@ -518,6 +1203,229 @@ def _coerce_bundle_case_payload(raw: Dict[str, Any], fallback_case_id: str) -> S
         polarity=str(payload.get("polarity") or "positive"),
         contrast_protocol=dict(payload.get("contrast_protocol") or {"with_skill": True, "without_skill": True}),
     )
+
+
+def _bundle_projection(bundle: SkillBundle) -> Dict[str, Any]:
+    return {
+        "bundle_id": bundle.bundle_id,
+        "bundle_version": bundle.bundle_version,
+        "contrast_protocol": copy.deepcopy(bundle.contrast_protocol or {}),
+        "maintenance_notes": bundle.maintenance_notes,
+        "positive_cases": [case.as_dict() for case in bundle.positive_cases],
+        "negative_cases": [case.as_dict() for case in bundle.negative_cases],
+        "integration_cases": [case.as_dict() for case in bundle.integration_cases],
+        "fixtures": copy.deepcopy(bundle.fixtures or {}),
+    }
+
+
+def _bundle_from_projection(payload: Dict[str, Any]) -> SkillBundle:
+    data = dict(payload or {})
+    bundle = SkillBundle(
+        bundle_id=str(data.get("bundle_id") or ""),
+        bundle_version=int(data.get("bundle_version") or 1),
+        maintenance_notes=str(data.get("maintenance_notes") or ""),
+        fixtures=copy.deepcopy(dict(data.get("fixtures") or {})),
+        contrast_protocol=copy.deepcopy(
+            dict(data.get("contrast_protocol") or {"with_skill": True, "without_skill": True})
+        ),
+    )
+    bundle.positive_cases = [
+        _coerce_bundle_case_payload(item, f"{bundle.bundle_id or 'bundle'}:positive:{idx}")
+        for idx, item in enumerate(data.get("positive_cases") or [])
+    ]
+    bundle.negative_cases = [
+        _coerce_bundle_case_payload(item, f"{bundle.bundle_id or 'bundle'}:negative:{idx}")
+        for idx, item in enumerate(data.get("negative_cases") or [])
+    ]
+    bundle.integration_cases = [
+        _coerce_bundle_case_payload(item, f"{bundle.bundle_id or 'bundle'}:integration:{idx}")
+        for idx, item in enumerate(data.get("integration_cases") or [])
+    ]
+    return bundle
+
+
+def _artifact_text(artifact: SkillArtifact) -> str:
+    return json.dumps(artifact.as_dict(), ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _artifact_from_text(text: str) -> SkillArtifact:
+    payload = json.loads(text or "{}")
+    if not isinstance(payload, dict):
+        raise ValueError("artifact text must decode to a JSON object")
+    fields = {k: v for k, v in payload.items() if k in SkillArtifact.__dataclass_fields__}
+    artifact = SkillArtifact(**fields)
+    artifact.interface = _coerce_interface_payload(payload.get("interface"), fallback_summary=artifact.description)
+    artifact.bundle = _bundle_from_projection(dict(payload.get("bundle") or {}))
+    artifact.evidence = SkillEvidence(**dict(payload.get("evidence") or {}))
+    artifact.lineage = SkillLineage(**dict(payload.get("lineage") or {}))
+    artifact.dependency_pins = _coerce_dependency_pins(payload.get("dependency_pins"))
+    artifact.dependencies = [
+        str(dep).strip()
+        for dep in (payload.get("dependencies") or artifact.dependencies or [])
+        if str(dep).strip()
+    ]
+    artifact.history = list(payload.get("history") or artifact.history or [])
+    artifact.status = str(payload.get("status") or artifact.status or "active")
+    artifact.stale = bool(payload.get("stale", artifact.stale))
+    artifact.metadata = dict(payload.get("metadata") or artifact.metadata or {})
+    artifact.tags = [str(item).strip() for item in (payload.get("tags") or artifact.tags or []) if str(item).strip()]
+    if not artifact.bundle.bundle_id:
+        artifact.bundle.bundle_id = f"{artifact.name}.bundle"
+    return artifact
+
+
+def _artifact_projection(artifact: SkillArtifact) -> Dict[str, Any]:
+    payload = artifact.as_dict()
+    payload.pop("version_id", None)
+    payload.pop("version_kind", None)
+    payload.pop("dependency_versions", None)
+    payload["interface"] = dict(payload.get("interface") or {})
+    payload["interface"].pop("summary", None)
+    payload["history"] = []
+    return payload
+
+
+def _bundle_text(bundle: SkillBundle) -> str:
+    return json.dumps(_bundle_projection(bundle), ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _bundle_from_text(text: str) -> SkillBundle:
+    payload = json.loads(text or "{}")
+    if not isinstance(payload, dict):
+        raise ValueError("bundle text must decode to a JSON object")
+    return _bundle_from_projection(payload)
+
+
+def _trim_bundle_projection(
+    bundle: SkillBundle,
+    *,
+    per_polarity_limit: int,
+    total_limit: int,
+) -> bool:
+    changed = False
+    for attr in ("positive_cases", "negative_cases", "integration_cases"):
+        cases = list(getattr(bundle, attr) or [])
+        if len(cases) <= per_polarity_limit:
+            continue
+        setattr(bundle, attr, cases[:per_polarity_limit])
+        changed = True
+    ordered_groups = [
+        ("positive_cases", list(bundle.positive_cases or [])),
+        ("negative_cases", list(bundle.negative_cases or [])),
+        ("integration_cases", list(bundle.integration_cases or [])),
+    ]
+    total_cases = sum(len(cases) for _, cases in ordered_groups)
+    if total_cases > total_limit:
+        kept: Dict[str, List[SkillBundleCase]] = {name: [] for name, _ in ordered_groups}
+        group_iters = {name: list(cases) for name, cases in ordered_groups}
+        while sum(len(items) for items in kept.values()) < total_limit:
+            progress = False
+            for name, _cases in ordered_groups:
+                remaining = group_iters[name]
+                if not remaining:
+                    continue
+                kept[name].append(remaining.pop(0))
+                progress = True
+                if sum(len(items) for items in kept.values()) >= total_limit:
+                    break
+            if not progress:
+                break
+        bundle.positive_cases = kept["positive_cases"]
+        bundle.negative_cases = kept["negative_cases"]
+        bundle.integration_cases = kept["integration_cases"]
+        bundle.fixtures = {
+            **dict(bundle.fixtures or {}),
+            "bundle_split_count": total_cases - total_limit,
+            "bundle_trimmed": True,
+        }
+        changed = True
+    if changed:
+        bundle.bundle_version = max(int(bundle.bundle_version or 1), 1) + 1
+    return changed
+
+
+async def _edit_bundle_text(
+    *,
+    current_bundle: SkillBundle,
+    target_bundle: SkillBundle,
+) -> SkillBundle:
+    current_text = _bundle_text(current_bundle)
+    target_text = _bundle_text(target_bundle)
+    editor = StrReplaceEditor()
+    result = await editor.execute(action="replace", content=current_text, old=current_text, new=target_text)
+    if result.error:
+        raise ValueError(f"bundle text edit failed: {result.error}")
+    edited_text = str(result.output or "")
+    edited_bundle = _bundle_from_text(edited_text)
+    if _bundle_projection(edited_bundle) != _bundle_projection(target_bundle):
+        raise ValueError("bundle text roundtrip validation failed")
+    return edited_bundle
+
+
+async def _edit_artifact_text(
+    *,
+    current_artifact: SkillArtifact,
+    target_artifact: SkillArtifact,
+) -> SkillArtifact:
+    current_text = _artifact_text(current_artifact)
+    target_text = _artifact_text(target_artifact)
+    editor = StrReplaceEditor()
+    result = await editor.execute(action="replace", content=current_text, old=current_text, new=target_text)
+    if result.error:
+        raise ValueError(f"artifact text edit failed: {result.error}")
+    edited_text = str(result.output or "")
+    edited_artifact = _artifact_from_text(edited_text)
+    if _artifact_projection(edited_artifact) != _artifact_projection(target_artifact):
+        raise ValueError("artifact text roundtrip validation failed")
+    return edited_artifact
+
+
+async def apply_bundle_patch_payload_via_editor(
+    artifact: SkillArtifact,
+    *,
+    patch_payload: Dict[str, Any],
+    maintenance_notes: str = "",
+) -> SkillBundle:
+    target_bundle = apply_bundle_patch_payload(
+        artifact,
+        patch_payload=patch_payload,
+        maintenance_notes=maintenance_notes,
+    )
+    temp_artifact = copy.deepcopy(artifact)
+    temp_artifact.bundle = copy.deepcopy(target_bundle)
+    trim_changed = False
+    if temp_artifact.bundle.all_cases():
+        trim_changed = _trim_bundle_projection(
+            temp_artifact.bundle,
+            per_polarity_limit=_bundle_case_limit_per_polarity(),
+            total_limit=max(_bundle_case_limit_per_polarity(), int(os.environ.get("BFCL_BUNDLE_MAX_TOTAL_CASES", "6") or "6")),
+        )
+    if trim_changed:
+        target_bundle = temp_artifact.bundle
+    return await _edit_bundle_text(current_bundle=artifact.bundle, target_bundle=target_bundle)
+
+
+async def apply_bundle_text_via_editor(
+    current_bundle: SkillBundle,
+    target_bundle: SkillBundle,
+) -> SkillBundle:
+    return await _edit_bundle_text(current_bundle=current_bundle, target_bundle=target_bundle)
+
+
+async def apply_refine_payload_via_editor(
+    artifact: SkillArtifact,
+    payload: Dict[str, Any],
+) -> SkillArtifact:
+    target = apply_refine_payload(artifact, payload)
+    return await _edit_artifact_text(current_artifact=artifact, target_artifact=target)
+
+
+async def apply_stale_payload_via_editor(
+    artifact: SkillArtifact,
+    payload: Dict[str, Any],
+) -> SkillArtifact:
+    target = apply_stale_payload(artifact, payload)
+    return await _edit_artifact_text(current_artifact=artifact, target_artifact=target)
 
 
 def _coerce_dependency_pins(raw: Iterable[Dict[str, Any]] | None) -> List[DependencyPin]:
@@ -739,11 +1647,280 @@ def _error_focus_hints(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return hints
 
 
+def _skill_credit_projection(
+    artifact: SkillArtifact,
+    *,
+    task_domains: List[str],
+    metrics: Dict[str, Any],
+) -> Dict[str, Any]:
+    prompt_injected = set(metrics.get("prompt_injected_skills") or [])
+    tool_injected = set(metrics.get("tool_injected_skills") or [])
+    used = set(metrics.get("used_skills") or []) | set(metrics.get("called_skill_tools") or [])
+    source_domains = [str(item).strip() for item in (artifact.metadata.get("domains") or []) if str(item).strip()]
+    allowed_tools = [str(item).strip() for item in (artifact.metadata.get("allowed_tools") or []) if str(item).strip()]
+    skill_type = "function_like" if artifact.injection_type() == "functional" else "knowledge_like"
+    return {
+        "skill_name": artifact.name,
+        "version": artifact.version,
+        "version_id": artifact.version_id(),
+        "kind": artifact.kind,
+        "skill_type": skill_type,
+        "injection_type": artifact.injection_type(),
+        "description": artifact.description,
+        "body": artifact.body,
+        "interface": artifact.interface.as_dict(),
+        "source_domains": source_domains,
+        "task_domain_overlap": sorted(set(source_domains) & set(task_domains)),
+        "allowed_tools": allowed_tools,
+        "dependencies": list(artifact.dependencies or []),
+        "source_task_ids": list(artifact.metadata.get("source_task_ids") or []),
+        "retrieved": artifact.name in set(metrics.get("retrieved_skills") or []),
+        "prompt_injected": artifact.name in prompt_injected,
+        "tool_injected": artifact.name in tool_injected,
+        "used": artifact.name in used,
+    }
+
+
+def _credit_assignment_prompt_block(
+    *,
+    detail: Dict[str, Any],
+    candidate_artifacts: List[SkillArtifact],
+) -> Dict[str, Any]:
+    run = dict((detail.get("runs") or [{}])[0] or {})
+    task = dict(detail.get("task") or {})
+    metrics = dict(run.get("metrics") or {})
+    trace = dict(run.get("trace") or {})
+    task_domains = [
+        str(item).strip()
+        for item in ((task.get("metadata") or {}).get("involved_classes") or [])
+        if str(item).strip()
+    ]
+    call_errors = list(metrics.get("call_errors") or [])
+    candidate_names = {artifact.name for artifact in candidate_artifacts}
+    selected_turns: List[Dict[str, Any]] = []
+    turns = list(trace.get("turns") or [])
+    expected = list(task.get("expected") or [])
+    error_turn_indices = {
+        item.get("turn_index")
+        for item in call_errors
+        if isinstance(item.get("turn_index"), int)
+    }
+    allowed_tools = {
+        tool
+        for artifact in candidate_artifacts
+        for tool in (artifact.metadata.get("allowed_tools") or [])
+        if str(tool).strip()
+    }
+    for idx, turn in enumerate(turns):
+        ti = turn.get("turn_index", idx)
+        include = ti in error_turn_indices
+        if not include and 0 <= ti < len(expected):
+            for raw_call in expected[ti] or []:
+                if str(raw_call).split("(", 1)[0].strip() in allowed_tools:
+                    include = True
+                    break
+        if not include:
+            for call in (turn.get("tool_calls") or []):
+                if str(call.get("name") or "").strip() in allowed_tools:
+                    include = True
+                    break
+        if not include and idx == 0:
+            include = True
+        if include:
+            selected_turns.append(
+                {
+                    "turn_index": ti,
+                    "user_messages": turn.get("user_messages"),
+                    "expected_calls": expected[ti] if 0 <= ti < len(expected) else [],
+                    "tool_calls": turn.get("tool_calls"),
+                }
+            )
+    return {
+        "task": {
+            "benchmark": task.get("benchmark"),
+            "task_id": task.get("task_id"),
+            "question_preview": _trim_text(_json_block(task.get("question") or []), limit=1400),
+            "metadata": {
+                "involved_classes": task_domains,
+            },
+        },
+        "result": {
+            "success": run.get("success"),
+            "score": run.get("score"),
+            "metrics": {
+                "official_valid": metrics.get("official_valid"),
+                "official_error_type": metrics.get("official_error_type"),
+                "call_f1": metrics.get("call_f1"),
+                "n_model_steps": metrics.get("n_model_steps"),
+                "total_tokens": metrics.get("total_tokens"),
+                "call_errors": call_errors,
+                "retrieved_skills": metrics.get("retrieved_skills"),
+                "prompt_injected_skills": metrics.get("prompt_injected_skills"),
+                "tool_injected_skills": metrics.get("tool_injected_skills"),
+                "used_skills": metrics.get("used_skills"),
+            },
+        },
+        "skill_lists": {
+            "retrieved": metrics.get("retrieved_skills") or [],
+            "prompt_injected": metrics.get("prompt_injected_skills") or [],
+            "tool_injected": metrics.get("tool_injected_skills") or [],
+            "used": metrics.get("used_skills") or [],
+            "called_skill_tools": metrics.get("called_skill_tools") or [],
+        },
+        "trace": {
+            "focused_turns": selected_turns,
+        },
+        "candidate_skills": [
+            _skill_credit_projection(artifact, task_domains=task_domains, metrics=metrics)
+            for artifact in candidate_artifacts
+            if artifact.name in candidate_names
+        ],
+    }
+
+
+def _normalize_credit_bundle_suggestions(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    suggestions: List[Dict[str, Any]] = []
+    for raw in list(data.get("bundle_case_suggestions") or []):
+        if isinstance(raw, dict):
+            suggestions.append(raw)
+    for judgment in list(data.get("skill_judgments") or []):
+        if not isinstance(judgment, dict):
+            continue
+        skill_name = str(judgment.get("skill_name") or "").strip()
+        for raw in list(judgment.get("bundle_case_suggestions") or []):
+            if not isinstance(raw, dict):
+                continue
+            row = dict(raw)
+            row.setdefault("skill_name", skill_name)
+            suggestions.append(row)
+    normalized: List[Dict[str, Any]] = []
+    for raw in suggestions:
+        skill_name = str(raw.get("skill_name") or "").strip()
+        if not skill_name:
+            continue
+        polarity = str(raw.get("polarity") or "").strip().lower()
+        if polarity not in {"positive", "negative", "integration"}:
+            continue
+        normalized.append(
+            {
+                "skill_name": skill_name,
+                "polarity": polarity,
+                "reason": str(raw.get("reason") or ""),
+                "source_task_id": str(raw.get("source_task_id") or ""),
+                "focus_turn_indices": [
+                    int(item)
+                    for item in (raw.get("focus_turn_indices") or [])
+                    if isinstance(item, int) or str(item).strip().isdigit()
+                ],
+                "required_context_turn_indices": [
+                    int(item)
+                    for item in (raw.get("required_context_turn_indices") or [])
+                    if isinstance(item, int) or str(item).strip().isdigit()
+                ],
+                "state_requirements": copy.deepcopy(dict(raw.get("state_requirements") or {})),
+                "expected_contract": str(raw.get("expected_contract") or ""),
+                "task_fragment_policy": str(raw.get("task_fragment_policy") or "reuse_official_fragment").strip() or "reuse_official_fragment",
+            }
+        )
+    return normalized
+
+
+def _normalize_credit_maintenance_actions(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    actions: List[Dict[str, Any]] = []
+    for raw in list(data.get("maintenance_actions") or []):
+        if isinstance(raw, dict):
+            actions.append(raw)
+    for judgment in list(data.get("skill_judgments") or []):
+        if not isinstance(judgment, dict):
+            continue
+        skill_name = str(judgment.get("skill_name") or "").strip()
+        for raw in list(judgment.get("maintenance_actions") or []):
+            if not isinstance(raw, dict):
+                continue
+            row = dict(raw)
+            row.setdefault("skill_name", skill_name)
+            actions.append(row)
+    normalized: List[Dict[str, Any]] = []
+    for raw in actions:
+        skill_name = str(raw.get("skill_name") or "").strip()
+        action = str(raw.get("action") or "").strip().lower()
+        if not skill_name or not action:
+            continue
+        normalized.append(
+            {
+                "skill_name": skill_name,
+                "action": action,
+                "reason": str(raw.get("reason") or ""),
+                "target_scope": str(raw.get("target_scope") or ""),
+            }
+        )
+    return normalized
+
+
+async def assign_skill_credit_llm(
+    *,
+    detail: Dict[str, Any],
+    candidate_artifacts: List[SkillArtifact],
+    llm_config: str = EXTRACT_MODEL,
+    model_name: str | None = None,
+    audit_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    prompt_payload = _credit_assignment_prompt_block(
+        detail=detail,
+        candidate_artifacts=candidate_artifacts,
+    )
+    user = (
+        "## Completed Task Trace\n"
+        f"{_json_block(prompt_payload)}\n"
+    )
+    data = await _ask_json(
+        system=CREDIT_ASSIGNMENT_SYSTEM,
+        user=_trim_text(user, limit=18000),
+        llm_config=llm_config,
+        model_name=model_name,
+        role="credit_assigner",
+        metadata={
+            "task_id": str(detail.get("task_id") or ""),
+            "n_candidate_skills": len(candidate_artifacts),
+            **dict(audit_context or {}),
+        },
+    )
+    judgments = []
+    for item in list(data.get("skill_judgments") or []):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("skill_name") or "").strip()
+        if not name:
+            continue
+        judgments.append(
+            {
+                "skill_name": name,
+                "judgment": str(item.get("judgment") or "uncertain").strip().lower() or "uncertain",
+                "effect_type": str(item.get("effect_type") or "unknown").strip().lower() or "unknown",
+                "confidence": float(item.get("confidence") or 0.0),
+                "reason": str(item.get("reason") or ""),
+                "maintenance_actions": _normalize_credit_maintenance_actions({"skill_judgments": [item]}),
+                "bundle_case_suggestions": _normalize_credit_bundle_suggestions({"skill_judgments": [item]}),
+                "refine_required": bool(item.get("refine_required")),
+                "filter_candidate": bool(item.get("filter_candidate")),
+                "evidence_strength": str(item.get("evidence_strength") or "weak").strip().lower() or "weak",
+                "attribution_scope": str(item.get("attribution_scope") or "none").strip().lower() or "none",
+                "evidence": copy.deepcopy(dict(item.get("evidence") or {})),
+            }
+        )
+    return {
+        "task_summary": copy.deepcopy(dict(data.get("task_summary") or {})),
+        "skill_judgments": judgments,
+        "input_projection": prompt_payload,
+    }
+
+
 async def extract_skill_artifacts_from_results_llm(
     results: List[Dict[str, Any]],
     *,
     tool_schemas: Iterable[Dict[str, Any]] | None = None,
     existing_artifacts: Iterable[SkillArtifact] | None = None,
+    extractor_rules: Iterable[Dict[str, Any]] | None = None,
     llm_config: str = EXTRACT_MODEL,
     model_name: str | None = None,
     audit_context: Dict[str, Any] | None = None,
@@ -792,7 +1969,7 @@ async def extract_skill_artifacts_from_results_llm(
         f"{_json_block([_result_prompt_block(item) for item in results])}\n"
     )
     data = await _ask_json(
-        system=EXTRACT_SYSTEM,
+        system=EXTRACT_SYSTEM + _extractor_rule_suffix(extractor_rules),
         user=_trim_text(user),
         llm_config=llm_config,
         model_name=model_name,
@@ -800,6 +1977,7 @@ async def extract_skill_artifacts_from_results_llm(
         metadata={
             "n_results": len(results),
             "n_existing_artifacts": len(list(existing_artifacts or [])),
+            "n_extractor_rules": len(_normalize_feedback_rules(extractor_rules)),
             **dict(audit_context or {}),
         },
     )
@@ -820,6 +1998,7 @@ async def extract_skill_artifacts_from_results_llm(
             description=description,
             body=body,
             metadata=metadata,
+            tags=[str(item).strip() for item in (payload.get("tags") or []) if str(item).strip()],
             interface=_coerce_interface_payload(payload.get("interface"), fallback_summary=description),
             lineage=SkillLineage(version_kind=str(payload.get("version_kind") or "seed")),
             dependency_pins=_coerce_dependency_pins(payload.get("dependency_pins")),
@@ -829,6 +2008,50 @@ async def extract_skill_artifacts_from_results_llm(
             artifact.bundle.bundle_id = f"{artifact.name}.bundle"
         artifacts.append(artifact)
     return artifacts
+
+
+async def update_extractor_rules_from_feedback_llm(
+    *,
+    current_rules: Iterable[Dict[str, Any]] | None,
+    feedback_rows: List[Dict[str, Any]],
+    llm_config: str = EXTRACT_MODEL,
+    model_name: str | None = None,
+    max_rules: int = 5,
+    audit_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    normalized_current = _normalize_feedback_rules(current_rules, max_rules=max_rules)
+    if not feedback_rows:
+        return {
+            "summary": "no_feedback_rows",
+            "rules": normalized_current,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    user = (
+        "## Current Extractor Rules\n"
+        f"{_json_block(normalized_current)}\n\n"
+        "## Runtime Feedback Evidence\n"
+        f"{_json_block(feedback_rows)}\n"
+    )
+    data = await _ask_json(
+        system=EXTRACTOR_RULE_UPDATE_SYSTEM.replace("{max_rules}", str(max_rules)),
+        user=_trim_text(user, limit=12000),
+        llm_config=llm_config,
+        model_name=model_name,
+        role="extractor_feedback",
+        metadata={
+            "n_current_rules": len(normalized_current),
+            "n_feedback_rows": len(feedback_rows),
+            **dict(audit_context or {}),
+        },
+    )
+    updated_rules = _normalize_feedback_rules(data.get("rules"), max_rules=max_rules)
+    if not updated_rules:
+        updated_rules = normalized_current
+    return {
+        "summary": str(data.get("summary") or ""),
+        "rules": updated_rules,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 async def distill_skill_bundle_llm(
@@ -881,10 +2104,114 @@ async def distill_skill_bundle_llm(
     ]
     if not bundle.bundle_id:
         bundle.bundle_id = f"{artifact.name}.bundle"
-    bundle.positive_cases = bundle.positive_cases[:1]
-    bundle.negative_cases = bundle.negative_cases[:1]
-    bundle.integration_cases = bundle.integration_cases[:1]
     return bundle
+
+
+def apply_bundle_patch_payload(
+    artifact: SkillArtifact,
+    *,
+    patch_payload: Dict[str, Any],
+    maintenance_notes: str = "",
+) -> SkillBundle:
+    bundle = copy.deepcopy(artifact.bundle)
+    buckets: Dict[str, Dict[str, SkillBundleCase]] = {
+        "positive_cases": {case.case_id: copy.deepcopy(case) for case in bundle.positive_cases},
+        "negative_cases": {case.case_id: copy.deepcopy(case) for case in bundle.negative_cases},
+        "integration_cases": {case.case_id: copy.deepcopy(case) for case in bundle.integration_cases},
+    }
+    drop_ids = {
+        str(item).strip()
+        for item in (patch_payload.get("drop_case_ids") or [])
+        if str(item).strip()
+    }
+    for case_id in drop_ids:
+        for bucket_cases in buckets.values():
+            bucket_cases.pop(case_id, None)
+    for raw in (patch_payload.get("replace_cases") or []):
+        payload = dict(raw or {})
+        case_id = str(payload.get("case_id") or "").strip()
+        bucket = str(payload.get("bucket") or "").strip()
+        if not case_id:
+            continue
+        target_bucket = bucket if bucket in buckets else None
+        if target_bucket is None:
+            for bucket_name, bucket_cases in buckets.items():
+                if case_id in bucket_cases:
+                    target_bucket = bucket_name
+                    break
+        if target_bucket is None:
+            target_bucket = "integration_cases"
+        for bucket_name, bucket_cases in buckets.items():
+            if bucket_name != target_bucket:
+                bucket_cases.pop(case_id, None)
+        buckets[target_bucket][case_id] = _coerce_bundle_case_payload(payload, case_id)
+    add_cases = dict(patch_payload.get("add_cases") or {})
+    for polarity_key in ("positive_cases", "negative_cases", "integration_cases"):
+        for idx, raw in enumerate(add_cases.get(polarity_key) or []):
+            payload = dict(raw or {})
+            fallback_case_id = str(payload.get("case_id") or f"{artifact.name}:{polarity_key}:{idx}")
+            case = _coerce_bundle_case_payload(payload, fallback_case_id)
+            buckets[polarity_key][case.case_id] = case
+
+    bundle.positive_cases = list(buckets["positive_cases"].values())
+    bundle.negative_cases = list(buckets["negative_cases"].values())
+    bundle.integration_cases = list(buckets["integration_cases"].values())
+    if maintenance_notes.strip():
+        bundle.maintenance_notes = maintenance_notes.strip()
+    if not bundle.bundle_id:
+        bundle.bundle_id = f"{artifact.name}.bundle"
+    return bundle
+
+
+async def maintain_skill_bundle_llm(
+    artifact: SkillArtifact,
+    *,
+    source_results: List[Dict[str, Any]] | None = None,
+    replay_results: List[Dict[str, Any]] | None = None,
+    integration_failures: List[Dict[str, Any]] | None = None,
+    credit_cases: List[Dict[str, Any]] | None = None,
+    contract_validation_failures: List[Dict[str, Any]] | None = None,
+    llm_config: str = EXTRACT_MODEL,
+    model_name: str | None = None,
+    audit_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    user = (
+        "## Target Skill Artifact\n"
+        f"{_json_block(_artifact_prompt_block(artifact))}\n\n"
+        "## Current Bundle\n"
+        f"{_json_block(_bundle_projection(artifact.bundle))}\n\n"
+        "## Credit-Assigned Bundle Cases\n"
+        f"{_json_block(list(credit_cases or []))}\n\n"
+        "## Integration Failures\n"
+        f"{_json_block(list(integration_failures or []))}\n\n"
+        "## Contract Validation Failures\n"
+        f"{_json_block(list(contract_validation_failures or []))}\n"
+    )
+    data = await _ask_json(
+        system=BUNDLE_MAINTAIN_SYSTEM,
+        user=_trim_text(user, limit=12000),
+        llm_config=llm_config,
+        model_name=model_name,
+        role="bundle_maintainer",
+        metadata={
+            "artifact_name": artifact.name,
+            "skill_version": artifact.version,
+            "existing_bundle_cases": len(artifact.bundle.all_cases()),
+            "n_integration_failures": len(integration_failures or []),
+            "n_credit_cases": len(credit_cases or []),
+            "n_contract_validation_failures": len(contract_validation_failures or []),
+            **dict(audit_context or {}),
+        },
+    )
+    action = str(data.get("action") or "rebuild").strip().lower() or "rebuild"
+    normalized_action = action if action in {"keep", "patch", "rebuild"} else "rebuild"
+    return {
+        "action": normalized_action,
+        "reason": str(data.get("reason") or ""),
+        "maintenance_notes": str(data.get("maintenance_notes") or ""),
+        "patch": copy.deepcopy(dict(data.get("patch") or {})),
+        "raw": copy.deepcopy(data),
+    }
 
 
 async def refine_skill_artifact_llm(
@@ -894,6 +2221,7 @@ async def refine_skill_artifact_llm(
     integration_failures: List[Dict[str, Any]] | None = None,
     refinement_history: List[Dict[str, Any]] | None = None,
     dependency_summaries: List[Dict[str, Any]] | None = None,
+    credit_context: List[Dict[str, Any]] | None = None,
     llm_config: str = EXTRACT_MODEL,
     model_name: str | None = None,
     audit_context: Dict[str, Any] | None = None,
@@ -908,7 +2236,9 @@ async def refine_skill_artifact_llm(
         "## Refinement History\n"
         f"{_json_block(list(refinement_history or []))}\n\n"
         "## Neighbor Dependency Summaries\n"
-        f"{_json_block(list(dependency_summaries or []))}\n"
+        f"{_json_block(list(dependency_summaries or []))}\n\n"
+        "## Recent Credit Assignment Context\n"
+        f"{_json_block(list(credit_context or []))}\n"
     )
     return await _ask_json(
         system=REFINE_SYSTEM,
@@ -994,6 +2324,8 @@ def apply_refine_payload(
                 _coerce_bundle_case_payload(item, f"{updated.name}:integration:{idx}")
                 for idx, item in enumerate(bundle_payload.get("integration_cases") or [])
             ]
+        if not bundle.bundle_id:
+            bundle.bundle_id = f"{updated.name}.bundle"
         updated.bundle = bundle
     version_kind = str(decision.get("version_kind") or updated.metadata.get("version_kind") or "minor")
     updated.metadata["version_kind"] = version_kind
@@ -1041,6 +2373,8 @@ def apply_stale_payload(
         updated.status = "active"
         updated.metadata["version_kind"] = "major" if action == "refresh_major" else "minor"
         updated.lineage.version_kind = updated.metadata["version_kind"]
+        if not updated.bundle.bundle_id:
+            updated.bundle.bundle_id = f"{updated.name}.bundle"
     elif action == "pin_legacy":
         updated.dependency_pins = _coerce_dependency_pins(payload.get("pinned_dependencies"))
         updated.stale = False

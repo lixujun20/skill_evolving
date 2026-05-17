@@ -18,6 +18,13 @@
 - BFCL adapter 把通用协议落到真实 function-calling benchmark 上。
 - Web player 只消费结果和 debug events，不参与算法决策。
 
+论文定位上的重要边界：
+
+- PSN 已经覆盖 executable programmatic skill networks 的 fault localization、maturity-aware update gating 和 rollback refactoring。
+- SkillMOO 已经覆盖 task-specific skill bundle 的 pass rate / cost 多目标优化。
+- AgentOptimizer 已经覆盖不改 LLM 权重、把外部 functions 当作 learnable weights 的训练视角。
+- 因此本系统最应该强调的核心不是“会生成/重构 skill”，而是 test-grounded repository maintenance：候选 skill population 经过 bundle tests、with/without unit utility、integration-derived cases、retrieval-noise analysis、redundancy/refactor 和 versioned dependency handling 后，选择一个 compact、low-noise、低维护成本的 skill store。
+
 ```mermaid
 flowchart LR
     Trace[Real Benchmark Trace] --> Extractor[LLM Extractor]
@@ -54,9 +61,9 @@ flowchart TB
     end
 
     subgraph BenchmarkAdapter["BFCL adapter layer"]
-        BFCLExec[benchmarks/bfcl.py<br/>real executor + retriever integration]
-        BFCLMaint[benchmarks/bfcl_llm_maintenance.py<br/>BFCL bundle/test/refine adapter]
-        Runner[benchmarks/run.py<br/>evolve orchestration]
+        BFCLExec[benchmarks/bfcl/adapter.py<br/>real executor + retriever integration]
+        BFCLMaint[benchmarks/bfcl/maintenance/adapter.py<br/>BFCL bundle/test/refine adapter]
+        Runner[benchmarks/core/runner.py<br/>generic evolve orchestration]
     end
 
     subgraph Outputs["Output layer"]
@@ -67,9 +74,10 @@ flowchart TB
     end
 
     subgraph WebLayer["Web layer"]
-        App[webapp/app.py<br/>API + result normalization]
-        JS[maintenance.js<br/>player UI]
-        Docs[maintenance-docs<br/>Markdown docs]
+    App[webapp/app.py<br/>API + result normalization]
+    React[frontend React/Vite<br/>Maintenance V2]
+    JS[maintenance.js<br/>legacy reference]
+    Docs[maintenance-docs<br/>Markdown docs]
     end
 
     Types --> Store
@@ -86,7 +94,8 @@ flowchart TB
     Result --> App
     Partial --> App
     Audit --> App
-    App --> JS
+    App --> React
+    App -. legacy .-> JS
     Docs --> App
 ```
 
@@ -99,10 +108,67 @@ flowchart TB
 | schema | `academic/skill_repository/types.py` | 定义 skill、interface、bundle、test result、lineage、dependency pin。 |
 | store | `academic/skill_repository/store.py` | 版本化资产存取、检索、bundle/test result 分离、stale 传播、rollback。 |
 | LLM roles | `academic/skill_repository/llm_maintenance.py` | 通用 extractor/bundle builder/refiner/stale resolver prompt、JSON parsing、audit log。 |
-| BFCL execution | `academic/benchmarks/bfcl.py` | 真实 BFCL task executor、turn-level retrieval、tool call replay、official metrics。 |
-| BFCL maintenance adapter | `academic/benchmarks/bfcl_llm_maintenance.py` | 把 BFCL result 转成通用 role 输入，把 bundle case 转回 BFCL task，并运行 with/without tests。 |
-| orchestration | `academic/benchmarks/run.py::_run_bfcl_evolve` | 一次 evolve 实验的主流程，负责 train、extract、bundle、unit test、refine、replay、保存。 |
+| BFCL execution | `academic/benchmarks/bfcl/adapter.py` | 真实 BFCL task executor、turn-level retrieval、tool call replay、official metrics。 |
+| BFCL maintenance adapter | `academic/benchmarks/bfcl/maintenance/adapter.py` | 把 BFCL result 转成通用 role 输入，把 bundle case 转回 BFCL task，并运行 with/without tests。 |
+| orchestration | `academic/benchmarks/core/runner.py::_run_bfcl_evolve` | 一次 evolve 实验的主流程，负责 train、extract、bundle、unit test、refine、replay、保存。 |
 | UI API | `academic/webapp/app.py` | 扫描实验、加载 result、生成 pages/player frames。 |
+
+### 2.3 Frontend V2 Architecture
+
+`/maintenance` 和 `/method-tests` 现在由 `academic/webapp/frontend` 中的 React + Vite + TypeScript app 提供。Flask 不再向这两个 route 注入旧 `maintenance.js`，而是读取 Vite manifest 并加载 `academic/webapp/static/maintenance-v2` 中的 build 产物。开发时可以设置 `MAINTENANCE_VITE_DEV_SERVER=http://127.0.0.1:5173`，让 Flask 模板直接加载 Vite dev server。
+
+V2 的边界：
+
+- 不直接读取 experiment result JSON。
+- 不改变 `/api/maintenance/*` schema。
+- 不接管 `/maintenance-docs`。
+- `/refactor-graph` 保持独立页面，但已升级为 skill evolving graph viewer，不并入 React V2。
+
+前端数据流：
+
+```mermaid
+flowchart LR
+    ExperimentsAPI["/api/maintenance/experiments"] --> AppState[selectedExperimentId]
+    DetailAPI["/api/maintenance/experiment"] --> Adapter[view model adapter]
+    PlayerAPI["/api/maintenance/player"] --> Adapter
+    Adapter --> FileTree[filesystem-style tree]
+    Adapter --> Flow[React Flow industrial board]
+    Adapter --> Inspector[Inspector + JsonTree]
+    Adapter --> Player[frame player]
+```
+
+V2 组件职责：
+
+| Component | 职责 |
+| --- | --- |
+| `FileTree` | 左侧 experiment 搜索、选择和文件系统式 page/artifact tree。 |
+| `Player` | progress slider、Prev/Next、Next Role、marker rail、当前 frame caption。 |
+| `FlowBoard` | 固定工业流程图，按 role bucket 聚合 flow cards，并高亮当前 frame role。 |
+| `Inspector` | 展示当前 page/node/card/artifact/frame 的核心摘要；详细 payload 交给 modal。 |
+| `JsonTree` | 所有 raw payload 的折叠树展示。 |
+| `MetricGrid` | overview、page 和 Inspector 指标。 |
+
+文件树分组语义：
+
+- `Train Tasks`：`page_id` 以 `train` 开头的 task 页面。
+- `Replay Tasks`：`page_id` 以 `replay` 开头的 replay 页面。
+- `Rounds`：loop/round 页面。
+- `Global Pipeline Pages`：实验级 algorithm/refine/test 页面；旧 UI 中的 “Algorithm Roles” 命名不再使用。
+- `Method Cases`：method-validation 页面。
+- `Artifacts`：skill artifact、bundle、lineage 和版本数据。
+
+播放器状态模型：
+
+- `frameIndex` 是唯一播放位置。
+- `frames[].role_group/action_kind` 用于 Next Role 和流程图高亮。
+- `frames[].delta`、`consumed_slots`、`produced_slots`、`condition_result` 在 Inspector 中展示。
+- `initial_elements` 和 `element_deltas` 保留给后续细粒度节点状态；当前 V2 主图先按 role-level 聚合。
+
+详细 role/artifact 展示语义：
+
+- Inspector 默认只展示 1-2 个摘要块和折叠的 input/output。
+- 完整 card、artifact、frame、detail JSON 都进入 payload modal。
+- 缺失 role audit 或 legacy per-case IO 时显示 API 提供的 unavailable reason，不伪造输入输出。
 
 ---
 
@@ -183,7 +249,7 @@ flowchart LR
 
 ### 3.4 Test Case Run 记录真实输入输出
 
-源码：`SkillTestCaseRun` 和 `bfcl_llm_maintenance.py::_case_run_payload`
+源码：`SkillTestCaseRun` 和 `academic/benchmarks/bfcl/maintenance/adapter.py::_case_run_payload`
 
 每个 case 会保存：
 
@@ -259,6 +325,298 @@ flowchart TD
 - candidate rows：score、rank、predicate_passed、filter_reason、metadata。
 - selected rows：name、rank、score、rerank。
 
+---
+
+## 4.3 Overlap-Segment Refactor
+
+源码：
+
+- `academic/skill_repository/refactor_overlap.py`
+- `academic/benchmarks/bfcl/maintenance/adapter.py::run_bfcl_overlap_refactor_llm`
+- `academic/benchmarks/bfcl/maintenance/adapter.py::bfcl_trace_segments_from_details`
+- `academic/benchmarks/bfcl/maintenance/adapter.py::build_bfcl_overlap_timeline`
+- `academic/webapp/static/refactor_graph.js`
+- `academic/webapp/templates/refactor_graph.html`
+
+这部分实现新的 refactor 语义：skill 不是 trace 摘要，而是能解释多个 trace segment 的 latent reusable program/rule/workflow hypothesis。系统先在 skill 不存在的情况下，从 execution segments 中发现潜在重叠，再让 LLM 精筛并抽 shared skill。
+
+```mermaid
+flowchart LR
+    Trace[BFCL train traces] --> Segment[trace slicing into turns]
+    Segment --> Ngram[token/error token n-grams]
+    Ngram --> Graph[BM25/TF-IDF overlap graph]
+    Graph --> Clique[strict clique candidates]
+    Clique --> LLM[LLM refactorer]
+    LLM --> Shared[shared skill proposal]
+    LLM --> Rewrites[affected skill updates]
+    Shared --> Bundle[build bundle for shared skill]
+    Rewrites --> OldTests[reuse old bundles for rewritten skills]
+    Bundle --> Gate[run with/without bundle tests]
+    OldTests --> Gate
+    Gate -- pass --> Commit[atomic store commit]
+    Gate -- fail --> Reject[reject whole refactor]
+```
+
+### 4.3.0 Implementation API Map
+
+#### `TraceSegment`
+
+定义在 `refactor_overlap.py`。它是“skill 还不存在时”的最小执行实例候选。
+
+| 字段 | 含义 |
+| --- | --- |
+| `segment_id` | 全局唯一 segment id，例如 `multi_turn_base_111:turn:2`。 |
+| `task_id` | 来源 BFCL task id。 |
+| `turn_index` | multi-turn task 中的 turn 序号；task-level segment 可为 `None`。 |
+| `text` | 用于 overlap 检索的局部执行文本，包含 user messages、tool calls、tool results、expected calls。 |
+| `error_text` | 与该 turn 对齐的 call errors 文本。error n-gram 会更高权重。 |
+| `kind` | segment 类型，目前 BFCL 使用 `bfcl_turn` / `bfcl_task`。 |
+| `metadata` | 轻量结构化摘要，例如 `official_valid`、`call_f1`、`tool_names`、`expected`。 |
+| `raw` | 完整原始 trace/task/metrics，用于 UI 详情和 debug，不直接塞进 LLM refactor prompt。 |
+
+#### `OverlapEdge`
+
+表示两个 segment 可能是同一个 latent skill 的不同运行实例。
+
+| 字段 | 含义 |
+| --- | --- |
+| `source` / `target` | 两端 `segment_id`。 |
+| `weight` | 总 overlap 权重，`text_score + error_weight * error_score`。 |
+| `text_score` | segment `text` token n-gram 稀疏相似度。 |
+| `error_score` | `error_text` token n-gram 稀疏相似度。 |
+| `shared_ngrams` | 用于解释该边的共享 text n-grams。 |
+| `shared_error_ngrams` | 用于解释该边的共享 error n-grams。 |
+| `source_task_id` / `target_task_id` | 端点所属 task，用于过滤同 task 假 clique。 |
+
+#### `OverlapGraph`
+
+| 字段 | 含义 |
+| --- | --- |
+| `segments` | 当前 prefix 或全量 train traces 中的 segment 列表。 |
+| `edges` | 通过 n-gram 检索得到的候选 overlap 边。 |
+| `params` | 构图参数和创建时间，便于复现实验。 |
+
+#### `RefactorClique`
+
+小规模候选组，送给 LLM 精筛。第一版使用 strict clique，避免把弱连接的大团直接交给 LLM。
+
+| 字段 | 含义 |
+| --- | --- |
+| `clique_id` | 候选组 id。 |
+| `segment_ids` | 候选 segment 集合。 |
+| `edge_weight_sum` | clique 内所有边权重和，用于排序。 |
+| `edges` | clique 内边证据，LLM 可看到 shared n-grams 和 weight。 |
+
+#### Core Functions
+
+| 函数 | 作用 |
+| --- | --- |
+| `tokenize(text)` | 只保留 word/number token，并过滤 JSON 字段名、常见虚词等 stop tokens。 |
+| `token_ngrams(text, n_values=(2,3))` | 生成 token-level 2/3-gram。 |
+| `discover_overlap_graph(segments, ...)` | 用稀疏 BM25/TF-IDF-style pair scoring 建 graph。 |
+| `_sparse_pair_scores(docs, max_bucket_size)` | 倒排索引 + IDF + cosine-like normalization，避免显式全量 N² 文本比较。 |
+| `find_refactor_cliques(graph, ...)` | 从高权重边出发贪心扩展 strict clique，默认要求至少两个不同 task。 |
+| `llm_refactor_clique(...)` | 调 LLM 判断 clique 是否是同一个 latent skill 的 execution instances。 |
+| `artifact_from_refactor_payload(payload, group_id)` | 把 LLM 的 `shared_skill` JSON 转成 `SkillArtifact`。 |
+| `apply_affected_skill_updates(...)` | 根据 LLM 输出 rewrite/merge/delete old skills，并维护 dependency pins/lineage。 |
+
+### 4.3.1 Segment Overlap Graph
+
+当前第一版只使用两个可执行、低成本 channel：
+
+- `segment token n-gram`：对 user messages、tool calls、tool results、expected calls 做 token-level 2/3-gram。
+- `error token n-gram`：对 call errors 做 token-level 2/3-gram，并给更高权重。
+
+暂时删除了不稳定的 argument-role、state-transition、constraint hand-written channels。后续如果 token n-gram 效果不够，再加入 embedding 或 LLM-extracted signature。
+
+关键参数：
+
+| 参数 | 含义 |
+| --- | --- |
+| `top_k_per_segment` | 每个 segment 最多保留多少条候选边，控制复杂度。 |
+| `min_weight` | overlap 边最低权重。 |
+| `max_bucket_size` | 太泛的 n-gram bucket 会被丢弃，避免 `search` 这类泛词连满图。 |
+| `error_weight` | error n-gram 的加权系数。 |
+
+### 4.3.2 LLM Refactor Prompt
+
+LLM refactorer 的输入不是已有 skill pair，而是 clique 中的多个 trace segments、overlap edge evidence、当前 store 摘要。Prompt 明确要求判断：
+
+- 这些 segments 是否是同一个 latent skill 的不同 execution instances；
+- shared invariant 是什么；
+- 哪些是参数化差异；
+- 哪些旧 skill 需要 keep/rewrite/merge/delete；
+- refactor 必须保持旧 skill 功能语义不变。
+
+Few-shot 覆盖三类：
+
+- 显然 workflow overlap：authenticate before protected communication action。
+- 隐式语义 overlap：explicit ids present -> direct compare, skip discovery。
+- superficial overlap reject：只共享 search 词但没有同一局部 contract。
+
+实现上有一个重要压缩步骤：`_segment_for_llm()` 只把 `segment_id/task_id/turn_index/kind/text/error_text/metadata` 送给 LLM，并用 `REFACTOR_SEGMENT_TEXT_LIMIT`、`REFACTOR_SEGMENT_ERROR_LIMIT` 控制长度。完整 `raw` 保留在结果和 UI 中，但不进入 refactor prompt，避免 prompt 被 BFCL fixture 和长 tool result 淹没。
+
+LLM 输出必须是严格 JSON：
+
+| 字段 | 含义 |
+| --- | --- |
+| `decision.action` | `extract_shared` 或 `reject`。 |
+| `decision.reason` | 为什么抽取或拒绝。 |
+| `decision.confidence` | LLM 自评置信度。 |
+| `shared_skill` | 若抽取，给出 name/kind/description/body/interface/metadata。 |
+| `affected_skill_updates` | 对已有 skill 的 keep/rewrite/merge/delete 决策。 |
+| `instance_mappings` | 每个 segment 是否是 shared skill 的运行实例，以及 invariant/parameter/residual。 |
+
+### 4.3.3 Test-Gated Atomic Commit And Repair
+
+若 LLM 抽出 shared skill：
+
+1. 在 candidate store 中新增 shared skill。
+2. 对 affected old skills 应用 rewrite/merge/delete，但不直接写入主 store。
+3. 对 shared skill 调 bundle builder 生成新 bundle。
+4. 对 shared skill 运行 bundle tests。
+5. 对 rewritten old skills 重用原 bundle 并重跑 bundle tests。
+6. 任一测试失败，当前 round 不覆盖主 store；失败的 `decision/shared_skill/affected_skill_updates/test_results` 会作为 `repair_context` 再喂给 refactorer。
+7. 最多重试 `BFCL_REFACTOR_MAX_REPAIR_ROUNDS` 轮，默认 1 轮 repair。
+8. 全部通过后，原子提交 shared skill 和 affected updates，并记录 `refactor_group_id`、dependencies、lineage。
+9. 仍不过则整组 refactor rejected，主 store 不变。
+
+实现位置：
+
+- `run_bfcl_overlap_refactor_llm(..., max_repair_rounds=...)`
+- `llm_refactor_clique(..., repair_context=...)`
+
+注意：旧 skill 的 bundle 在 refactor 后理论上不重写，因为 refactor 的目标是保持旧 skill 功能语义不变。只有新 shared skill 需要由 bundle builder 生成新 bundle；旧 skill 若 rewrite 后过不了旧 bundle，就说明 refactor 改坏了语义，应修 refactor 或 reject。
+
+```mermaid
+flowchart TD
+    Candidate["LLM proposes shared skill + old skill updates"] --> CandidateStore["Apply to candidate store only"]
+    CandidateStore --> NewBundle["Build bundle for new shared skill"]
+    CandidateStore --> OldBundle["Reuse old bundles for rewritten old skills"]
+    NewBundle --> Gate["Run unit utility tests"]
+    OldBundle --> Gate
+    Gate --> Decision{"All tests pass?"}
+    Decision -- yes --> Commit["Atomic commit to main store"]
+    Decision -- no and rounds left --> Repair["Feed failed test results as repair_context"]
+    Repair --> Candidate
+    Decision -- no and no rounds left --> Reject["Reject whole refactor; main store unchanged"]
+```
+
+commit/reject 的关键实现语义：
+
+- 所有变更先进入 `candidate_store = ArtifactStore(store.all(), test_results=store.test_results())`。
+- `candidate_store.add(shared)` 和 `candidate_store.add(update)` 不影响主 store。
+- shared skill 先调用 `build_bfcl_skill_bundles_llm(..., artifact_names=[shared.name])` 生成 bundle。
+- `test_targets = [shared.name] + rewritten_old_skill_names`。
+- 对每个 target 调 `execute_bfcl_bundle_tests(...)`，每个 case 跑 `without_skill` 与 `with_skill`。
+- `failed_results` 非空时，本轮 attempt 写入 `rejections`，主 store 不变。
+- 如果还有 repair round，则构造 `repair_context`，包含 failed attempt 和 failed/all test results。
+- 只有全部测试通过时，才把 shared、updates、test_results 写入主 store。
+
+### 4.3.4 Logs And UI
+
+新增 debug events：
+
+| event_type | 含义 |
+| --- | --- |
+| `refactor_overlap_start` | refactor overlap 阶段开始，记录 store_before。 |
+| `overlap_graph_built` | segment graph、edge weight、clique 候选。 |
+| `refactor_llm_done` | LLM refactor 的真实输入输出。 |
+| `refactor_commit_rejected` | 测试门控失败或 LLM reject。 |
+| `refactor_commit_done` | 原子提交成功后的 store 状态。 |
+| `refactor_overlap_done` | 阶段汇总。 |
+
+`overlap_refactor.timeline` 是面向 UI 的 prefix graph 序列。每一帧对应“又完成一道 train task 后”的状态：
+
+| 字段 | 含义 |
+| --- | --- |
+| `frame_index` | prefix 帧序号。 |
+| `task_id` | 刚加入证据的 task。 |
+| `n_tasks_seen` | 到该帧为止累计看过多少 train task。 |
+| `segments` | 当前 prefix 中切出的所有 trace segments。 |
+| `overlap_graph` | 当前 prefix 的 segment graph 和边权重。 |
+| `cliques` | 当前 prefix 的候选 clique。 |
+| `store_state` | 当时 skill store 摘要，用于检查 refactor 前后的库状态。 |
+
+新增页面：
+
+- `/refactor-graph`
+- `/api/refactor-graph/experiments`
+- `/api/refactor-graph?id=<experiment_id>`
+
+该页面以 graph 为主视图，时间轴只播放 `overlap_refactor.timeline` 的 evolve frames；refactor debug events 作为右侧 inspector 的 event detail 展示，不混入进度条。
+
+视图模式：
+
+- `macro`：节点是当前 skill library 中的 skill；edge 表示两个 skill 之间存在的最大 segment similarity，颜色和 label 都来自该最大权重。
+- `micro`：节点是 segment，edge 表示 segment similarity；segment 会按所属 skill/group 包装显示。
+
+segment 到 skill 的归属优先使用 `source_segments` / `source_task_ids`，缺失时 fallback 到 `task:<task_id>` group。右侧 inspector 显示事件名、old/new/updated skill、内容 diff、LLM refactor input/output，以及 `decision.reason`。
+
+默认主实验不启用该阶段。启用方式：
+
+```bash
+BFCL_ENABLE_OVERLAP_REFACTOR=1 \
+BFCL_REFACTOR_MAX_CLIQUES=1 \
+BFCL_REFACTOR_MAX_REPAIR_ROUNDS=1 \
+python -m academic.benchmarks.core.runner ...
+```
+
+常用环境变量：
+
+| 变量 | 默认 | 含义 |
+| --- | --- | --- |
+| `BFCL_ENABLE_OVERLAP_REFACTOR` | off | 设为 `1/true/yes` 才运行 overlap refactor。 |
+| `BFCL_REFACTOR_MAX_CLIQUES` | `3` | 最多送给 LLM 的 clique 数。 |
+| `BFCL_REFACTOR_MAX_REPAIR_ROUNDS` | `1` | gate 失败后最多 repair 轮数。 |
+| `REFACTOR_SEGMENT_TEXT_LIMIT` | `1800` | 每个 segment 送入 refactorer 的 text 最大字符数。 |
+| `REFACTOR_SEGMENT_ERROR_LIMIT` | `900` | 每个 segment 送入 refactorer 的 error text 最大字符数。 |
+| `MAINTENANCE_ANTHROPIC_TIMEOUT` | `300` | Anthropic-compatible maintenance role HTTP timeout。 |
+
+### 4.3.5 Verified 5-Case Debug Run
+
+最近一次真实链路验证：
+
+```text
+academic/results/bfcl_real_glm_maintenance_2026-05-12/overlap_refactor_debug_5case/result.json
+```
+
+设置：
+
+- 复用 5 个 BFCL train details，避免重复跑 executor。
+- `BFCL_ENABLE_OVERLAP_REFACTOR=1`
+- `BFCL_REFACTOR_MAX_CLIQUES=1`
+- `BFCL_REFACTOR_MAX_REPAIR_ROUNDS=1`
+- `BFCL_EVOLVE_SKIP_REPLAY=1`
+- `BFCL_EVOLVE_SKIP_FINAL_TEST=1`
+- `llm_config=local_proxy_glm`
+- `execution_backend=local_mock`
+
+结果：
+
+| 指标 | 值 |
+| --- | --- |
+| `segments` | 19 |
+| `timeline_frames` | 5 |
+| `edges` | 5 |
+| `cliques` | 1 |
+| `attempts` | 2 |
+| `commits` | 0 |
+| `rejections` | 2 |
+
+关键行为：
+
+1. LLM refactor 第 0 轮从 message-related clique 中抽出 `explicit_sender_auth_before_send`。
+2. shared skill 的 bundle gate 失败，因此没有提交到主 store。
+3. 系统把失败测试结果作为 `repair_context` 喂给第 1 轮 refactorer。
+4. 第 1 轮 refactorer 判断这个 overlap 实际上是 `message_login` extra-call 伪模式，选择 `reject`。
+5. 主 store 没有提交该 refactor，符合 correctness-preserving gate 语义。
+
+限制：
+
+- 本机当前没有可用官方 Anthropic key，因此这次是真实 LLM 调用，但经本地 Anthropic-compatible proxy 路由到 GLM 上游。
+- 运行耗时较长，主要瓶颈是 maintenance role LLM 响应和 bundle unit tests。
+
 ### 4.3 Dependency/Stale Flow
 
 ```mermaid
@@ -312,7 +670,7 @@ flowchart TD
 源码：
 
 - `llm_maintenance.py::extract_skill_artifacts_from_results_llm`
-- `bfcl_llm_maintenance.py::extract_bfcl_skill_artifacts_llm`
+- `academic/benchmarks/bfcl/maintenance/adapter.py::extract_bfcl_skill_artifacts_llm`
 
 输入构造：
 
@@ -343,7 +701,7 @@ BFCL wrapper 做了三件事：
 源码：
 
 - `llm_maintenance.py::distill_skill_bundle_llm`
-- `bfcl_llm_maintenance.py::build_bfcl_skill_bundles_llm`
+- `academic/benchmarks/bfcl/maintenance/adapter.py::build_bfcl_skill_bundles_llm`
 
 ```mermaid
 flowchart TD
@@ -378,7 +736,7 @@ flowchart TD
 
 - `llm_maintenance.py::refine_skill_artifact_llm`
 - `llm_maintenance.py::apply_refine_payload`
-- `bfcl_llm_maintenance.py::refine_bfcl_skill_store_llm`
+- `academic/benchmarks/bfcl/maintenance/adapter.py::refine_bfcl_skill_store_llm`
 
 ```mermaid
 flowchart TD
@@ -410,7 +768,7 @@ flowchart TD
 
 ## 6. BFCL Evolve Orchestration
 
-源码：`academic/benchmarks/run.py::_run_bfcl_evolve`
+源码：`academic/benchmarks/core/runner.py::_run_bfcl_evolve`
 
 ### 6.1 Full Control Flow
 
@@ -500,7 +858,7 @@ flowchart TD
 
 ### 7.2 Bundle Case to Runnable Task
 
-源码：`bfcl_llm_maintenance.py::_task_from_case`
+源码：`academic/benchmarks/bfcl/maintenance/adapter.py::_task_from_case`
 
 ```mermaid
 flowchart LR
@@ -790,8 +1148,8 @@ python /tmp/run_local_claude_bfcl.py ...
 ```bash
 python -m py_compile \
   academic/skill_repository/*.py \
-  academic/benchmarks/bfcl_llm_maintenance.py \
-  academic/benchmarks/run.py \
+  academic/benchmarks/bfcl/maintenance/adapter.py \
+  academic/benchmarks/core/runner.py \
   academic/webapp/app.py
 
 python scripts/maintenance_player_mock_integration.py
@@ -881,3 +1239,136 @@ flowchart LR
 | `openSequentialPayloadModal` | 打开 Input / Output / Debug Raw 的 JSON tree |
 
 这个边界很重要：状态机事件、播放器 frame、debug delta 仍可作为底层基础设施存在，但默认 UI 不把它们作为用户主要阅读对象。用户首先看到的是算法每一步的输入、输出和产物。
+
+---
+
+## 9. 最新 Debug Player 与日志语义
+
+当前 `/maintenance` 的主视图是一个状态播放器。它不伪造算法步骤，而是消费 `result.json.debug_events` 以及每个 BFCL run trace 内的真实 executor events。
+
+### 9.1 页面粒度
+
+```mermaid
+flowchart LR
+    Exp[Experiment] --> T0[train_task_0]
+    Exp --> T1[train_task_1]
+    Exp --> Tn[train_task_n]
+    Exp --> Alg[algorithm / maintenance]
+    Exp --> Ref[refine]
+
+    T0 --> P0[Local timeline: this task only]
+    T1 --> P1[Local timeline: this task only]
+    Alg --> PM[Local timeline: maintenance roles only]
+```
+
+每个 `train_task_i` 有独立进度条，只包含该 task 的 `retrieval`、`prompt_injection`、`executor_step`、`tool_call`、`tool_result`、`turn_end`、`executor_end` 等事件。维护页只展示 train 完成后的 `extractor -> bundle_builder -> unit_tester -> refiner -> skill_store` 事件。这样不会把所有 task 混入同一个进度条。
+
+### 9.2 replay 与 train 的区别
+
+- `train`：第一次按任务顺序运行 `1,2,...,n`，从当前 store 检索 skill 并执行任务。
+- `replay`：在 train 之后、skill 已抽取/更新后，对训练任务再跑一次，检查多 skill 共存的 integration 行为。
+- 当前 debug run 设置 `BFCL_EVOLVE_SKIP_REPLAY=1`，所以 replay 被跳过。
+- 若开启 replay，顺序是 `1,2,...,n` train 完成后，再 `1,2,...,n` replay；不是 `1,1,...,2,2,...`。
+
+### 9.3 Debug Event 到 UI Frame
+
+```mermaid
+flowchart TD
+    Result[result.json] --> Events[debug_events]
+    Trace[run.trace.debug_events] --> Rehydrate[load-train-details event rehydration]
+    Rehydrate --> Events
+    Events --> Adapter[maintenance_state_machine.py]
+    Adapter --> Frame[PlayerFrame]
+    Frame --> Slots[fixed slots]
+    Slots --> UI[maintenance.js factory board]
+```
+
+当使用 `--load-train-details` 复用历史 train 结果时，`run.py::_detail_debug_events(...)` 会把每个 run trace 内的 executor/retriever 事件回灌到顶层 `debug_events`。否则播放器只能看到后续维护阶段，看不到 train task 的 executor 细节。
+
+### 9.4 固定槽位
+
+播放器使用固定槽位，不随着事件不断创建新 role：
+
+| 槽位 | 含义 | 是否持久 |
+| --- | --- | --- |
+| `trace` | executor 产生的 conversation/tool trace | transient |
+| `role:retriever` | 检索器本帧输入输出 | transient |
+| `retrieval` | 检索产物、候选分数、selected skills | transient |
+| `role:executor` | 模型消息、tool calls、tool results | transient |
+| `role:extractor` | 从 train traces 生成 skill 的 LLM role | transient |
+| `skill` | 新增/更新的 skill artifact | transient |
+| `role:bundle_builder` | 从 skill + trace 构建 bundle 的 LLM role | transient |
+| `bundle` | positive/negative/integration cases | transient |
+| `role:unit_tester` | with/without 单 skill 测试角色 | transient |
+| `test_result` | unit utility report 和 case runs | transient |
+| `role:refiner` | 基于 tests 修 skill 的 LLM role | transient |
+| `skill_store` | repository 当前状态 | persistent |
+
+只有 `skill_store` 是长期持久对象；拖动进度条时它会展示当时帧的 store 状态，包括新增 skill、版本变化、bundle case diff、refine diff。
+
+### 9.5 关键日志字段
+
+每个 event 的通用形状：
+
+```json
+{
+  "event_id": "debug_event_000196",
+  "event_type": "bundle_builder_done",
+  "phase": "build_initial_bundles",
+  "task_id": null,
+  "turn_index": null,
+  "input": {},
+  "output": {},
+  "metrics": {}
+}
+```
+
+重要事件：
+
+| event_type | role | input | output |
+| --- | --- | --- | --- |
+| `retrieval` | retriever | query、user_messages、error retry context | store_summary、所有 candidates、selected |
+| `prompt_injection` | executor | user_messages、turn_prompt_skills | system、skill_prompt、turn_instruction |
+| `executor_step` | executor | system、messages、available_tool_count | assistant_message、tool_calls |
+| `tool_call` | executor | raw/canonical tool name、arguments | none |
+| `tool_result` | executor | none | tool result 或 error |
+| `extractor_done` | extractor | train result count、existing skills、tool names | artifacts、new_skill_names、store_after |
+| `bundle_builder_done` | bundle builder | targets、source_task_ids | bundles、bundle_diffs、store_after |
+| `unit_case_done` | unit tester | case、task、with/without input | with/without output、expected、tool calls、trace summary |
+| `unit_test_done` | unit tester | skill、bundle | SkillTestResult |
+| `refiner_done` | refiner | selected targets、test result summary | decisions、artifact_diffs、store_after |
+| `store_update` | skill store | action | store_after |
+
+### 9.6 前端展示规则
+
+- 图形播放器是主体，左侧 `Exp / Task Navigator` 合并所有实验页并支持拖拽宽度。
+- 每个 task/round 有独立局部进度条，不使用全实验共享进度条。
+- 点击 `Executor` 卡片可直接看到当前 task 的多 turn messages、tool calls、retrieval shortcut。
+- tool call arguments 默认显示摘要，并提供可展开 JSON tree。
+- skill store overlay 不跳转新 URL，而是在主页面上方弹出；拖动进度条时 overlay 跟随当前帧更新。
+- raw JSON 默认折叠，核心输入输出优先以文本、表格、case card、diff card 展示。
+
+### 9.7 当前 5-case Debug Run
+
+最新 debug run 位于：
+
+`academic/results/bfcl_real_glm_maintenance_2026-05-11/05_debug_state_player_claude_5case`
+
+运行设置：
+
+- `n_train=5`，`n_test=0`
+- `BFCL_EVOLVE_SKIP_REPLAY=1`
+- `BFCL_EVOLVE_SKIP_FINAL_TEST=1`
+- 本地 Anthropic-compatible proxy：`http://127.0.0.1:4000`
+- model：`claude-sonnet-4-5`
+- train executor trace 复用 `partial_train.json`，维护阶段和 unit tests 真实调用 Claude。
+
+结果摘要：
+
+- 总耗时：约 `141s`
+- `debug_event_count=288`
+- player frames：`289`
+- role frame counts：executor `198`，retriever `67`，extractor `1`，bundle_builder `2`，unit_tester `8`，refiner `2`，skill_store `3`
+- 生成 skill：`travel_api_authenticate_parameter_contract`、`message_api_login_before_operations`
+- train official valid rate：`0.6`
+- integration replay 和 final test 在本 debug run 中按设置跳过。

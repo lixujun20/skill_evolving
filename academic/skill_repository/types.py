@@ -188,13 +188,14 @@ class SkillArtifact:
     description: str  # Short summary used in retrieval, UI lists, and prompts.
     body: str  # Full actionable skill content shown to the model or returned by skill tools.
     metadata: Dict[str, Any] = field(default_factory=dict)  # Benchmark-specific retrieval hints, provenance, disable flags, and auxiliary annotations.
+    tags: List[str] = field(default_factory=list)  # Controlled retrieval labels, e.g. domain:TravelAPI, tool:create_ticket, intent:reuse_id.
     version: int = 1  # Monotonic artifact version managed by ArtifactStore.
     usage_count: int = 0  # Optional runtime usage counter for reporting and pruning decisions.
     success_count: int = 0  # Optional count of successful uses for later utility heuristics.
     interface: SkillInterface = field(default_factory=SkillInterface)  # Explicit contract separate from free-form body text.
     bundle: SkillBundle = field(default_factory=SkillBundle)  # Long-lived maintenance test asset bound to this skill version family.
     evidence: SkillEvidence = field(default_factory=SkillEvidence)  # Accumulated support and failure evidence behind the skill.
-    status: str = "active"  # active / stale / disabled / rejected / archived, etc.
+    status: str = "active"  # active / pending / stale / disabled / rejected / archived, etc.
     lineage: SkillLineage = field(default_factory=SkillLineage)  # Version ancestry and migration metadata.
     dependency_pins: List[DependencyPin] = field(default_factory=list)  # Explicit version decisions for upstream dependencies.
     dependencies: List[str] = field(default_factory=list)  # Names of other skills this artifact conceptually relies on.
@@ -215,7 +216,10 @@ class SkillArtifact:
         return bool(self.metadata.get("disabled")) or self.status == "disabled"
 
     def retrieval_enabled(self) -> bool:
-        return not self.is_disabled() and self.status not in {"rejected", "archived"}
+        # Pending skills are repository candidates, not execution-time aids.
+        # They can participate in maintenance/refactor, but must not pollute
+        # executor retrieval before posterior evidence promotes them.
+        return not self.is_disabled() and self.status not in {"pending", "rejected", "archived"}
 
     def version_kind(self) -> str:
         explicit = str(self.metadata.get("version_kind", "")).strip().lower()
@@ -245,6 +249,7 @@ class SkillArtifact:
         return (
             f"{self.name}\nkind: {self.kind}\n{self.description}\n"
             f"{self.body}\ninterface: {' '.join(bit for bit in interface_bits if bit)}\n"
+            f"tags: {' '.join(self.tags)}\n"
             f"metadata: {self.metadata}"
         )
 

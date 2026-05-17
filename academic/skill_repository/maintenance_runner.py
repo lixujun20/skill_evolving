@@ -361,18 +361,12 @@ def build_runner_trace_from_debug_events(
     """Build the same player trace through the runner-facing contract.
 
     For compatibility, this delegates snapshot construction to the existing
-    debug-event trace builder after validating that a generic runner can consume
-    the events.  This keeps the UI output stable while making the state-machine
-    contract executable and testable against real logs.
+    debug-event trace builder.  ``build_runner_from_debug_events`` remains
+    available for explicit contract tests; the web UI path must stay linear in
+    the number of persisted events and avoid replaying large snapshots twice.
     """
 
     events = [dict(event) for event in debug_events]
-    runner = build_runner_from_debug_events(
-        run_id=run_id,
-        debug_events=events,
-        initial_context={"title": title, "kind": kind},
-    )
-    runner.run(max_steps=len(events) + 2)
     return build_player_trace_from_debug_events(
         run_id=run_id,
         title=title,

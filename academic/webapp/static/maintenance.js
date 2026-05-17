@@ -342,6 +342,7 @@ function renderMaintenanceList() {
   const items = getFilteredMaintenanceExperiments();
   maintenanceState.filtered = items;
   const list = document.getElementById("maintenance-experiment-list");
+  const taskTree = document.getElementById("maintenance-task-tree");
   if (maintenanceState.loadError) {
     list.innerHTML = `
       <li class="skill-item">
@@ -349,6 +350,7 @@ function renderMaintenanceList() {
         <div class="skill-desc">${escapeHtml(maintenanceState.loadError)}</div>
       </li>
     `;
+    if (taskTree) taskTree.innerHTML = "";
     return;
   }
   if (!items.length) {
@@ -359,21 +361,68 @@ function renderMaintenanceList() {
         <div class="skill-desc">Try clearing the search box or refresh the page.</div>
       </li>
     `;
+    if (taskTree) taskTree.innerHTML = "";
     return;
   }
-  list.innerHTML = items.map((item) => {
+  list.innerHTML = renderExperimentFileTree(items);
+  if (items.length === 1 && !maintenanceState.currentId) {
+    selectMaintenanceExperiment(items[0].id);
+  }
+  if (taskTree) taskTree.innerHTML = "";
+}
+
+function renderExperimentFileTree(items) {
+  return items.map((item) => {
     const active = item.id === maintenanceState.currentId ? "active" : "";
+    const isLoaded = active && maintenanceState.currentDetail?.pages?.length;
+    const pageGroups = isLoaded ? groupPagesForNavigator(maintenanceState.currentDetail.pages) : [];
     return `
-      <li class="skill-item ${active}" onclick="selectMaintenanceExperiment('${escapeJs(item.id)}')">
-        <div class="skill-name">${escapeHtml(item.title)}</div>
-        <div class="skill-desc">${escapeHtml(item.folder_name)}</div>
-        <div class="timeline-pill-row maintenance-pill-row">
-          <span class="timeline-pill">${escapeHtml(item.kind.toUpperCase())}</span>
-          <span class="timeline-pill">${escapeHtml(item.role_log_exists ? `audit ${item.role_log_count}` : "no audit")}</span>
+      <li class="experiment-file-tree-node ${active}">
+        <button class="experiment-folder-row" onclick="selectMaintenanceExperiment('${escapeJs(item.id)}')">
+          <span class="file-tree-icon">${active ? "▾" : "▸"}</span>
+          <span class="file-tree-name">${escapeHtml(item.title)}</span>
+          <small>${escapeHtml(item.folder_name)}</small>
+        </button>
+        <div class="file-tree-meta">
+          <span>${escapeHtml(item.kind.toUpperCase())}</span>
+          <span>${escapeHtml(item.role_log_exists ? `audit ${item.role_log_count}` : "no audit")}</span>
         </div>
+        ${isLoaded ? renderExperimentPageFileTree(pageGroups) : ""}
       </li>
     `;
   }).join("");
+}
+
+function renderExperimentPageFileTree(groups) {
+  return `
+    <div class="experiment-page-tree">
+      ${groups.map((group) => `
+        <details class="file-tree-group" open>
+          <summary><span class="file-tree-icon">📁</span>${escapeHtml(group.label)} <small>${group.pages.length}</small></summary>
+          <div class="file-tree-children">
+            ${group.pages.map((page) => `
+              <button class="file-tree-page ${page.page_id === maintenanceState.currentPageId ? "active" : ""}" onclick="selectMaintenancePage('${escapeJs(page.page_id)}')">
+                <span class="file-tree-icon">${escapeHtml(fileIconForPage(page))}</span>
+                <span class="file-tree-name">${escapeHtml(page.label || page.page_id)}</span>
+                <small>${escapeHtml(compactLabel(page.title || "", 62))}</small>
+              </button>
+            `).join("")}
+          </div>
+        </details>
+      `).join("")}
+    </div>
+  `;
+}
+
+function fileIconForPage(page) {
+  const id = String(page?.page_id || "");
+  if (id.startsWith("train_task_")) return "▶";
+  if (id.startsWith("replay_task_")) return "↻";
+  if (id === "algorithm") return "◇";
+  if (id === "refine") return "✎";
+  if (id === "test") return "✓";
+  if (id === "train") return "Σ";
+  return "•";
 }
 
 async function selectMaintenanceExperiment(id) {
@@ -384,7 +433,76 @@ function selectMaintenancePage(pageId) {
   maintenanceState.selectedBoardEntityId = "";
   maintenanceState.selectedTurnIndex = -1;
   maintenanceState.selectedRoleTab = "summary";
+  syncPlayerFrameToPage(pageId);
   pushMaintenanceRoute({ view: "round", section: currentSection(), experimentId: maintenanceState.currentId, pageId });
+}
+
+function renderMaintenanceTaskTree() {
+  const detail = maintenanceState.currentDetail;
+  if (!detail?.pages?.length) {
+    return `
+      <div class="task-tree-title">Tasks</div>
+      <div class="task-tree-empty">Select an experiment to see rounds/tasks.</div>
+    `;
+  }
+  const groups = groupPagesForNavigator(detail.pages);
+  return `
+    <div class="task-tree-title">Selected Experiment / Tasks</div>
+    <div class="task-tree-exp">${escapeHtml((detail.experiment || {}).title || maintenanceState.currentId || "")}</div>
+    <div class="task-tree-groups">
+      ${groups.map((group) => `
+        <details class="task-tree-group" open>
+          <summary>${escapeHtml(group.label)} <span>${group.pages.length}</span></summary>
+          <div class="task-tree-items">
+            ${group.pages.map((page) => `
+              <button class="task-tree-item ${page.page_id === maintenanceState.currentPageId ? "active" : ""}" onclick="selectMaintenancePage('${escapeJs(page.page_id)}')">
+                <span>${escapeHtml(page.label || page.page_id)}</span>
+                <small>${escapeHtml(compactLabel(page.title || "", 56))}</small>
+              </button>
+            `).join("")}
+          </div>
+        </details>
+      `).join("")}
+    </div>
+  `;
+}
+
+function groupPagesForNavigator(pages) {
+  const groups = [
+    { key: "task", label: "Task Rounds", pages: [] },
+    { key: "train", label: "Train Tasks", pages: [] },
+    { key: "replay", label: "Replay Tasks", pages: [] },
+    { key: "algorithm", label: "Global Pipeline Pages", pages: [] },
+    { key: "other", label: "Other", pages: [] },
+  ];
+  const byKey = new Map(groups.map((group) => [group.key, group]));
+  (pages || []).forEach((page) => {
+    const id = String(page.page_id || "");
+    if (/^round_/.test(id)) byKey.get("task").pages.push(page);
+    else if (/^train_task_/.test(id)) byKey.get("train").pages.push(page);
+    else if (/^replay_task_/.test(id)) byKey.get("replay").pages.push(page);
+    else if (["algorithm", "refine", "train", "test"].includes(id)) byKey.get("algorithm").pages.push(page);
+    else byKey.get("other").pages.push(page);
+  });
+  return groups.filter((group) => group.pages.length);
+}
+
+function syncPlayerFrameToPage(pageId) {
+  const frames = maintenanceState.currentPlayer?.frames || [];
+  if (!frames.length) return;
+  const page = (maintenanceState.currentDetail?.pages || []).find((item) => item.page_id === pageId) || null;
+  const refs = playerFrameIndexesForPage(page);
+  let idx = refs[0] ?? -1;
+  if (idx >= 0) {
+    maintenanceState.currentFrameIndex = idx;
+    if (String(pageId || "").startsWith("train_task_") || String(pageId || "").startsWith("replay_task_")) {
+      maintenanceState.selectedPlayerElementId = "role:executor";
+    } else if (pageId === "algorithm") {
+      maintenanceState.selectedPlayerElementId = "role:extractor";
+    } else {
+      maintenanceState.selectedPlayerElementId = "";
+    }
+  }
 }
 
 function shiftMaintenancePage(offset) {
@@ -511,59 +629,8 @@ function renderPaneHeaders() {
 }
 
 function renderExperimentOverviewView(detail) {
-  const algorithmPage = (detail.pages || []).find((page) => page.page_id === "algorithm") || resolveCurrentPage(detail);
-  const algorithmFlow = buildSequentialRoleFlow(algorithmPage);
-  const actions = `
-    <button class="btn chip-btn" onclick="pushMaintenanceRoute({view:'metrics', experimentId:'${escapeJs(maintenanceState.currentId)}'})">Metrics</button>
-    <button class="btn chip-btn" onclick="pushMaintenanceRoute({view:'docs', experimentId:'${escapeJs(maintenanceState.currentId)}'})">Docs</button>
-  `;
-  const pageCards = (detail.pages || []).map((page, idx) => `
-    <button class="maintenance-round-thumb" onclick="pushMaintenanceRoute({view:'round', experimentId:'${escapeJs(maintenanceState.currentId)}', pageId:'${escapeJs(page.page_id)}'})">
-      <div class="maintenance-stage-kicker">Turn ${idx + 1}</div>
-      <div class="maintenance-round-thumb-title">${escapeHtml(page.title || page.page_id)}</div>
-      <div class="maintenance-round-thumb-metrics">
-        ${(page.summary_metrics || []).slice(0, 4).map((metric) => `<span class="timeline-pill">${escapeHtml(`${metric.label}: ${metric.value}`)}</span>`).join("")}
-      </div>
-    </button>
-  `).join("");
-  return renderViewChrome(
-    detail,
-    "Algorithm Monitor",
-    detail.experiment?.subtitle || "",
-    `
-      <div class="maintenance-hero-grid">${(detail.overview_metrics || []).slice(0, 8).map((card) => `
-        <div class="timeline-summary-card ${escapeHtml(card.tone || "neutral")}" title="${escapeHtml(metricHelp(card.label || ""))}">
-          <div class="timeline-summary-label">${escapeHtml(card.label || "")}</div>
-          <div class="timeline-summary-value">${escapeHtml(String(card.value ?? ""))}</div>
-        </div>
-      `).join("")}</div>
-      ${renderAuditAvailabilityNotice(detail)}
-      ${algorithmPage ? `
-        <div class="round-sequence-route algorithm-monitor-route">
-          <section class="algorithm-monitor-intro">
-            <div>
-              <div class="maintenance-stage-kicker">Monitor Scope</div>
-              <div class="maintenance-stage-title">${escapeHtml(algorithmPage.title || "Algorithm Monitor")}</div>
-              <div class="maintenance-stage-subtitle">这页按算法调用顺序展示：executor 运行、skill 产出、bundle 产出、integration replay、unit utility test、refiner 决策和最终 skill store。</div>
-            </div>
-            <button class="btn chip-btn" onclick="pushMaintenanceRoute({view:'round', experimentId:'${escapeJs(maintenanceState.currentId)}', pageId:'${escapeJs(algorithmPage.page_id)}'})">Open Page</button>
-          </section>
-          ${renderSequentialRoleFlow(algorithmPage, algorithmFlow, {
-            kicker: "Algorithm Flow",
-            title: "核心 role 与 artifact 输出",
-            subtitle: "正面只显示算法输入摘要、输出摘要和关键指标；完整输入/输出/debug raw 在弹窗里查看。"
-          })}
-          ${renderRoundTestResults(algorithmPage)}
-        </div>
-      ` : ""}
-      <div class="maintenance-turn-intro">
-        <div class="maintenance-stage-kicker">Pages</div>
-        <div class="maintenance-stage-subtitle">Algorithm 是默认监控页；Train/Refine/Test 保留原始阶段汇总，Debug 信息不在主视图展开。</div>
-      </div>
-      <div class="maintenance-round-gallery">${pageCards || "<div class='timeline-empty'>No turns recorded.</div>"}</div>
-    `,
-    actions
-  );
+  const firstTaskPage = firstChronologicalTaskPage(detail) || resolveCurrentPage(detail);
+  return renderEvolvePlayerView(detail, firstTaskPage);
 }
 
 function renderAuditAvailabilityNotice(detail) {
@@ -583,25 +650,256 @@ function renderAuditAvailabilityNotice(detail) {
 
 function renderRoundRouteView(detail, page) {
   if (!page) return renderViewChrome(detail, "Round", "No round selected.", "<div class='timeline-empty'>No page selected.</div>");
+  return renderEvolvePlayerView(detail, page);
+}
+
+function renderEvolvePlayerView(detail, page) {
+  const currentPage = page || firstChronologicalTaskPage(detail) || resolveCurrentPage(detail);
+  const roleFlow = buildSequentialRoleFlow(currentPage);
   const actions = `
-    <button class="btn chip-btn" onclick="pushMaintenanceRoute({view:'executor', experimentId:'${escapeJs(maintenanceState.currentId)}', pageId:'${escapeJs(page.page_id)}'})">Executor</button>
     <button class="btn chip-btn" onclick="pushMaintenanceRoute({view:'metrics', experimentId:'${escapeJs(maintenanceState.currentId)}'})">Metrics</button>
+    <button class="btn chip-btn" onclick="pushMaintenanceRoute({view:'docs', experimentId:'${escapeJs(maintenanceState.currentId)}'})">Docs</button>
   `;
-  const roleFlow = buildSequentialRoleFlow(page);
   return renderViewChrome(
     detail,
-    page.title || "Round",
-    `${roleFlow.length} executed role/test cards`,
+    currentPage?.title || "Evolve Player",
+    detail.experiment?.subtitle || "",
     `
-      <div class="round-sequence-route">
-        ${renderTurnSwitcher(detail, page)}
-        ${renderTaskProblemBar(page, { nodes: roleFlow })}
-        ${renderSequentialRoleFlow(page, roleFlow)}
-        ${renderRoundTestResults(page)}
+      <div class="evolve-player-shell">
+        <main class="evolve-player-main">
+          ${renderEvolveRoundHeader(detail, currentPage, roleFlow)}
+          ${renderGraphicPlayerMain()}
+          ${renderAuditAvailabilityNotice(detail)}
+          ${renderRoundRoleSummaryStrip(currentPage, roleFlow)}
+        </main>
       </div>
     `,
     actions
   );
+}
+
+function firstChronologicalTaskPage(detail) {
+  const pages = detail?.pages || [];
+  return pages.find((page) => String(page.page_id || "").startsWith("train_task_"))
+    || pages.find((page) => String(page.page_id || "").startsWith("replay_task_"))
+    || pages.find((page) => page.page_id === "algorithm")
+    || pages.find((page) => page.page_id === "refine")
+    || pages[0]
+    || null;
+}
+
+function renderEvolveRoundHeader(detail, page, roleFlow) {
+  const playable = playablePages(detail);
+  const currentIdx = Math.max(0, playable.findIndex((item) => item.page_id === page?.page_id));
+  const pageRefs = playerFrameIndexesForPage(page);
+  const localIdx = Math.max(0, pageRefs.findIndex((globalIdx) => globalIdx === Number(maintenanceState.currentFrameIndex || 0)));
+  const max = Math.max(1, playable.length);
+  const pageKind = pageKindForPlayerPage(page);
+  return `
+    <section class="evolve-round-header">
+      <div>
+        <div class="maintenance-stage-kicker">Task Round ${escapeHtml(String(currentIdx + 1))}/${escapeHtml(String(max))}</div>
+        <div class="maintenance-stage-title">${escapeHtml(page?.title || "Round")}</div>
+        <div class="maintenance-stage-subtitle">${escapeHtml(pageKind.description)}</div>
+      </div>
+      <div class="evolve-player-controls">
+        <button class="btn chip-btn" onclick="shiftPlayableRound(-1)">Prev Task</button>
+        <input class="evolve-player-range task-round-range" type="range" min="0" max="${escapeHtml(String(max - 1))}" value="${escapeHtml(String(currentIdx))}" oninput="jumpPlayableRound(Number(this.value))">
+        <button class="btn chip-btn" onclick="shiftPlayableRound(1)">Next Task</button>
+        <span class="timeline-pill">${escapeHtml(`${pageRefs.length || 0} local frames`)}</span>
+        <span class="timeline-pill">${escapeHtml(`frame ${localIdx + 1}/${Math.max(pageRefs.length, 1)}`)}</span>
+      </div>
+    </section>
+  `;
+}
+
+function playablePages(detail = maintenanceState.currentDetail) {
+  const pages = detail?.pages || [];
+  const taskPages = pages.filter((page) => String(page.page_id || "").startsWith("train_task_") || String(page.page_id || "").startsWith("replay_task_"));
+  const pipelinePages = pages.filter((page) => page.page_id === "algorithm");
+  const maintenancePages = pages.filter((page) => page.page_id === "refine");
+  return [...taskPages, ...pipelinePages, ...maintenancePages];
+}
+
+function pageKindForPlayerPage(page) {
+  const pageId = String(page?.page_id || "");
+  if (pageId.startsWith("train_task_")) {
+    return {
+      kind: "train",
+      description: "Train task: 只播放这道题这一轮的 retrieval / executor 真实事件。训练顺序是 1,2,...,n，然后进入维护阶段。",
+    };
+  }
+  if (pageId.startsWith("replay_task_")) {
+    return {
+      kind: "replay",
+      description: "Replay task: 使用 evolved skill store 对同一道题再跑一次，用于 integration 检查。本次 debug run 设置为 skip replay，所以可能为空。",
+    };
+  }
+  if (pageId === "algorithm" || pageId === "refine") {
+    return {
+      kind: "maintenance",
+      description: "Maintenance round: 播放整轮 train 完成后的 extractor -> bundle builder -> unit tester -> refiner -> skill store 更新事件。",
+    };
+  }
+  return { kind: "other", description: "Current page local timeline." };
+}
+
+function jumpPlayableRound(index) {
+  const pages = playablePages();
+  if (!pages.length) return;
+  const next = pages[Math.max(0, Math.min(index, pages.length - 1))];
+  selectMaintenancePage(next.page_id);
+}
+
+function shiftPlayableRound(delta) {
+  const pages = playablePages();
+  if (!pages.length) return;
+  const current = Math.max(0, pages.findIndex((page) => page.page_id === maintenanceState.currentPageId));
+  jumpPlayableRound(current + delta);
+}
+
+function renderCurrentRoundPlayerBody(page, roleFlow) {
+  if (roleFlow.length === 1 && roleFlow[0].type === "run") {
+    return renderTaskRoundRolePlayer(roleFlow[0]);
+  }
+  if (page?.page_id === "algorithm") {
+    return renderSequentialRoleFlow(page, roleFlow, {
+      kicker: "Maintenance Pipeline",
+      title: "所有维护 role",
+      subtitle: "这里按维护闭环展示 executor/replay、extractor、bundle builder、unit tester、refiner、skill store。卡片只保留核心输入输出，完整 JSON 默认折叠。"
+    });
+  }
+  return renderSequentialRoleFlow(page, roleFlow, {
+    kicker: "Evolve Player",
+    title: "核心对象流",
+    subtitle: "按当前 round 内真实发生顺序展示维护对象；点击卡片看详细输入输出。"
+  });
+}
+
+function renderGraphicPlayerMain() {
+  return `
+    <section class="graphic-player-main">
+      ${renderPlayerSection()}
+    </section>
+  `;
+}
+
+function renderRoundRoleSummaryStrip(page, roleFlow) {
+  return `
+    <section class="round-role-summary-strip">
+      <div class="maintenance-stage-head">
+        <div>
+          <div class="maintenance-stage-kicker">Current Round Cards</div>
+          <div class="maintenance-stage-title">选中图中节点查看详情</div>
+          <div class="maintenance-stage-subtitle">这里只保留当前 round 的 role 摘要；messages、retrieval、tool calls 放在图形播放器的 executor/retriever 节点卡片中。</div>
+        </div>
+      </div>
+      <div class="round-role-card-row">
+        ${roleFlow.map((card) => renderRoundRoleInlineCard(card)).join("") || "<span class='empty-inline'>No role cards for this round.</span>"}
+      </div>
+    </section>
+  `;
+}
+
+function renderRoundRoleInlineCard(card) {
+  const slotId = slotForSequentialRole(card);
+  const metrics = (card.metrics || []).slice(0, 3);
+  return `
+    <article class="round-role-inline-card ${escapeHtml(card.tone || "")}">
+      <button class="round-role-chip" onclick="selectPlayerSlotForRole('${escapeJs(slotId)}', '${escapeJs(card.id)}')">
+        <span>${escapeHtml(card.role || card.type)}</span>
+        <small>${escapeHtml(card.title || "")}</small>
+      </button>
+      <div class="round-role-card-summary">
+        <b>${escapeHtml(card.outputSummary || card.subtitle || "No output summary recorded.")}</b>
+        <small>${escapeHtml(card.inputSummary || "")}</small>
+      </div>
+      ${metrics.length ? `
+        <div class="round-role-card-metrics">
+          ${metrics.map(([label, value]) => `<span>${escapeHtml(label)}=${escapeHtml(String(value ?? "—"))}</span>`).join("")}
+        </div>
+      ` : ""}
+    </article>
+  `;
+}
+
+function slotForSequentialRole(card) {
+  const role = String(card.role || card.type || "").toLowerCase();
+  if (role.includes("retriever")) return "role:retriever";
+  if (role.includes("executor")) return "role:executor";
+  if (role.includes("extractor")) return "role:extractor";
+  if (role.includes("bundle")) return "role:bundle_builder";
+  if (role.includes("test")) return "role:unit_tester";
+  if (role.includes("refiner")) return "role:refiner";
+  if (role.includes("store")) return "skill_store";
+  return "trace";
+}
+
+function selectPlayerSlotForRole(slotId, cardId = "") {
+  maintenanceState.selectedPlayerElementId = slotId;
+  maintenanceState.selectedRoleCardId = cardId || "";
+  renderMaintenanceDetail(maintenanceState.currentDetail);
+}
+
+function renderTaskRoundRolePlayer(card) {
+  const run = card.raw?.run || card.run || {};
+  const detail = run.detail || {};
+  const turns = detail.turns || [];
+  return `
+    <section class="task-round-player">
+      ${objectDetailHeader("Task Round", card.title || "Executor", `task=${run.task_id || "—"}`)}
+      <div class="object-summary-grid">
+        ${renderReadableMetric("Official", run.official_valid ?? "—")}
+        ${renderReadableMetric("Call F1", run.call_f1 ?? "—")}
+        ${renderReadableMetric("Tokens", run.total_tokens ?? "—")}
+        ${renderReadableMetric("Turns", detail.summary?.n_turns ?? turns.length)}
+      </div>
+      <div class="round-role-timeline">
+        ${turns.map((turn, idx) => renderTurnRolePair(turn, idx)).join("") || "<div class='timeline-empty'>No executor turns recorded.</div>"}
+      </div>
+      <details class="collapsed-json-tree">
+        <summary>Executor Full Detail</summary>
+        ${renderExecutorPlayerDetail(card.raw || card)}
+      </details>
+    </section>
+  `;
+}
+
+function renderTurnRolePair(turn, idx) {
+  const retrieval = turn.retrieval || {};
+  const toolCalls = turn.tool_calls || [];
+  const retrieverModal = rememberModalPayload({
+    title: `Retriever turn ${turn.turn_index ?? idx}`,
+    subtitle: retrieval.query || "",
+    body: renderRetrieverDetail(retrieval),
+    payload: retrieval,
+  });
+  const executorModal = rememberModalPayload({
+    title: `Executor turn ${turn.turn_index ?? idx}`,
+    subtitle: extractTurnUserText(turn),
+    payload: turn,
+  });
+  return `
+    <div class="turn-role-pair">
+      <div class="turn-role-index">Turn ${escapeHtml(String(turn.turn_index ?? idx))}</div>
+      <article class="round-role-card retriever-role-card">
+        <div class="maintenance-stage-kicker">Retriever</div>
+        <div class="sequence-role-title">Skill Retrieval</div>
+        <div class="object-body-text">${escapeHtml(retrieval.query || extractTurnUserText(turn) || "No retrieval query recorded.")}</div>
+        ${renderRetrieverInline(retrieval)}
+        <button class="btn chip-btn" onclick="openRememberedModal('${escapeJs(retrieverModal)}')">Open Retriever</button>
+      </article>
+      <article class="round-role-card executor-role-card">
+        <div class="maintenance-stage-kicker">Executor</div>
+        <div class="sequence-role-title">Model / Tool Calls</div>
+        <div class="object-body-text">${escapeHtml(extractTurnUserText(turn))}</div>
+        <div class="tool-call-strip">
+          ${toolCalls.map((call, callIdx) => renderMiniToolCall(call, callIdx)).join("") || "<span class='empty-inline'>No tool calls</span>"}
+        </div>
+        <button class="btn chip-btn" onclick="openRememberedModal('${escapeJs(executorModal)}')">Open Executor Turn</button>
+      </article>
+    </div>
+  `;
 }
 
 function renderTurnSwitcher(detail, currentPage) {
@@ -641,6 +939,8 @@ function renderPlayerSection() {
       </section>
     `;
   }
+  const page = resolveCurrentPage(maintenanceState.currentDetail);
+  const frameRefs = playerFrameIndexesForPage(page);
   const idx = Math.max(0, Math.min(Number(maintenanceState.currentFrameIndex || 0), frames.length - 1));
   maintenanceState.currentFrameIndex = idx;
   const frame = resolvePlayerFrame(idx);
@@ -650,12 +950,15 @@ function renderPlayerSection() {
     : scene.defaultSelectedId;
   maintenanceState.selectedPlayerElementId = selectedId;
   const selected = scene.elementsById[selectedId] || null;
+  const localIdx = Math.max(0, frameRefs.findIndex((globalIdx) => globalIdx === idx));
+  const localMax = Math.max(1, frameRefs.length);
+  const localLabel = localFrameLabel(idx);
   return `
     <section class="player-shell">
       <div class="player-toolbar">
         <div>
           <div class="maintenance-stage-kicker">State Machine Player</div>
-          <div class="maintenance-stage-title">${escapeHtml(frame.name || "Frame")}</div>
+          <div class="maintenance-stage-title">${escapeHtml(localLabel)} · ${escapeHtml(frameTitleForDisplay(frame))}</div>
           <div class="maintenance-stage-subtitle">${escapeHtml(frame.summary || "")}</div>
         </div>
         <div class="player-controls">
@@ -663,12 +966,12 @@ function renderPlayerSection() {
           <button class="btn chip-btn" onclick="shiftPlayerMarker(1)">Next Mark</button>
           <button class="btn chip-btn" onclick="jumpNextNonExecutor()">Next Role</button>
           <button class="btn chip-btn" onclick="shiftPlayerFrame(-1)">Prev</button>
-          <span class="timeline-pill player-frame-count">${escapeHtml(`${idx + 1}/${frames.length}`)}</span>
+          <span class="timeline-pill player-frame-count">${escapeHtml(`${localIdx + 1}/${localMax}`)}</span>
           <button class="btn chip-btn" onclick="shiftPlayerFrame(1)">Next</button>
         </div>
       </div>
-      <input class="player-slider" data-player-slider type="range" min="0" max="${frames.length - 1}" value="${idx}" oninput="previewPlayerFrame(Number(this.value))" onchange="commitPlayerFrame(Number(this.value))">
-      ${renderPlayerMarkerRail(frames, idx)}
+      <input class="player-slider" data-player-slider type="range" min="0" max="${localMax - 1}" value="${localIdx}" oninput="previewLocalPlayerFrame(Number(this.value))" onchange="commitLocalPlayerFrame(Number(this.value))">
+      ${renderPlayerMarkerRailForRefs(frames, frameRefs, idx)}
       <div class="player-workspace">
         <div class="player-board" id="player-board-dynamic">
           ${renderPixelPlayerBoard(scene, frame)}
@@ -681,6 +984,68 @@ function renderPlayerSection() {
       <div id="player-overlay-root">${renderPlayerOverlayStack()}</div>
     </section>
   `;
+}
+
+function currentPageFrameRefs() {
+  return playerFrameIndexesForPage(resolveCurrentPage(maintenanceState.currentDetail));
+}
+
+function playerFrameIndexesForPage(page) {
+  const frames = maintenanceState.currentPlayer?.frames || [];
+  if (!frames.length) return [];
+  const pageId = String(page?.page_id || maintenanceState.currentPageId || "");
+  const taskId = taskIdForPlayerPage(page);
+  const phaseWanted = pageId.startsWith("train_task_")
+    ? "train"
+    : (pageId.startsWith("replay_task_") ? "integration_replay_before_refine" : "");
+  const pageKind = pageKindForPlayerPage(page).kind;
+  const refs = [];
+  frames.forEach((frame, idx) => {
+    const event = frame.delta?.event || {};
+    const eventTask = String(event.task_id || event.input?.task_id || event.output?.task_id || "");
+    const phase = String(event.phase || "");
+    const group = playerFrameGroup(frame);
+    if (taskId && eventTask === taskId && (!phaseWanted || phase === phaseWanted || !phase)) {
+      refs.push(idx);
+      return;
+    }
+    if (pageKind === "maintenance") {
+      const isMaintenanceEvent = ["extractor", "bundle_builder", "unit_tester", "refiner", "skill_store"].includes(group)
+        && (!eventTask || !["train", "integration_replay_before_refine", "post_refine_replay", "final_test_rollout"].includes(phase));
+      if (isMaintenanceEvent) refs.push(idx);
+    }
+    if (pageId.startsWith("replay_task_") && ["retriever", "executor"].includes(group) && phase === "integration_replay_before_refine" && (!taskId || eventTask === taskId)) {
+      refs.push(idx);
+    }
+  });
+  const unique = [...new Set(refs)].sort((a, b) => a - b);
+  return unique.length ? unique : [0];
+}
+
+function localFrameInfo(index = maintenanceState.currentFrameIndex || 0) {
+  const refs = currentPageFrameRefs();
+  const globalIndex = Number(index || 0);
+  const local = refs.findIndex((idx) => idx === globalIndex);
+  if (refs.length && local >= 0) {
+    return { localIndex: local, total: refs.length, globalIndex };
+  }
+  return { localIndex: globalIndex, total: maintenanceState.currentPlayer?.frames?.length || 0, globalIndex };
+}
+
+function localFrameLabel(index = maintenanceState.currentFrameIndex || 0) {
+  const info = localFrameInfo(index);
+  const total = Math.max(1, info.total || 1);
+  return `Step ${info.localIndex + 1}/${total}`;
+}
+
+function frameTitleForDisplay(frame) {
+  const event = frame?.delta?.event || {};
+  return String(event.event_type || frame?.action_kind || frame?.name || "frame").replace(/_/g, " ");
+}
+
+function taskIdForPlayerPage(page) {
+  const runCard = (page?.flow_cards || []).find((card) => card.type === "run");
+  return String(runCard?.run?.task_id || page?.task_id || "");
 }
 
 const PLAYER_SLOT_DEFS = [
@@ -932,18 +1297,18 @@ function renderFactoryEdges(scene) {
       <path class="${cls}" d="${route.path}" marker-end="url(#${markerId})">
         <title>${escapeHtml(edge.label || edge.id)}</title>
       </path>
-      <circle class="factory-port-dot ${edge.active ? "active" : ""}" cx="${route.start.x}" cy="${route.start.y}" r="${edge.active ? 4 : 2.5}"></circle>
-      <circle class="factory-port-dot ${edge.active ? "active" : ""}" cx="${route.end.x}" cy="${route.end.y}" r="${edge.active ? 4 : 2.5}"></circle>
+      <circle class="factory-port-dot ${edge.active ? "active" : ""}" cx="${route.start.x}" cy="${route.start.y}" r="${edge.active ? 3 : 2}"></circle>
+      <circle class="factory-port-dot ${edge.active ? "active" : ""}" cx="${route.end.x}" cy="${route.end.y}" r="${edge.active ? 3 : 2}"></circle>
       ${edge.active ? `<text class="factory-wire-label ${escapeHtml(edge.mode || "context")}" x="${route.label.x}" y="${route.label.y}">${escapeHtml(label)}</text>` : ""}
     `;
   }).join("");
   return `
     <svg class="factory-wire-layer" viewBox="0 0 1600 620" preserveAspectRatio="none" aria-hidden="true">
       <defs>
-        <marker id="wire-arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <marker id="wire-arrow-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="2.4" markerHeight="2.4" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" class="wire-arrow-muted"></path>
         </marker>
-        <marker id="wire-arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <marker id="wire-arrow-active" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3" markerHeight="3" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" class="wire-arrow-active"></path>
         </marker>
       </defs>
@@ -1129,6 +1494,12 @@ function summarizePlayerSlot(slot) {
 }
 
 function shiftPlayerFrame(offset) {
+  const refs = currentPageFrameRefs();
+  if (refs.length) {
+    const current = refs.findIndex((idx) => idx === Number(maintenanceState.currentFrameIndex || 0));
+    commitLocalPlayerFrame(Math.max(0, current) + offset);
+    return;
+  }
   commitPlayerFrame(Number(maintenanceState.currentFrameIndex || 0) + offset);
 }
 
@@ -1164,27 +1535,44 @@ function playerMarkerLabel(frame, index) {
 }
 
 function renderPlayerMarkerRail(frames, currentIndex) {
-  const markers = playerMarkerFrames(frames);
+  return renderPlayerMarkerRailForRefs(frames, frames.map((_, idx) => idx), currentIndex);
+}
+
+function renderPlayerMarkerRailForRefs(frames, refs, currentIndex) {
+  const refSet = new Set(refs || []);
+  const localFrames = (frames || []).filter((_, idx) => refSet.has(idx));
+  const markers = playerMarkerFrames(localFrames).map((marker) => ({
+    ...marker,
+    index: refs[marker.index],
+    localIndex: marker.index,
+  }));
   if (!markers.length) return "";
-  const max = Math.max(1, frames.length - 1);
+  const max = Math.max(1, (refs || []).length - 1);
+  const currentLocal = Math.max(0, (refs || []).findIndex((idx) => idx === currentIndex));
   return `
     <div class="player-marker-rail">
       ${markers.map((marker) => `
         <button
           class="player-marker marker-${escapeHtml(marker.group)} ${marker.index === currentIndex ? "active" : ""}"
-          style="left:${(marker.index / max) * 100}%"
+          style="left:${(marker.localIndex / max) * 100}%"
           title="${escapeHtml(marker.label)}"
           data-frame-index="${marker.index}"
           onclick="commitPlayerFrame(${marker.index})"
         ></button>
       `).join("")}
+      <span class="player-marker-current" style="left:${(currentLocal / max) * 100}%"></span>
     </div>
   `;
 }
 
 function shiftPlayerMarker(direction) {
   const frames = maintenanceState.currentPlayer?.frames || [];
-  const markers = playerMarkerFrames(frames);
+  const refs = currentPageFrameRefs();
+  const refSet = new Set(refs);
+  const markers = playerMarkerFrames(frames.filter((_, idx) => refSet.has(idx))).map((marker) => ({
+    ...marker,
+    index: refs[marker.index],
+  }));
   if (!markers.length) return;
   const current = Number(maintenanceState.currentFrameIndex || 0);
   const next = direction > 0
@@ -1196,7 +1584,11 @@ function shiftPlayerMarker(direction) {
 function jumpNextNonExecutor() {
   const frames = maintenanceState.currentPlayer?.frames || [];
   const current = Number(maintenanceState.currentFrameIndex || 0);
-  const next = playerMarkerFrames(frames).find((marker) => marker.index > current && marker.group !== "executor");
+  const refs = currentPageFrameRefs();
+  const refSet = new Set(refs);
+  const next = playerMarkerFrames(frames.filter((_, idx) => refSet.has(idx)))
+    .map((marker) => ({ ...marker, index: refs[marker.index] }))
+    .find((marker) => marker.index > current && marker.group !== "executor");
   if (next) commitPlayerFrame(next.index);
 }
 
@@ -1236,6 +1628,17 @@ function commitPlayerFrame(index) {
   previewPlayerFrame(index);
 }
 
+function previewLocalPlayerFrame(localIndex) {
+  const refs = currentPageFrameRefs();
+  if (!refs.length) return previewPlayerFrame(localIndex);
+  const clamped = Math.max(0, Math.min(Number(localIndex || 0), refs.length - 1));
+  previewPlayerFrame(refs[clamped]);
+}
+
+function commitLocalPlayerFrame(localIndex) {
+  previewLocalPlayerFrame(localIndex);
+}
+
 function refreshPlayerDynamicView() {
   const frames = maintenanceState.currentPlayer?.frames || [];
   if (!frames.length) return;
@@ -1252,7 +1655,9 @@ function refreshPlayerDynamicView() {
   const inspector = document.getElementById("player-inspector-dynamic");
   if (inspector) inspector.innerHTML = selected ? renderPlayerInspector(selected, frame) : "<div class='timeline-empty'>Select an element.</div>";
   document.querySelectorAll("[data-player-slider]").forEach((slider) => {
-    slider.value = String(idx);
+    const refs = currentPageFrameRefs();
+    const local = refs.findIndex((globalIdx) => globalIdx === idx);
+    slider.value = String(Math.max(0, local >= 0 ? local : idx));
   });
   document.querySelectorAll(".player-marker[data-frame-index]").forEach((marker) => {
     marker.classList.toggle("active", Number(marker.dataset.frameIndex) === idx);
@@ -1264,7 +1669,9 @@ function refreshPlayerDynamicView() {
     el.textContent = frame.summary || "";
   });
   document.querySelectorAll(".player-frame-count").forEach((el) => {
-    el.textContent = `${idx + 1}/${frames.length}`;
+    const refs = currentPageFrameRefs();
+    const local = refs.findIndex((globalIdx) => globalIdx === idx);
+    el.textContent = refs.length ? `${Math.max(0, local) + 1}/${refs.length}` : `${idx + 1}/${frames.length}`;
   });
   refreshPlayerOverlayDynamic(scene, frame);
 }
@@ -1350,13 +1757,15 @@ function renderPlayerInspector(element, frame) {
       </div>
     </div>
     <div class="maintenance-metric-grid compact-metrics">
-      ${metricMini("Frame", frame.index ?? 0)}
+      ${metricMini("Step", localFrameLabel(frame.index ?? maintenanceState.currentFrameIndex ?? 0))}
       ${metricMini("Changed", slotState.changed ?? (frame.changed_elements || []).includes(element.element_id))}
       ${metricMini("Consumed", slotState.consumed ?? "—")}
       ${metricMini("Produced", slotState.produced ?? "—")}
     </div>
     ${hasDetail ? `
       ${renderPlayerRoleStateBoard(element, frame)}
+      ${renderCurrentRoundLinkedRoleCard(element)}
+      ${renderCurrentPageExecutorInspectorAddon(element)}
       ${renderLastEventBanner(lastEvent, representedState)}
       <div class="single-json-column">
         ${renderDetailBlock("Last Event Raw", lastEvent || {}, { open: false, key: `player:${element.element_id}:last_event_raw` })}
@@ -1366,7 +1775,86 @@ function renderPlayerInspector(element, frame) {
       <div class="maintenance-missing-detail">
         This transient element has no action in the current frame. Move the timeline to a frame where it is highlighted, or open persistent Skill Store.
       </div>
+      ${renderCurrentRoundLinkedRoleCard(element)}
     `}
+  `;
+}
+
+function renderCurrentRoundLinkedRoleCard(element) {
+  const page = resolveCurrentPage(maintenanceState.currentDetail);
+  const card = findLinkedRoleCardForElement(page, element);
+  if (!card) return "";
+  return `
+    <section class="role-state-board linked-role-card-detail">
+      <div class="maintenance-stage-head">
+        <div>
+          <div class="maintenance-stage-kicker">Current Round Linked Role Output</div>
+          <div class="maintenance-stage-title">${escapeHtml(card.role || card.type || "Role")}</div>
+          <div class="maintenance-stage-subtitle">当前 task 页关联到该 role 的真实输入输出卡片；完整 JSON 默认折叠。</div>
+        </div>
+      </div>
+      ${card.detailHtml ? card.detailHtml() : renderFallbackInspector(card.raw || card)}
+    </section>
+  `;
+}
+
+function findLinkedRoleCardForElement(page, element) {
+  const flow = buildSequentialRoleFlow(page);
+  if (!flow.length) return null;
+  if (maintenanceState.selectedRoleCardId) {
+    const exact = flow.find((card) => card.id === maintenanceState.selectedRoleCardId);
+    if (exact && slotForSequentialRole(exact) === String(element.element_id || "")) return exact;
+  }
+  const slot = String(element.element_id || "");
+  return flow.find((card) => slotForSequentialRole(card) === slot) || null;
+}
+
+function renderCurrentPageExecutorInspectorAddon(element) {
+  if (element.element_id !== "role:executor") return "";
+  const page = resolveCurrentPage(maintenanceState.currentDetail);
+  const runCard = (page?.flow_cards || []).find((card) => card.type === "run");
+  if (!runCard) return "";
+  const run = runCard.run || {};
+  const turns = run.detail?.turns || [];
+  if (!turns.length) return "";
+  return `
+    <section class="role-state-board current-task-executor-addon">
+      <div class="maintenance-section-title">Current Task Executor Turns</div>
+      <div class="executor-turn-mini-stack">
+        ${turns.map((turn, idx) => renderExecutorTurnMiniForInspector(turn, idx)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderExecutorTurnMiniForInspector(turn, idx) {
+  const retrieval = turn.retrieval || {};
+  const toolCalls = turn.tool_calls || [];
+  const retrieverModal = rememberModalPayload({
+    title: `Retriever turn ${turn.turn_index ?? idx}`,
+    subtitle: retrieval.query || "",
+    body: renderRetrieverDetail(retrieval),
+    payload: retrieval,
+  });
+  return `
+    <details class="executor-turn-mini executor-turn-collapsible" ${idx === 0 ? "open" : ""}>
+      <summary>
+        <span class="maintenance-stage-kicker">Turn ${escapeHtml(String(turn.turn_index ?? idx))}</span>
+        <span class="message-summary">${escapeHtml(compactLabel(extractTurnUserText(turn), 120))}</span>
+      </summary>
+      <div class="message-bubble message-user">
+        <div class="message-role">user</div>
+        <div class="message-content">${escapeHtml(compactMultiline(extractTurnUserText(turn), 800))}</div>
+      </div>
+      <div class="retriever-store-summary">
+        <span>retrieved=${escapeHtml(String((retrieval.selected || []).length))}</span>
+        <span>candidates=${escapeHtml(String((retrieval.candidates || []).length))}</span>
+        <button class="object-shortcut" onclick="openRememberedModal('${escapeJs(retrieverModal)}')">Retriever</button>
+      </div>
+      <div class="tool-call-strip">
+        ${toolCalls.map((call, callIdx) => renderMiniToolCall(call, callIdx)).join("") || "<span class='empty-inline'>No tool calls</span>"}
+      </div>
+    </details>
   `;
 }
 
@@ -1594,22 +2082,41 @@ function renderMessageBubble(message, idx) {
   const role = message?.role || `message_${idx + 1}`;
   const content = message?.content || message?.text || "";
   return `
-    <article class="message-bubble message-${escapeHtml(String(role).replace(/[^a-z0-9_-]/gi, "_"))}">
-      <div class="message-role">${escapeHtml(role)}</div>
+    <details class="message-bubble message-collapsible message-${escapeHtml(String(role).replace(/[^a-z0-9_-]/gi, "_"))}" ${idx === 0 ? "open" : ""}>
+      <summary>
+        <span class="message-role">${escapeHtml(role)}</span>
+        <span class="message-summary">${escapeHtml(compactLabel(content || "(empty)", 120))}</span>
+      </summary>
       <div class="message-content">${escapeHtml(compactMultiline(content || "(empty)", 1200))}</div>
-    </article>
+    </details>
   `;
 }
 
 function renderToolCallPill(call) {
   const name = call?.name || call?.function?.name || "tool_call";
-  const args = call?.arguments || call?.function?.arguments || {};
+  const args = normalizeToolArguments(call?.arguments || call?.function?.arguments || {});
+  const rawArgs = call?.arguments || call?.function?.arguments || {};
+  const argTreeKey = `tool:${name}:${JSON.stringify(rawArgs).slice(0, 80)}`;
   return `
     <div class="tool-call-pill">
       <strong>${escapeHtml(name)}</strong>
-      <span>${escapeHtml(typeof args === "string" ? compactLabel(args, 180) : compactLabel(JSON.stringify(args), 180))}</span>
+      <span>${escapeHtml(compactLabel(typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs), 180))}</span>
+      <details class="tool-argument-details json-navigator-panel" ontoggle="rememberDetailOpenState('${escapeJs(argTreeKey)}', this.open)" ${maintenanceState.detailOpenState[argTreeKey] ? "open" : ""}>
+        <summary>Arguments</summary>
+        ${renderJsonTree(args, "arguments", 0)}
+      </details>
     </div>
   `;
+}
+
+function normalizeToolArguments(value) {
+  if (value && typeof value === "object") return value;
+  if (typeof value !== "string") return value || {};
+  try {
+    return JSON.parse(value);
+  } catch (_err) {
+    return { raw: value };
+  }
 }
 
 function renderToolResultCard(result) {
@@ -1627,6 +2134,10 @@ function currentPlayerScene() {
 }
 
 function openPlayerOverlay(type, payload = {}) {
+  if ((type === "bundle" || type === "test_result") && !payload.skillName) {
+    const selectedSkill = skillNameFromSelectedOrFrame();
+    if (selectedSkill) payload = { ...payload, skillName: selectedSkill };
+  }
   maintenanceState.overlayStack.push({ type, payload, frameIndex: maintenanceState.currentFrameIndex || 0 });
   renderMaintenanceDetail(maintenanceState.currentDetail);
 }
@@ -1651,7 +2162,12 @@ function renderPlayerOverlayStack() {
   if (!overlay) return "";
   const { frame, scene } = currentPlayerScene();
   const frames = maintenanceState.currentPlayer?.frames || [];
+  const refs = currentPageFrameRefs();
   const idx = Number(maintenanceState.currentFrameIndex || 0);
+  const localIdx = refs.findIndex((globalIdx) => globalIdx === idx);
+  const sliderMax = Math.max(0, (refs.length || frames.length) - 1);
+  const sliderValue = refs.length ? Math.max(0, localIdx) : idx;
+  const localLabel = localFrameLabel(idx);
   return `
     <div class="player-overlay-backdrop" onclick="closePlayerOverlays()">
       <section class="player-overlay-panel" onclick="event.stopPropagation()">
@@ -1659,7 +2175,7 @@ function renderPlayerOverlayStack() {
           <div>
             <div class="maintenance-stage-kicker">State Overlay</div>
             <div class="floating-detail-title">${escapeHtml(playerOverlayTitle(overlay))}</div>
-            <div class="maintenance-stage-subtitle">Frame ${escapeHtml(String((frame.index ?? 0) + 1))}: ${escapeHtml(frame.action_kind || "")}</div>
+            <div class="maintenance-stage-subtitle">${escapeHtml(localLabel)}: ${escapeHtml(frameTitleForDisplay(frame))}</div>
           </div>
           <div class="player-controls">
             ${maintenanceState.overlayStack.length > 1 ? `<button class="btn chip-btn" onclick="popPlayerOverlay()">Back</button>` : ""}
@@ -1667,15 +2183,15 @@ function renderPlayerOverlayStack() {
             <button class="btn chip-btn" onclick="shiftPlayerMarker(1)">Next Mark</button>
             <button class="btn chip-btn" onclick="jumpNextNonExecutor()">Next Role</button>
             <button class="btn chip-btn" onclick="shiftPlayerFrame(-1)">Prev</button>
-            <span class="timeline-pill player-frame-count">${escapeHtml(`${idx + 1}/${Math.max(1, frames.length)}`)}</span>
+            <span class="timeline-pill player-frame-count">${escapeHtml(refs.length ? `${sliderValue + 1}/${Math.max(1, refs.length)}` : `${idx + 1}/${Math.max(1, frames.length)}`)}</span>
             <button class="btn chip-btn" onclick="shiftPlayerFrame(1)">Next</button>
             <button class="floating-close-btn" onclick="closePlayerOverlays()">×</button>
           </div>
         </div>
         ${frames.length ? `
           <div class="player-overlay-timeline">
-            <input class="player-slider" data-player-slider type="range" min="0" max="${frames.length - 1}" value="${idx}" oninput="previewPlayerFrame(Number(this.value))" onchange="commitPlayerFrame(Number(this.value))">
-            ${renderPlayerMarkerRail(frames, idx)}
+            <input class="player-slider" data-player-slider type="range" min="0" max="${sliderMax}" value="${sliderValue}" oninput="previewLocalPlayerFrame(Number(this.value))" onchange="commitLocalPlayerFrame(Number(this.value))">
+            ${refs.length ? renderPlayerMarkerRailForRefs(frames, refs, idx) : renderPlayerMarkerRail(frames, idx)}
           </div>
         ` : ""}
         <div class="player-overlay-body" id="player-overlay-body-dynamic">
@@ -1696,7 +2212,7 @@ function refreshPlayerOverlayDynamic(scene, frame) {
     overlayBody.scrollTop = scrollTop;
   }
   document.querySelectorAll(".player-overlay-head .maintenance-stage-subtitle").forEach((el) => {
-    el.textContent = `Frame ${String((frame.index ?? 0) + 1)}: ${frame.action_kind || ""}`;
+    el.textContent = `${localFrameLabel(frame.index ?? maintenanceState.currentFrameIndex ?? 0)}: ${frameTitleForDisplay(frame)}`;
   });
 }
 
@@ -1731,6 +2247,24 @@ function matchingSceneElements(scene, kind) {
   return Object.values(resolvePlayerFrame(maintenanceState.currentFrameIndex || 0).elements || {}).filter(slot.match);
 }
 
+function skillNameFromSelectedOrFrame() {
+  const selected = maintenanceState.selectedPlayerElementId || "";
+  const frame = resolvePlayerFrame(maintenanceState.currentFrameIndex || 0);
+  const selectedSlot = currentPlayerScene().scene?.elementsById?.[selected];
+  const represented = selectedSlot?.state?.represented_element || {};
+  const state = represented.state || {};
+  const direct = state.name || state.skill_name || state.last_output?.skill_name || state.last_input?.skill_name;
+  if (direct) return String(direct);
+  for (const key of frame.changed_elements || []) {
+    if (String(key).startsWith("skill:")) return String(key).replace(/^skill:/, "");
+    if (String(key).startsWith("bundle:")) return String(key).replace(/^bundle:/, "");
+    if (String(key).startsWith("test_result:")) return String(key).split(":")[1] || "";
+  }
+  const store = frame.elements?.skill_store?.state || {};
+  const skills = store.skills || store.store_summary?.skills || [];
+  return String(skills[skills.length - 1]?.name || skills[skills.length - 1]?.skill_name || "");
+}
+
 function renderPlayerSkillStoreOverlay(scene, frame, payload) {
   const storeSlot = slotForScene(scene, "skill_store");
   const state = storeSlot?.element?.state || {};
@@ -1760,11 +2294,79 @@ function renderPlayerSkillStoreOverlay(scene, frame, payload) {
           <div class="maintenance-stage-title">Recently Changed</div>
           ${renderChipList([...newNames, ...updatedNames])}
         </section>
+        ${renderStoreChangePanel(represented, frame)}
         <section class="maintenance-stage-card board-neutral">
           <div class="maintenance-stage-title">Store State</div>
           ${renderPayloadNavigator(represented, "skill_store")}
         </section>
       </main>
+    </div>
+  `;
+}
+
+function renderStoreChangePanel(storeState, frame) {
+  const event = storeState.last_event || frame.delta?.event || {};
+  const output = event.output || {};
+  const diffs = output.artifact_diffs || output.bundle_diffs || [];
+  return `
+    <section class="maintenance-stage-card board-neutral">
+      <div class="maintenance-stage-title">Frame Store Change</div>
+      <div class="maintenance-stage-subtitle">${escapeHtml(event.event_type || "No store event in this frame")}</div>
+      ${Array.isArray(diffs) && diffs.length ? `
+        <div class="store-diff-list">
+          ${diffs.map((diff, idx) => renderStoreDiffCard(diff, idx)).join("")}
+        </div>
+      ` : `<div class="maintenance-doc-empty">No artifact/bundle diff recorded for this frame.</div>`}
+    </section>
+  `;
+}
+
+function renderStoreDiffCard(diff, idx) {
+  const artifactDiff = diff.artifact_diff || diff;
+  const changed = artifactDiff.changed_fields || [];
+  return `
+    <article class="store-diff-card">
+      <div class="maintenance-stage-kicker">Diff ${idx + 1}</div>
+      <div class="sequence-role-title">${escapeHtml(artifactDiff.name || diff.skill_name || "skill")}</div>
+      <div class="timeline-pill-row">
+        <span class="timeline-pill">${escapeHtml(`${artifactDiff.version_before ?? "?"} -> ${artifactDiff.version_after ?? "?"}`)}</span>
+        ${changed.map((field) => `<span class="timeline-pill">${escapeHtml(field)}</span>`).join("")}
+      </div>
+      ${artifactDiff.description_before !== artifactDiff.description_after ? renderTextDiff("Description", artifactDiff.description_before || "", artifactDiff.description_after || "") : ""}
+      ${artifactDiff.body_before !== artifactDiff.body_after ? renderTextDiff("Body", artifactDiff.body_before || "", artifactDiff.body_after || "") : ""}
+      ${artifactDiff.bundle_diff ? renderBundleDiffSummary(artifactDiff.bundle_diff) : ""}
+    </article>
+  `;
+}
+
+function renderTextDiff(title, before, after) {
+  return `
+    <div class="text-diff-grid">
+      <div>
+        <div class="maintenance-section-title">${escapeHtml(title)} Before</div>
+        <pre class="maintenance-code-block diff-before">${escapeHtml(compactMultiline(before || "(empty)", 1400))}</pre>
+      </div>
+      <div>
+        <div class="maintenance-section-title">${escapeHtml(title)} After</div>
+        <pre class="maintenance-code-block diff-after">${escapeHtml(compactMultiline(after || "(empty)", 1400))}</pre>
+      </div>
+    </div>
+  `;
+}
+
+function renderBundleDiffSummary(diff) {
+  return `
+    <div class="bundle-diff-summary">
+      <div class="maintenance-section-title">Bundle Case Diff</div>
+      ${["positive", "negative", "integration"].map((key) => `
+        <div class="readable-kv-row">
+          <div class="readable-kv-key">${escapeHtml(key)}</div>
+          <div class="readable-kv-value">
+            +${renderChipList(diff.added_case_ids?.[key] || [])}
+            -${renderChipList(diff.removed_case_ids?.[key] || [])}
+          </div>
+        </div>
+      `).join("")}
     </div>
   `;
 }
@@ -1900,12 +2502,24 @@ function deepMergeObjects(...items) {
 }
 
 function renderPlayerBundleOverlay(scene, payload) {
-  const bundles = matchingSceneElements(scene, "bundle").map((el) => el.state || {});
   const wanted = String(payload.skillName || "").trim();
+  const skill = wanted ? findPlayerSkill(scene, wanted) : null;
+  const skillBundle = normalizeSkillBundleForOverlay(skill);
+  const bundles = [
+    ...matchingSceneElements(scene, "bundle").map((el) => el.state || {}),
+    ...storeBundlesForScene(scene),
+  ];
   const bundle = (wanted ? bundles.find((item) => String(item.skill_name || item.name || "").includes(wanted)) : null)
+    || skillBundle
     || bundles[bundles.length - 1];
-  if (!bundle) return "<div class='maintenance-doc-empty'>No bundle visible in this frame.</div>";
-  const cases = bundle.cases || bundle.bundle?.cases || {};
+  if (!bundle) {
+    return `
+      <div class='maintenance-doc-empty'>
+        No bundle visible in this frame. Move to the Bundle Builder / Store Update frame, or open a skill after bundle construction.
+      </div>
+    `;
+  }
+  const cases = normalizedBundleCases(bundle);
   return `
     <div class="artifact-detail-stack">
       <section class="maintenance-stage-card board-accent">
@@ -1920,9 +2534,44 @@ function renderPlayerBundleOverlay(scene, payload) {
       ${renderBundleCaseSection("Positive Cases", cases.positive || [], "positive")}
       ${renderBundleCaseSection("Negative Cases", cases.negative || [], "negative")}
       ${renderBundleCaseSection("Integration-Derived Cases", cases.integration || [], "integration")}
+      ${bundle.bundle_diff ? renderStoreDiffCard({ artifact_diff: { name: bundle.skill_name || bundle.name, bundle_diff: bundle.bundle_diff, changed_fields: ["bundle"] } }, 0) : ""}
       ${renderDebugRaw("Raw Bundle", bundle)}
     </div>
   `;
+}
+
+function normalizeSkillBundleForOverlay(skill) {
+  if (!skill || typeof skill !== "object") return null;
+  const bundle = skill.bundle && typeof skill.bundle === "object" ? skill.bundle : {};
+  if (!Object.keys(bundle).length && !skill.bundle_counts) return null;
+  return {
+    skill_name: skill.name || skill.skill_name || "",
+    bundle_id: skill.bundle_id || bundle.bundle_id || "",
+    bundle_version: skill.bundle_version || bundle.bundle_version,
+    maintenance_notes: bundle.maintenance_notes || "",
+    cases: {
+      positive: bundle.positive_cases || [],
+      negative: bundle.negative_cases || [],
+      integration: bundle.integration_cases || [],
+    },
+    raw_skill: skill,
+  };
+}
+
+function storeBundlesForScene(scene) {
+  const storeSlot = slotForScene(scene, "skill_store");
+  const state = storeSlot?.element?.state?.represented_element?.state || storeSlot?.element?.state || {};
+  const skills = state.skills || state.store_summary?.skills || [];
+  return (skills || []).map(normalizeSkillBundleForOverlay).filter(Boolean);
+}
+
+function normalizedBundleCases(bundle) {
+  const direct = bundle.cases || bundle.bundle?.cases || {};
+  return {
+    positive: direct.positive || bundle.positive_cases || bundle.bundle?.positive_cases || [],
+    negative: direct.negative || bundle.negative_cases || bundle.bundle?.negative_cases || [],
+    integration: direct.integration || bundle.integration_cases || bundle.bundle?.integration_cases || [],
+  };
 }
 
 function renderPlayerTestResultOverlay(scene, payload) {
@@ -2085,13 +2734,15 @@ function normalizeSequentialCard(card, idx) {
       role: "Executor",
       input: card.detail?.input || {},
       output: card.detail?.output || run,
+      inputSummary: `${run.task_id || "task"} | retrieved=${(run.retrieved_skills || []).length}`,
+      outputSummary: `turns=${run.detail?.summary?.n_turns ?? "?"}, tool_calls=${run.detail?.summary?.n_tool_calls ?? "?"}, valid=${run.official_valid ?? "—"}`,
       metrics: [
         ["Official", run.official_valid ?? "—"],
         ["Call F1", run.call_f1 ?? "—"],
         ["Tokens", run.total_tokens ?? "—"],
-        ["Errors", (run.call_errors || []).length],
+        ["Retrievals", run.detail?.summary?.n_retrieval_events ?? 0],
       ],
-      detailHtml: () => renderRunCard(card),
+      detailHtml: () => renderExecutorPlayerDetail(card),
     };
   }
   if (card.type === "role_extractor") {
@@ -2120,19 +2771,22 @@ function normalizeSequentialCard(card, idx) {
   if (card.type === "maintenance_test") {
     return {
       ...base,
-      role: "Unit Utility Test",
+      role: "Unit Tester",
+      title: `Unit Test: ${card.skill_name || ""}`,
       input: {
         skill_name: card.skill_name,
         skill_version: card.skill_version,
         bundle_version: card.bundle_version,
       },
+      inputSummary: `skill=${card.skill_name || "—"} | bundle_v${card.bundle_version ?? "?"}`,
+      outputSummary: `pass_all=${card.aggregate?.pass_all_tests ?? "—"} | cases=${card.aggregate?.n_cases ?? 0}`,
       output: card.detail || card,
       metrics: [
         ["Cases", card.aggregate?.n_cases ?? 0],
         ["Pass All", card.aggregate?.pass_all_tests ?? "—"],
         ["Regressed", card.aggregate?.n_regressed ?? 0],
       ],
-      detailHtml: () => renderMaintenanceTestCard(card),
+      detailHtml: () => renderTestResultPlayerDetail(card),
     };
   }
   if (card.type === "role_refiner") {
@@ -2157,7 +2811,7 @@ function normalizeSequentialCard(card, idx) {
         ["After", card.version_after ?? "—"],
         ["Regressions", card.failed_count ?? 0],
       ],
-      detailHtml: () => renderRefineDecisionCard(card),
+      detailHtml: () => renderRefinerPlayerDetail(card),
     };
   }
   if (card.type === "skill_delta") {
@@ -2186,7 +2840,7 @@ function normalizeAlgorithmMonitorCard(card, idx) {
     id: `seq_${idx}_${card.type || "algorithm"}`,
     index: idx,
     type: card.type || "algorithm",
-    title: card.title || role,
+    title: algorithmCardTitle(card) || card.title || role,
     subtitle: card.subtitle || "",
     role,
     tone: boardToneClass(card.tone),
@@ -2197,8 +2851,20 @@ function normalizeAlgorithmMonitorCard(card, idx) {
     inputSummary: card.input_summary || summarizeValue(card.detail?.input || {}),
     outputSummary: card.output_summary || summarizeValue(card.detail?.output || {}),
     metrics: (card.metrics || []).map((item) => [item.label, item.value, item.help]),
-    detailHtml: () => renderAlgorithmMonitorCardDetail(card),
+    detailHtml: () => renderAlgorithmObjectDetail(card),
   };
+}
+
+function algorithmCardTitle(card) {
+  const titles = {
+    algorithm_executor: "Train Executor",
+    algorithm_extractor: "Skill Extractor",
+    algorithm_bundle_builder: "Bundle Builder",
+    algorithm_replay: "Integration Replay Executor",
+    algorithm_refiner: "Refiner",
+    algorithm_store: "Skill Store",
+  };
+  return titles[card.type] || "";
 }
 
 function algorithmRoleName(type) {
@@ -2251,8 +2917,24 @@ function renderSequentialCard(card) {
           ${renderClickablePayloadPreview("Input", card.input, card.id, "input", card.inputSummary)}
           ${renderClickablePayloadPreview("Output", card.output, card.id, "output", card.outputSummary)}
         </div>
+        ${renderObjectShortcutStrip(card)}
       </div>
     </article>
+  `;
+}
+
+function renderObjectShortcutStrip(card) {
+  const shortcuts = [];
+  if (card.type === "run") shortcuts.push(["Executor Turns", card.id]);
+  if (card.type === "run" && (card.raw?.run?.detail?.retrieval_events || []).length) shortcuts.push(["Retriever", card.id]);
+  if (card.type === "algorithm_extractor" || card.type === "algorithm_store") shortcuts.push(["Skills", card.id]);
+  if (card.type === "algorithm_bundle_builder" || card.type === "maintenance_test") shortcuts.push(["Bundles / Tests", card.id]);
+  if (card.type === "algorithm_refiner" || card.type === "refine_decision") shortcuts.push(["Refiner", card.id]);
+  if (!shortcuts.length) return "";
+  return `
+    <div class="object-shortcut-strip">
+      ${shortcuts.map(([label, id]) => `<button class="object-shortcut" onclick="openSequentialCardModal('${escapeJs(id)}')">${escapeHtml(label)}</button>`).join("")}
+    </div>
   `;
 }
 
@@ -2337,13 +3019,17 @@ function openRememberedModal(id) {
   maintenanceState.modalPayload = {
     title: row.title || "Detail",
     subtitle: row.subtitle || "",
-    body: renderTextualPayloadCard(row.title || "Payload", row.payload),
+    body: row.body || renderTextualPayloadCard(row.title || "Payload", row.payload),
   };
   renderMaintenanceDetail(maintenanceState.currentDetail);
 }
 
 function closeFloatingDetailModal() {
-  maintenanceState.modalPayload = null;
+  if (maintenanceState.modalPayload?.parent) {
+    maintenanceState.modalPayload = maintenanceState.modalPayload.parent;
+  } else {
+    maintenanceState.modalPayload = null;
+  }
   renderMaintenanceDetail(maintenanceState.currentDetail);
 }
 
@@ -2351,7 +3037,7 @@ function renderFloatingDetailModal() {
   const modal = maintenanceState.modalPayload;
   if (!modal) return "";
   return `
-    <div class="floating-detail-backdrop" onclick="closeFloatingDetailModal()">
+    <div class="floating-detail-backdrop">
       <section class="floating-detail-panel" onclick="event.stopPropagation()">
         <div class="floating-detail-head">
           <div>
@@ -2359,7 +3045,10 @@ function renderFloatingDetailModal() {
             <div class="floating-detail-title">${escapeHtml(modal.title || "Detail")}</div>
             <div class="maintenance-stage-subtitle">${escapeHtml(modal.subtitle || "")}</div>
           </div>
-          <button class="floating-close-btn" onclick="closeFloatingDetailModal()">×</button>
+          <div class="player-controls">
+            ${modal.parent ? `<button class="btn chip-btn" onclick="closeFloatingDetailModal()">Back</button>` : ""}
+            <button class="floating-close-btn" onclick="maintenanceState.modalPayload=null; renderMaintenanceDetail(maintenanceState.currentDetail)">×</button>
+          </div>
         </div>
         <div class="floating-detail-body">${modal.body || ""}</div>
       </section>
@@ -2390,6 +3079,351 @@ function renderTestResultSummaryCard(card, idx) {
         <span class="timeline-pill">${escapeHtml(`pass_all=${card.aggregate?.pass_all_tests ?? "—"}`)}</span>
       </div>
     </button>
+  `;
+}
+
+function renderAlgorithmObjectDetail(card) {
+  if (card.type === "algorithm_executor" || card.type === "algorithm_replay") return renderAlgorithmExecutorSummary(card);
+  if (card.type === "algorithm_extractor") return renderSkillCollectionDetail(card.detail?.output?.skills || [], card);
+  if (card.type === "algorithm_bundle_builder") return renderBundleCollectionDetail(card.detail?.output?.bundles || [], card);
+  if (card.type === "algorithm_refiner") return renderRefinerCollectionDetail(card.detail?.output?.refine_decisions || [], card);
+  if (card.type === "algorithm_store") return renderSkillStorePlayerDetail(card.detail?.output || {}, card);
+  return renderAlgorithmMonitorCardDetail(card);
+}
+
+function renderAlgorithmExecutorSummary(card) {
+  const output = card.detail?.output || {};
+  const details = output.train_run_details || output.replay_run_details || {};
+  const tasks = details.tasks || [];
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader(card.role || "Executor", card.title, card.subtitle)}
+      <div class="object-summary-grid">
+        ${renderReadableMetric("Tasks", details.n_details ?? tasks.length)}
+        ${renderReadableMetric("Shown", details.shown ?? tasks.length)}
+        ${renderReadableMetric("Summary", summarizeValue(output.train_summary || output.replay_summary || {}))}
+      </div>
+      <div class="object-card-grid">
+        ${tasks.map((task, idx) => `
+          <article class="object-mini-card">
+            <div class="maintenance-stage-kicker">Task ${idx + 1}</div>
+            <div class="sequence-role-title">${escapeHtml(task.task_id || "")}</div>
+            <div class="object-body-text">${escapeHtml(task.first_user_message || "")}</div>
+            <div class="timeline-pill-row">
+              <span class="timeline-pill">valid=${escapeHtml(String(task.official_valid ?? "—"))}</span>
+              <span class="timeline-pill">f1=${escapeHtml(String(task.call_f1 ?? "—"))}</span>
+              <span class="timeline-pill">retrieved=${escapeHtml(String((task.retrieved_skills || []).length))}</span>
+            </div>
+          </article>
+        `).join("") || "<div class='timeline-empty'>No task details recorded.</div>"}
+      </div>
+      ${renderCollapsedJson("Debug Raw", card.detail?.debug_raw || card)}
+    </section>
+  `;
+}
+
+function renderExecutorPlayerDetail(card) {
+  const run = card.run || {};
+  const detail = run.detail || {};
+  const turns = detail.turns || [];
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader("Executor", card.title || "Executor", `task=${run.task_id || "—"}`)}
+      <div class="object-summary-grid">
+        ${renderReadableMetric("Official", run.official_valid ?? "—")}
+        ${renderReadableMetric("Call F1", run.call_f1 ?? "—")}
+        ${renderReadableMetric("Tokens", run.total_tokens ?? "—")}
+        ${renderReadableMetric("Retrievals", detail.summary?.n_retrieval_events ?? 0)}
+      </div>
+      <div class="executor-explain-box">
+        <b>Retriever events</b>
+        <span>Executor 在 BFCL 每个 turn 调用模型前预先检索一次 skill；这些 retrieval 事件会先记录到 trace 里，不代表 retriever agent 在多轮对话。</span>
+        <b>User messages</b>
+        <span>BFCL multi-turn 数据集中每个 turn 都自带一个 user message。这里按 turn 展示，避免把全局 raw messages 重复铺满页面。</span>
+      </div>
+      <div class="executor-turn-stack">
+        ${turns.map((turn, idx) => renderExecutorTurnCard(turn, idx)).join("") || "<div class='timeline-empty'>No executor turns recorded.</div>"}
+      </div>
+      ${renderCollapsedJson("Executor Raw JSON", { run, detail })}
+    </section>
+  `;
+}
+
+function renderExecutorTurnCard(turn, idx) {
+  const retrieval = turn.retrieval || {};
+  const prompt = turn.prompt_injection || {};
+  const toolCalls = turn.tool_calls || [];
+  const modalId = rememberModalPayload({
+    title: `Retriever turn ${turn.turn_index ?? idx}`,
+    subtitle: retrieval.query || "",
+    body: renderRetrieverDetail(retrieval),
+    payload: retrieval,
+  });
+  return `
+    <details class="executor-turn-card executor-turn-collapsible" ${idx === 0 ? "open" : ""}>
+      <summary class="executor-turn-head">
+        <div>
+          <div class="maintenance-stage-kicker">Executor Turn ${escapeHtml(String(turn.turn_index ?? idx))}</div>
+          <div class="object-body-text">${escapeHtml(extractTurnUserText(turn))}</div>
+        </div>
+        <span class="executor-turn-summary-pills">
+          <span>retrieved=${escapeHtml(String((retrieval.selected || []).length))}</span>
+          <span>tools=${escapeHtml(String(toolCalls.length))}</span>
+        </span>
+      </summary>
+      <button class="btn chip-btn" onclick="openRememberedModal('${escapeJs(modalId)}')">Open Retriever Detail</button>
+      ${renderRetrieverInline(retrieval)}
+      <div class="tool-call-strip">
+        ${toolCalls.map((call, callIdx) => renderMiniToolCall(call, callIdx)).join("") || "<span class='empty-inline'>No tool calls</span>"}
+      </div>
+      ${prompt.prompt_preview ? `<div class="prompt-preview-box"><b>Prompt Injection</b><span>${escapeHtml(prompt.prompt_preview)}</span></div>` : ""}
+    </details>
+  `;
+}
+
+function renderRetrieverDetail(retrieval) {
+  if (!retrieval || !Object.keys(retrieval).length) {
+    return "<div class='maintenance-missing-detail'>No retrieval audit was recorded for this turn.</div>";
+  }
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader("Retriever", `Turn ${retrieval.turn_index ?? "?"}`, retrieval.query || "")}
+      <div class="object-summary-grid">
+        ${renderReadableMetric("Store Total", retrieval.store_summary?.n_total ?? "—")}
+        ${renderReadableMetric("Candidates", (retrieval.candidates || []).length)}
+        ${renderReadableMetric("Selected", (retrieval.selected || []).length)}
+        ${renderReadableMetric("Top K", retrieval.top_k ?? "—")}
+      </div>
+      <section class="object-mini-card">
+        <div class="maintenance-stage-kicker">Selected Skills</div>
+        <div class="retriever-selected-list">
+          ${(retrieval.selected || []).map((item) => renderRetrieverCandidate(item, true)).join("") || "<span class='empty-inline'>No selected skill</span>"}
+        </div>
+      </section>
+      <details class="bundle-case-section" open>
+        <summary>All Candidates <span>${(retrieval.candidates || []).length}</span></summary>
+        <div class="retriever-selected-list">
+          ${(retrieval.candidates || []).map((item) => renderRetrieverCandidate(item, false)).join("") || "<span class='empty-inline'>No candidates</span>"}
+        </div>
+      </details>
+      <details class="bundle-case-section">
+        <summary>Skill Store Snapshot <span>${(retrieval.store_skills || []).length}</span></summary>
+        <div class="skill-explorer-grid">
+          ${(retrieval.store_skills || []).map((skill) => renderSkillExplorerCard(skill)).join("") || "<span class='empty-inline'>No store snapshot</span>"}
+        </div>
+      </details>
+      ${renderCollapsedJson("Retriever Raw JSON", retrieval)}
+    </section>
+  `;
+}
+
+function extractTurnUserText(turn) {
+  const msg = (turn.user_messages || [])[0] || {};
+  return String(msg.content || "").slice(0, 800);
+}
+
+function renderRetrieverInline(retrieval) {
+  if (!retrieval || !Object.keys(retrieval).length) {
+    return "<div class='maintenance-missing-detail'>No retrieval audit was recorded for this turn.</div>";
+  }
+  const selected = retrieval.selected || [];
+  const candidates = retrieval.candidates || [];
+  return `
+    <div class="retriever-inline">
+      <div class="retriever-store-summary">
+        <span>store=${escapeHtml(String(retrieval.store_summary?.n_total ?? "—"))}</span>
+        <span>candidates=${escapeHtml(String(candidates.length))}</span>
+        <span>selected=${escapeHtml(String(selected.length))}</span>
+      </div>
+      <div class="retriever-selected-list">
+        ${selected.map((item) => renderRetrieverCandidate(item, true)).join("") || "<span class='empty-inline'>No selected skill</span>"}
+      </div>
+    </div>
+  `;
+}
+
+function renderRetrieverCandidate(item, selected = false) {
+  return `
+    <div class="retriever-candidate ${selected ? "selected" : ""}">
+      <b>${escapeHtml(item.name || "skill")}</b>
+      <span>score=${escapeHtml(String(item.score ?? "—"))}</span>
+      <small>${escapeHtml(item.description || item.filter_reason || "")}</small>
+    </div>
+  `;
+}
+
+function renderSkillCollectionDetail(skills, card) {
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader("Skill", "Skill Explorer", `${skills.length} skills`)}
+      <div class="skill-explorer-grid">
+        ${skills.map((skill) => renderSkillExplorerCard(skill)).join("") || "<div class='timeline-empty'>No skills recorded.</div>"}
+      </div>
+      ${renderCollapsedJson("Debug Raw", card.detail?.debug_raw || card)}
+    </section>
+  `;
+}
+
+function renderSkillExplorerCard(skill) {
+  const modalId = rememberModalPayload({ title: `Skill ${skill.name || ""}`, payload: skill });
+  return `
+    <article class="skill-object-card">
+      <div class="maintenance-stage-kicker">${escapeHtml(skill.kind || "skill")}</div>
+      <div class="sequence-role-title">${escapeHtml(skill.name || "")}</div>
+      <div class="object-body-text">${escapeHtml(skill.description || "")}</div>
+      <div class="skill-implementation">${escapeHtml(skill.body || "")}</div>
+      <div class="timeline-pill-row">
+        <span class="timeline-pill">v${escapeHtml(String(skill.version ?? "—"))}</span>
+        <span class="timeline-pill">bundle=${escapeHtml(String(skill.bundle_version ?? "—"))}</span>
+        <span class="timeline-pill">pos=${escapeHtml(String(skill.bundle_counts?.positive ?? 0))}</span>
+      </div>
+      <button class="btn chip-btn" onclick="openRememberedModal('${escapeJs(modalId)}')">Full Skill</button>
+    </article>
+  `;
+}
+
+function renderBundleCollectionDetail(bundles, card) {
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader("Bundle", "Bundle Builder Output", `${bundles.length} bundles`)}
+      <div class="bundle-card-stack">
+        ${bundles.map(renderBundleObjectCard).join("") || "<div class='timeline-empty'>No bundle artifacts recorded.</div>"}
+      </div>
+      ${renderCollapsedJson("Debug Raw", card.detail?.debug_raw || card)}
+    </section>
+  `;
+}
+
+function renderBundleObjectCard(bundle) {
+  return `
+    <article class="bundle-object-card">
+      <div class="maintenance-stage-kicker">Bundle</div>
+      <div class="sequence-role-title">${escapeHtml(bundle.skill_name || bundle.bundle_id || "")}</div>
+      <div class="maintenance-metric-grid compact-metrics">
+        ${metricMini("Positive", bundle.counts?.positive ?? 0)}
+        ${metricMini("Negative", bundle.counts?.negative ?? 0)}
+        ${metricMini("Integration", bundle.counts?.integration ?? 0)}
+        ${metricMini("Version", bundle.bundle_version ?? "—")}
+      </div>
+      ${renderBundleCaseSection("Positive Cases", bundle.positive_cases || [])}
+      ${renderBundleCaseSection("Negative Cases", bundle.negative_cases || [])}
+      ${renderBundleCaseSection("Integration Cases", bundle.integration_cases || [])}
+    </article>
+  `;
+}
+
+function renderBundleCaseSection(title, cases) {
+  if (!cases.length) return "";
+  return `
+    <details class="bundle-case-section" open>
+      <summary>${escapeHtml(title)} <span>${cases.length}</span></summary>
+      ${cases.map((item) => {
+        const modalId = rememberModalPayload({ title: item.case_id || title, payload: item });
+        return `
+          <button class="bundle-case-card" onclick="openRememberedModal('${escapeJs(modalId)}')">
+            <b>${escapeHtml(item.case_id || "")}</b>
+            <span>${escapeHtml(item.prompt || "")}</span>
+            <small>expected=${escapeHtml(summarizeValue(item.expected_tool_calls || item.expected || {}))}</small>
+          </button>
+        `;
+      }).join("")}
+    </details>
+  `;
+}
+
+function renderTestResultPlayerDetail(card) {
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader("Test Result", card.skill_name || card.title || "Unit Test", `skill_v${card.skill_version ?? "?"} | bundle_v${card.bundle_version ?? "?"}`)}
+      ${renderMaintenanceTestCard(card, { suppressRaw: true })}
+      ${renderCollapsedJson("Full Test Result JSON", card.detail || card)}
+    </section>
+  `;
+}
+
+function renderRefinerCollectionDetail(decisions, card) {
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader("Refiner", "Refine Decisions", `${decisions.length} decisions`)}
+      <div class="object-card-grid">
+        ${decisions.map((decision) => renderRefinerDecisionObject(decision)).join("") || "<div class='timeline-empty'>No refine decisions recorded.</div>"}
+      </div>
+      ${renderCollapsedJson("Debug Raw", card.detail?.debug_raw || card)}
+    </section>
+  `;
+}
+
+function renderRefinerPlayerDetail(card) {
+  return renderRefinerCollectionDetail([card.detail?.raw_decision || card.raw || card], card);
+}
+
+function renderRefinerDecisionObject(decision) {
+  return `
+    <article class="object-mini-card">
+      <div class="maintenance-stage-kicker">Action: ${escapeHtml(decision.action || "—")}</div>
+      <div class="sequence-role-title">${escapeHtml(decision.skill_name || "")}</div>
+      <div class="object-body-text">${escapeHtml(decision.reason || "No reason recorded.")}</div>
+      <div class="timeline-pill-row">
+        <span class="timeline-pill">before=${escapeHtml(String(decision.version_before ?? "—"))}</span>
+        <span class="timeline-pill">after=${escapeHtml(String(decision.version_after ?? "—"))}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderSkillStorePlayerDetail(output, card) {
+  const skills = output.final_skills || output.skills || [];
+  const bundles = output.bundles || [];
+  return `
+    <section class="player-object-detail">
+      ${objectDetailHeader("Skill Store", "Repository Explorer", `${skills.length} skills`)}
+      <input class="store-search-input" placeholder="Search skill name, description, keyword..." oninput="filterObjectSkillCards(this.value)">
+      <div class="skill-explorer-grid" id="object-skill-grid">
+        ${skills.map(renderSkillExplorerCard).join("") || "<div class='timeline-empty'>No skills in store.</div>"}
+      </div>
+      <details class="bundle-case-section">
+        <summary>Bundles <span>${bundles.length}</span></summary>
+        <div class="bundle-card-stack">${bundles.map(renderBundleObjectCard).join("")}</div>
+      </details>
+      ${renderCollapsedJson("Debug Raw", card.detail?.debug_raw || card)}
+    </section>
+  `;
+}
+
+function filterObjectSkillCards(query) {
+  const q = String(query || "").toLowerCase();
+  document.querySelectorAll("#object-skill-grid .skill-object-card").forEach((card) => {
+    card.style.display = card.textContent.toLowerCase().includes(q) ? "" : "none";
+  });
+}
+
+function objectDetailHeader(kind, title, subtitle) {
+  return `
+    <div class="object-detail-header">
+      <div>
+        <div class="maintenance-stage-kicker">${escapeHtml(kind || "Object")}</div>
+        <div class="maintenance-stage-title">${escapeHtml(title || "")}</div>
+        <div class="maintenance-stage-subtitle">${escapeHtml(subtitle || "")}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderReadableMetric(label, value) {
+  return `
+    <div class="object-readable-metric">
+      <span>${escapeHtml(label)}</span>
+      <b>${escapeHtml(String(value ?? "—"))}</b>
+    </div>
+  `;
+}
+
+function renderCollapsedJson(title, payload) {
+  return `
+    <details class="collapsed-json-tree">
+      <summary>${escapeHtml(title)}</summary>
+      ${renderPayloadNavigator(payload, title)}
+    </details>
   `;
 }
 
@@ -3000,7 +4034,7 @@ function renderExecutorRouteView(detail, page) {
     detail,
     runCard.title || "Executor",
     page?.title || "",
-    renderExecutorWorkbench(runCard, timeline, selectedTurn, selectedIndex),
+    renderExecutorMessagesPage(runCard, timeline, selectedTurn, selectedIndex),
     actions
   );
 }
@@ -4195,6 +5229,160 @@ function selectExecutionTurn(index) {
   }
 }
 
+function shiftExecutionTurn(delta) {
+  const page = resolveCurrentPage(maintenanceState.currentDetail);
+  const runCard = (page?.flow_cards || []).find((card) => card.type === "run");
+  const timeline = buildExecutionTimeline(runCard?.run?.detail || {}, runCard?.run || {});
+  if (!timeline.length) return;
+  const current = getSelectedTurnIndex(timeline);
+  maintenanceState.selectedTurnIndex = Math.max(0, Math.min(current + delta, timeline.length - 1));
+  renderMaintenanceDetail(maintenanceState.currentDetail);
+}
+
+function renderExecutorMessagesPage(runCard, timeline, selectedTurn, selectedIndex) {
+  const run = runCard.run || {};
+  const traceDetail = run.detail || {};
+  const max = Math.max(1, timeline.length);
+  const allRetrievals = timeline.reduce((acc, turn) => acc + (turn.retrieval ? 1 : 0), 0);
+  return `
+    <section class="executor-message-page ${escapeHtml(boardToneClass(runCard.tone))}">
+      <div class="executor-message-head">
+        <div>
+          <div class="maintenance-stage-kicker">Executor Messages</div>
+          <div class="maintenance-stage-title">${escapeHtml(runCard.title || "Executor")}</div>
+          <div class="maintenance-stage-subtitle">按 BFCL turn 查看数据集 user message、每 turn 前检索、assistant tool calls。Raw 消息默认折叠，避免全量 trace 混在一起。</div>
+        </div>
+        <div class="timeline-pill-row">
+          ${(runCard.pills || []).map((pill) => `<span class="timeline-pill">${escapeHtml(String(pill))}</span>`).join("")}
+        </div>
+      </div>
+      <div class="executor-explain-box">
+        <b>为什么一开始有很多 Retriever？</b>
+        <span>Retriever 不是多轮 agent；当前实现是在 executor 每个 BFCL turn 开始前做一次 skill retrieval，所以 multi-turn task 会看到多个 retrieval 事件。若 store 为空，它仍会记录一次空检索用于 debug。</span>
+        <b>为什么有很多 user 消息？</b>
+        <span>BFCL multi-turn 数据集本身每个 turn 都给一个 user message。旧 UI 把全局 raw messages 显示在每个 turn，已改为每 turn 只展示对应 dataset user message。</span>
+      </div>
+      <div class="maintenance-metric-grid compact-metrics">
+        ${metricMini("Official", run.official_valid ?? "—")}
+        ${metricMini("Call F1", run.call_f1 ?? "—")}
+        ${metricMini("Tokens", run.total_tokens ?? "—")}
+        ${metricMini("Steps", run.n_model_steps ?? "—")}
+        ${metricMini("Errors", (run.call_errors || []).length)}
+        ${metricMini("Retrievals", allRetrievals)}
+      </div>
+      <div class="executor-turn-controls">
+        <button class="btn chip-btn" onclick="shiftExecutionTurn(-1)">Prev Turn</button>
+        <input class="executor-turn-range" type="range" min="0" max="${max - 1}" value="${Math.max(0, selectedIndex)}" oninput="selectExecutionTurn(Number(this.value))">
+        <button class="btn chip-btn" onclick="shiftExecutionTurn(1)">Next Turn</button>
+        <span class="timeline-pill">${escapeHtml(`turn ${Math.max(0, selectedIndex) + 1}/${max}`)}</span>
+      </div>
+      <div class="executor-turn-inline-list">
+        ${timeline.map((turn, idx) => `
+          <button class="executor-turn-inline-btn ${idx === selectedIndex ? "active" : ""}" onclick="selectExecutionTurn(${idx})">
+            <span>Turn ${escapeHtml(String(turn.turnIndex))}</span>
+            <small>${escapeHtml(compactLabel(turnUserText(turn.userMessages), 80))}</small>
+          </button>
+        `).join("")}
+      </div>
+      ${selectedTurn ? renderExecutorMessageTurnDetail(selectedTurn, traceDetail) : "<div class='maintenance-doc-empty'>No turn selected.</div>"}
+      ${renderDetailBlock("Executor Raw Trace", traceDetail.raw_trace || traceDetail || {}, { open: false })}
+    </section>
+  `;
+}
+
+function renderExecutorMessageTurnDetail(turn, traceDetail) {
+  const rawMessages = turnMessagesForDisplay(turn, traceDetail);
+  return `
+    <div class="executor-message-detail">
+      <section class="maintenance-stage-card board-neutral">
+        <div class="maintenance-stage-title">Organized Turn View</div>
+        ${renderExecutionTurn(turn)}
+      </section>
+      <section class="maintenance-stage-card board-neutral">
+        <div class="maintenance-stage-title">Turn Messages</div>
+        <div class="maintenance-stage-subtitle">默认折叠；展开后可查看该 turn 的 user/tool-call/result 结构。</div>
+        <div class="raw-message-stack">
+          ${rawMessages.map((msg, idx) => renderRawMessageBlock(msg, idx)).join("") || "<div class='maintenance-doc-empty'>No message recorded for this turn.</div>"}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function turnMessagesForDisplay(turn, traceDetail) {
+  const messages = [];
+  (turn.userMessages || []).forEach((msg, idx) => {
+    messages.push({
+      role: msg.role || "user",
+      label: `Dataset user message ${idx + 1}`,
+      content: msg.content || summarizeValue(msg),
+      raw: msg,
+    });
+  });
+  if (turn.retrieval) {
+    messages.push({
+      role: "retriever",
+      label: "Skill retrieval before this turn",
+      content: retrievalSummaryText(turn.retrieval),
+      raw: turn.retrieval,
+    });
+  }
+  (turn.calls || []).forEach((call, idx) => {
+    messages.push({
+      role: "assistant_tool_call",
+      label: `Assistant tool call ${idx + 1}`,
+      content: `${call.name || call.actual_name || "tool"}(${summarizeValue(call.arguments || call.actual_arguments || {})})`,
+      raw: call,
+    });
+    if (call.result !== undefined || call.error !== undefined) {
+      messages.push({
+        role: call.error ? "tool_error" : "tool_result",
+        label: `Tool ${call.error ? "error" : "result"} ${idx + 1}`,
+        content: call.error ? summarizeValue(call.error) : summarizeValue(call.result),
+        raw: { result: call.result, error: call.error },
+      });
+    }
+  });
+  if (!messages.length && Array.isArray(traceDetail.messages)) {
+    return traceDetail.messages.slice(0, 4).map((msg, idx) => ({
+      role: msg.role || `message_${idx + 1}`,
+      label: `Fallback raw message ${idx + 1}`,
+      content: typeof msg.content === "string" ? msg.content : summarizeValue(msg.content),
+      raw: msg,
+    }));
+  }
+  return messages;
+}
+
+function retrievalSummaryText(retrieval) {
+  const selected = retrieval.selected || [];
+  const candidates = retrieval.candidates || [];
+  const store = retrieval.store_summary || {};
+  return [
+    `query=${retrieval.query || "—"}`,
+    `selected=${selected.length}`,
+    `candidates=${candidates.length}`,
+    `store_total=${store.n_total ?? "—"}`,
+  ].join(" | ");
+}
+
+function renderRawMessageBlock(msg, idx) {
+  const role = msg.role || `message_${idx + 1}`;
+  const label = msg.label || role;
+  const content = typeof msg.content === "string" ? msg.content : summarizeValue(msg.content);
+  const raw = msg.raw || msg;
+  return `
+    <details class="raw-message-block raw-message-collapsible">
+      <summary>
+        <span class="message-role">${escapeHtml(role)}</span>
+        <span class="message-summary">${escapeHtml(compactLabel(`${label}: ${content}`, 140))}</span>
+      </summary>
+      <div class="message-content">${escapeHtml(content)}</div>
+      ${renderPayloadNavigator(raw, `message_${idx + 1}`)}
+    </details>
+  `;
+}
+
 function renderExecutorWorkbench(runCard, timeline, selectedTurn, selectedIndex) {
   const run = runCard.run || {};
   const traceDetail = run.detail || {};
@@ -4603,11 +5791,17 @@ function renderUnitVariantCard(run) {
 }
 
 function renderMiniToolCall(call, idx) {
+  const args = normalizeToolArguments(call.arguments || call.actual_arguments || {});
+  const key = `mini-tool:${idx}:${call.name || call.actual_name || "tool"}:${JSON.stringify(args).slice(0, 60)}`;
   return `
     <div class="mini-tool-call">
       <span class="readable-list-index">${idx + 1}</span>
       <span class="mini-tool-name">${escapeHtml(call.name || call.actual_name || "tool")}</span>
       <span class="mini-tool-args">${escapeHtml(summarizeValue(call.arguments || call.actual_arguments || {}))}</span>
+      <details class="mini-tool-args-tree" ontoggle="rememberDetailOpenState('${escapeJs(key)}', this.open)" ${maintenanceState.detailOpenState[key] ? "open" : ""}>
+        <summary>args</summary>
+        ${renderJsonTree(args, "arguments", 0)}
+      </details>
     </div>
   `;
 }
@@ -5495,6 +6689,8 @@ function buildExecutionTimeline(detail, run) {
       userMessages: turn.user_messages || [],
       calls,
       errors,
+      retrieval: turn.retrieval || {},
+      promptInjection: turn.prompt_injection || {},
       retrievedSkills: run.retrieved_skills || [],
       promptInjectedSkills: run.prompt_injected_skills || [],
     };
@@ -5521,8 +6717,8 @@ function renderExecutionTurn(turn) {
       </div>
       <div class="execution-skill-context">
         <div>
-          <div class="maintenance-section-title">Retrieved Skills</div>
-          ${renderChipList(turn.retrievedSkills)}
+          <div class="maintenance-section-title">Retriever Before Turn</div>
+          ${renderTurnRetrieverSummary(turn)}
         </div>
         <div>
           <div class="maintenance-section-title">Prompt Injected</div>
@@ -5539,6 +6735,26 @@ function renderExecutionTurn(turn) {
         </div>
       ` : ""}
     </section>
+  `;
+}
+
+function renderTurnRetrieverSummary(turn) {
+  const retrieval = turn.retrieval || {};
+  const selected = retrieval.selected || [];
+  const candidates = retrieval.candidates || [];
+  if (!Object.keys(retrieval).length) {
+    return `<div class="empty-inline">No retrieval event recorded for this turn.</div>`;
+  }
+  return `
+    <div class="turn-retriever-summary">
+      <div class="timeline-pill-row">
+        <span class="timeline-pill">selected ${escapeHtml(selected.length)}</span>
+        <span class="timeline-pill">candidates ${escapeHtml(candidates.length)}</span>
+        <span class="timeline-pill">top_k ${escapeHtml(retrieval.top_k ?? "—")}</span>
+      </div>
+      <div class="retriever-query-preview">${escapeHtml(compactLabel(retrieval.query || "", 180))}</div>
+      ${selected.length ? renderChipList(selected.map((item) => item.name || item.skill_name || String(item))) : "<div class='empty-inline'>No skill selected.</div>"}
+    </div>
   `;
 }
 

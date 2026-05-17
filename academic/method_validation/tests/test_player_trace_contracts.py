@@ -197,7 +197,7 @@ async def test_maintenance_runner_async_backend_executes_real_state_steps() -> N
 
 @pytest.mark.asyncio
 async def test_bfcl_loop_transition_policy_controls_role_order() -> None:
-    from academic.benchmarks.bfcl_real_maintenance_probe import BFCLLoopTransitionPolicy
+    from academic.benchmarks.bfcl.legacy.real_maintenance_probe import BFCLLoopTransitionPolicy
 
     class Role:
         def __init__(self, name, produced):

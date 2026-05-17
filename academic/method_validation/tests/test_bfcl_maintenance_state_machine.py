@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from academic.benchmarks.bfcl_real_maintenance_probe import BFCLRefineTransitionPolicy
+from academic.benchmarks.bfcl.legacy.real_maintenance_probe import BFCLRefineTransitionPolicy
 from academic.skill_repository.maintenance_runner import (
     MaintenanceActionResult,
     MaintenanceRunner,

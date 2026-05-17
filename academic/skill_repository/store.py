@@ -6,7 +6,7 @@ import math
 import re
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
 from academic.skill_repository.types import (
     DependencyPin,
@@ -21,12 +21,138 @@ from academic.skill_repository.types import (
 )
 
 
+class RetrievalBackend:
+    """Scoring backend for benchmark-agnostic skill retrieval.
+
+    The store owns filtering, audit shape, and top-k selection. Backends only
+    score a query/artifact pair so lexical, tag, and embedding retrieval can be
+    swapped without benchmark-specific branches in executor code.
+    """
+
+    name = "base"
+
+    def score(
+        self,
+        *,
+        query: str,
+        artifact: SkillArtifact,
+        artifact_tags: List[str],
+        query_tags: Set[str],
+    ) -> Dict[str, Any]:
+        raise NotImplementedError
+
+
+class LexicalTagRetrievalBackend(RetrievalBackend):
+    """Default retrieval: sparse token cosine plus controlled tag boost."""
+
+    name = "lexical_tag"
+
+    def score(
+        self,
+        *,
+        query: str,
+        artifact: SkillArtifact,
+        artifact_tags: List[str],
+        query_tags: Set[str],
+    ) -> Dict[str, Any]:
+        base_score = _cosine(_tokenize(query), _tokenize(artifact.retrieval_text()))
+        tag_info = _tag_match_score(artifact_tags, query_tags)
+        return {
+            "score": base_score + tag_info["score"],
+            "base_score": base_score,
+            "tag_score": tag_info["score"],
+            "embedding_score": None,
+            "tag_matches": tag_info["matches"],
+            "backend": self.name,
+        }
+
+
+class HybridEmbeddingRetrievalBackend(RetrievalBackend):
+    """Optional hybrid retriever using the existing embedding provider.
+
+    This is intentionally an in-memory, small-store implementation. It shares
+    the same embedding model as overlap/refactor but uses a separate skill text
+    projection and cache. For the current 50/50 setting the full scan is cheaper
+    and easier to audit than introducing ANN infrastructure.
+    """
+
+    name = "hybrid_embedding"
+
+    def __init__(
+        self,
+        *,
+        embedding_fn: Callable[[str], Optional[List[float]]] | None = None,
+        lexical_weight: float = 0.65,
+        embedding_weight: float = 0.35,
+    ) -> None:
+        self.embedding_fn = embedding_fn
+        self.lexical_weight = float(lexical_weight)
+        self.embedding_weight = float(embedding_weight)
+        self._cache: Dict[str, Optional[List[float]]] = {}
+        self._retriever: Any = None
+
+    def score(
+        self,
+        *,
+        query: str,
+        artifact: SkillArtifact,
+        artifact_tags: List[str],
+        query_tags: Set[str],
+    ) -> Dict[str, Any]:
+        lexical = LexicalTagRetrievalBackend().score(
+            query=query,
+            artifact=artifact,
+            artifact_tags=artifact_tags,
+            query_tags=query_tags,
+        )
+        query_embedding = self._embed(query)
+        artifact_embedding = self._embed(_skill_embedding_text(artifact))
+        embedding_score = _dense_cosine(query_embedding, artifact_embedding)
+        if embedding_score is None:
+            score = float(lexical["score"])
+        else:
+            score = (
+                self.lexical_weight * float(lexical["base_score"])
+                + self.embedding_weight * float(embedding_score)
+                + float(lexical["tag_score"])
+            )
+        return {
+            **lexical,
+            "score": score,
+            "embedding_score": embedding_score,
+            "backend": self.name if embedding_score is not None else "hybrid_embedding_fallback_lexical",
+        }
+
+    def _embed(self, text: str) -> Optional[List[float]]:
+        compact = (text or "").strip()[:8000]
+        if not compact:
+            return None
+        if compact in self._cache:
+            cached = self._cache[compact]
+            return None if cached is None else list(cached)
+        embedding: Optional[List[float]] = None
+        try:
+            if self.embedding_fn is not None:
+                embedding = self.embedding_fn(compact)
+            else:
+                if self._retriever is None:
+                    from app.meta_agent.skills.retrieval import SkillRetriever
+
+                    self._retriever = SkillRetriever()
+                embedding = self._retriever.generate_embedding(compact)
+        except Exception:
+            embedding = None
+        self._cache[compact] = list(embedding) if embedding else None
+        return None if embedding is None else list(embedding)
+
+
 class ArtifactStore:
     def __init__(
         self,
         artifacts: Iterable[SkillArtifact] | None = None,
         *,
         test_results: Iterable[SkillTestResult] | None = None,
+        retrieval_backend: RetrievalBackend | None = None,
     ) -> None:
         coerced_artifacts = [_coerce_artifact(artifact) for artifact in (artifacts or [])]
         self._artifacts: Dict[str, SkillArtifact] = {
@@ -35,7 +161,15 @@ class ArtifactStore:
         self._test_results: List[SkillTestResult] = [
             _coerce_test_result(item) for item in (test_results or [])
         ]
+        self._retrieval_backend = retrieval_backend or LexicalTagRetrievalBackend()
         self.refresh_all_dependencies()
+
+    def set_retrieval_backend(self, backend: RetrievalBackend) -> None:
+        self._retrieval_backend = backend
+
+    @property
+    def retrieval_backend_name(self) -> str:
+        return getattr(self._retrieval_backend, "name", type(self._retrieval_backend).__name__)
 
     def add(self, artifact: SkillArtifact) -> None:
         artifact = _coerce_artifact(artifact)
@@ -44,6 +178,14 @@ class ArtifactStore:
         if existing:
             version_kind = artifact.version_kind()
             self._inherit_long_lived_assets(existing, artifact)
+            if not _artifact_semantically_changed(existing, artifact):
+                existing.dependencies = self._detect_dependencies(existing)
+                if _bundle_changed(existing.bundle, artifact.bundle):
+                    if artifact.bundle.bundle_version <= existing.bundle.bundle_version:
+                        artifact.bundle.bundle_version = existing.bundle.bundle_version + 1
+                    existing.bundle = deepcopy(artifact.bundle)
+                existing.metadata.setdefault("version_kind", existing.version_kind())
+                return
             if artifact.version <= existing.version:
                 artifact.version = existing.version + 1
             artifact.history = list(existing.history)
@@ -75,6 +217,78 @@ class ArtifactStore:
         artifact.bundle.bundle_version = max(int(artifact.bundle.bundle_version or 1), 1)
         artifact.status = artifact.status or "active"
         self._artifacts[artifact.name] = artifact
+
+    def add_pending(self, artifact: SkillArtifact) -> None:
+        """Add a prior-extracted candidate without enabling retrieval.
+
+        Pending artifacts are the implementation of the paper algorithm's
+        forward-prior extraction stage: they remain visible to repository
+        maintenance and overlap/refactor, but are not injected into executor
+        prompts until posterior evidence promotes them.
+        """
+
+        artifact = _coerce_artifact(artifact)
+        existing = self._artifacts.get(artifact.name)
+        if existing is not None and existing.status != "pending":
+            original_name = artifact.name
+            base_name = f"{original_name}__pending"
+            idx = 1
+            candidate_name = f"{base_name}_{idx}"
+            while candidate_name in self._artifacts:
+                idx += 1
+                candidate_name = f"{base_name}_{idx}"
+            artifact.name = candidate_name
+            artifact.metadata["candidate_for_existing_skill"] = original_name
+            if not artifact.bundle.bundle_id or artifact.bundle.bundle_id == f"{original_name}.bundle":
+                artifact.bundle.bundle_id = f"{artifact.name}.bundle"
+        artifact.status = "pending"
+        artifact.metadata["is_pending_skill"] = True
+        artifact.metadata["is_promoted"] = False
+        artifact.metadata["retrieval_disabled_reason"] = "pending_prior_candidate"
+        artifact.metadata.setdefault("promotion_state", "pending")
+        self.add(artifact)
+
+    def pending_artifacts(self) -> List[SkillArtifact]:
+        return [
+            artifact
+            for artifact in self._artifacts.values()
+            if artifact.status == "pending" or artifact.metadata.get("is_pending_skill")
+        ]
+
+    def promote_pending(
+        self,
+        name: str,
+        *,
+        reason: str = "posterior_overlap_evidence",
+        refactor_group_id: str = "",
+    ) -> bool:
+        artifact = self._artifacts.get(name)
+        if artifact is None:
+            return False
+        if artifact.status != "pending" and not artifact.metadata.get("is_pending_skill"):
+            return False
+        artifact.status = "active"
+        artifact.metadata["is_pending_skill"] = False
+        artifact.metadata["is_promoted"] = True
+        artifact.metadata["promotion_state"] = "promoted"
+        artifact.metadata["promotion_reason"] = reason
+        if refactor_group_id:
+            artifact.metadata["promoted_by_refactor_group_id"] = refactor_group_id
+        artifact.metadata.pop("retrieval_disabled_reason", None)
+        return True
+
+    def revoke_unpromoted_pending(self, *, reason: str = "pending_not_reused") -> List[str]:
+        revoked: List[str] = []
+        for artifact in list(self._artifacts.values()):
+            if artifact.status != "pending" and not artifact.metadata.get("is_pending_skill"):
+                continue
+            if artifact.metadata.get("is_promoted"):
+                continue
+            artifact.status = "archived"
+            artifact.metadata["archived_reason"] = reason
+            artifact.metadata["promotion_state"] = "revoked"
+            revoked.append(artifact.name)
+        return sorted(revoked)
 
     def _inherit_long_lived_assets(self, existing: SkillArtifact, incoming: SkillArtifact) -> None:
         """Preserve durable assets when an extractor emits a same-name update.
@@ -199,6 +413,7 @@ class ArtifactStore:
         query: str,
         top_k: int = 5,
         *,
+        min_score: float = 0.0,
         predicate: Callable[[SkillArtifact], bool] | None = None,
         rerank_key: Callable[[SkillArtifact], tuple] | None = None,
         debug_context: Dict[str, Any] | None = None,
@@ -206,6 +421,7 @@ class ArtifactStore:
         audit = self.retrieve_audit(
             query,
             top_k=top_k,
+            min_score=min_score,
             predicate=predicate,
             rerank_key=rerank_key,
             debug_context=debug_context,
@@ -221,6 +437,7 @@ class ArtifactStore:
         query: str,
         top_k: int = 5,
         *,
+        min_score: float = 0.0,
         predicate: Callable[[SkillArtifact], bool] | None = None,
         rerank_key: Callable[[SkillArtifact], tuple] | None = None,
         debug_context: Dict[str, Any] | None = None,
@@ -230,15 +447,18 @@ class ArtifactStore:
             return {
                 "query": query,
                 "top_k": top_k,
+                "min_score": float(min_score),
                 "context": context,
                 "store_summary": {"n_total": 0, "n_active": 0, "n_stale": 0, "n_disabled": 0},
                 "candidates": [],
                 "selected": [],
             }
         q = _tokenize(query)
+        query_tags = _query_tags(query, context)
         candidates: List[Dict[str, Any]] = []
         scored: List[tuple[float, tuple, SkillArtifact, Dict[str, Any]]] = []
         for artifact in self._artifacts.values():
+            artifact_tags = _artifact_tags(artifact)
             row: Dict[str, Any] = {
                 "name": artifact.name,
                 "version": artifact.version,
@@ -249,15 +469,17 @@ class ArtifactStore:
                 "dependencies": list(artifact.dependencies or []),
                 "retrieval_enabled": artifact.retrieval_enabled(),
                 "description": artifact.description,
+                "tags": artifact_tags,
                 "metadata": {
                     "intent_keywords": list(artifact.metadata.get("intent_keywords") or []),
                     "allowed_tools": list(artifact.metadata.get("allowed_tools") or []),
+                    "domains": list(artifact.metadata.get("domains") or []),
                     "source_task_ids": list(artifact.metadata.get("source_task_ids") or []),
                     "source": artifact.metadata.get("source"),
                 },
             }
             if not artifact.retrieval_enabled():
-                row.update({"predicate_passed": False, "filter_reason": "retrieval_disabled", "score": 0.0, "rerank": []})
+                row.update({"predicate_passed": False, "filter_reason": "retrieval_disabled", "score": 0.0, "base_score": 0.0, "tag_score": 0.0, "tag_matches": [], "rerank": []})
                 candidates.append(row)
                 continue
             predicate_passed = True
@@ -269,10 +491,20 @@ class ArtifactStore:
                     predicate_passed = False
                     filter_reason = f"predicate_error:{type(exc).__name__}"
             if not predicate_passed:
-                row.update({"predicate_passed": False, "filter_reason": filter_reason or "predicate_false", "score": 0.0, "rerank": []})
+                row.update({"predicate_passed": False, "filter_reason": filter_reason or "predicate_false", "score": 0.0, "base_score": 0.0, "tag_score": 0.0, "tag_matches": [], "rerank": []})
                 candidates.append(row)
                 continue
-            score = _cosine(q, _tokenize(artifact.retrieval_text()))
+            score_info = self._retrieval_backend.score(
+                query=query,
+                artifact=artifact,
+                artifact_tags=artifact_tags,
+                query_tags=query_tags,
+            )
+            base_score = float(score_info.get("base_score") or 0.0)
+            tag_score = float(score_info.get("tag_score") or 0.0)
+            embedding_score = score_info.get("embedding_score")
+            tag_matches = list(score_info.get("tag_matches") or [])
+            score = float(score_info.get("score") or 0.0)
             try:
                 rerank = rerank_key(artifact) if rerank_key is not None else ()
             except Exception as exc:
@@ -283,7 +515,13 @@ class ArtifactStore:
                     "predicate_passed": True,
                     "filter_reason": "",
                     "score": round(float(score), 6),
+                    "base_score": round(float(base_score), 6),
+                    "tag_score": round(float(tag_score), 6),
+                    "embedding_score": None if embedding_score is None else round(float(embedding_score), 6),
+                    "tag_matches": tag_matches,
+                    "query_tags": sorted(query_tags),
                     "rerank": list(rerank),
+                    "retrieval_backend": str(score_info.get("backend") or self.retrieval_backend_name),
                     "retrieval_text_chars": len(artifact.retrieval_text()),
                 }
             )
@@ -294,7 +532,7 @@ class ArtifactStore:
         selected_names = set()
         for rank, (score, rerank, artifact, row) in enumerate(scored, start=1):
             row["rank"] = rank
-            selected = rank <= top_k and score > 0.0
+            selected = rank <= top_k and score >= float(min_score)
             row["selected"] = selected
             if selected:
                 selected_names.add(artifact.name)
@@ -303,7 +541,12 @@ class ArtifactStore:
                         "name": artifact.name,
                         "rank": rank,
                         "score": round(float(score), 6),
+                        "base_score": round(float(row.get("base_score", 0.0)), 6),
+                        "tag_score": round(float(row.get("tag_score", 0.0)), 6),
+                        "embedding_score": row.get("embedding_score"),
+                        "tag_matches": list(row.get("tag_matches") or []),
                         "rerank": list(rerank),
+                        "retrieval_backend": row.get("retrieval_backend") or self.retrieval_backend_name,
                     }
                 )
         for row in candidates:
@@ -312,7 +555,9 @@ class ArtifactStore:
         return {
             "query": query,
             "top_k": top_k,
+            "min_score": float(min_score),
             "context": context,
+            "retrieval_backend": self.retrieval_backend_name,
             "store_summary": {
                 "n_total": len(self._artifacts),
                 "n_active": sum(1 for artifact in self._artifacts.values() if artifact.status == "active"),
@@ -465,6 +710,127 @@ def _cosine(a: Dict[str, float], b: Dict[str, float]) -> float:
     return dot / (na * nb)
 
 
+def _dense_cosine(a: Optional[List[float]], b: Optional[List[float]]) -> Optional[float]:
+    if not a or not b or len(a) != len(b):
+        return None
+    dot = 0.0
+    norm_a = 0.0
+    norm_b = 0.0
+    for x, y in zip(a, b):
+        dot += float(x) * float(y)
+        norm_a += float(x) * float(x)
+        norm_b += float(y) * float(y)
+    if norm_a <= 0.0 or norm_b <= 0.0:
+        return None
+    return dot / math.sqrt(norm_a * norm_b)
+
+
+def _skill_embedding_text(artifact: SkillArtifact) -> str:
+    metadata = artifact.metadata or {}
+    parts = [
+        artifact.name,
+        artifact.kind,
+        artifact.description,
+        artifact.interface.summary,
+        artifact.interface.usage,
+        artifact.body[:3000],
+        " ".join(str(item) for item in artifact.tags or []),
+        " ".join(str(item) for item in metadata.get("domains") or []),
+        " ".join(str(item) for item in metadata.get("allowed_tools") or []),
+        " ".join(str(item) for item in metadata.get("intent_keywords") or []),
+    ]
+    return "\n".join(part for part in parts if str(part).strip())
+
+
+_TAG_PREFIXES = {"domain", "tool", "intent"}
+_TAG_WEIGHTS = {"domain": 0.08, "tool": 0.12, "intent": 0.04}
+_MAX_TAG_BOOST = 0.28
+
+
+def _normalize_tag(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if not text or ":" not in text:
+        return ""
+    prefix, value = text.split(":", 1)
+    prefix = prefix.strip().lower()
+    value = value.strip()
+    if prefix not in _TAG_PREFIXES or not value:
+        return ""
+    value = re.sub(r"\s+", "_", value)
+    if prefix == "intent":
+        value = re.sub(r"[^A-Za-z0-9_./-]+", "_", value).strip("_").lower()
+    else:
+        value = re.sub(r"[^A-Za-z0-9_./-]+", "_", value).strip("_")
+    return f"{prefix}:{value}" if value else ""
+
+
+def _normalize_tags(raw_tags: Iterable[Any]) -> List[str]:
+    out: List[str] = []
+    seen: Set[str] = set()
+    for raw in raw_tags or []:
+        tag = _normalize_tag(raw)
+        if tag and tag not in seen:
+            seen.add(tag)
+            out.append(tag)
+    return out
+
+
+def _intent_tag_value(raw: Any) -> str:
+    value = str(raw or "").strip().lower()
+    if not value:
+        return ""
+    value = re.sub(r"\s+", "_", value)
+    value = re.sub(r"[^a-z0-9_./-]+", "_", value).strip("_")
+    return value
+
+
+def _artifact_tags(artifact: SkillArtifact) -> List[str]:
+    tags: List[str] = list(artifact.tags or [])
+    metadata = artifact.metadata or {}
+    tags.extend(f"domain:{item}" for item in metadata.get("domains") or [])
+    tags.extend(f"tool:{item}" for item in metadata.get("allowed_tools") or [])
+    tool = str(metadata.get("tool") or "").strip()
+    if tool:
+        tags.append(f"tool:{tool}")
+    tags.extend(f"intent:{_intent_tag_value(item)}" for item in metadata.get("intent_keywords") or [])
+    return _normalize_tags(tags)
+
+
+def _query_tags(query: str, context: Dict[str, Any]) -> Set[str]:
+    raw_tags: List[Any] = []
+    raw_tags.extend(context.get("query_tags") or [])
+    raw_tags.extend(context.get("tags") or [])
+    for domain in context.get("domains") or context.get("task_domains") or []:
+        raw_tags.append(f"domain:{domain}")
+    for tool in context.get("runtime_tools") or context.get("allowed_tools") or context.get("tools") or []:
+        raw_tags.append(f"tool:{tool}")
+    for intent in context.get("intent_keywords") or context.get("intents") or []:
+        raw_tags.append(f"intent:{intent}")
+    lowered = (query or "").lower()
+    for raw in re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", query or ""):
+        if "_" in raw:
+            raw_tags.append(f"tool:{raw}")
+        value = _intent_tag_value(raw)
+        if value:
+            raw_tags.append(f"intent:{value}")
+    for marker in ("reuse id", "reuse ids", "exact id", "identifier"):
+        if marker in lowered:
+            raw_tags.append("intent:reuse_id")
+    for marker in ("schema", "argument", "parameter"):
+        if marker in lowered:
+            raw_tags.append("intent:schema")
+    return set(_normalize_tags(raw_tags))
+
+
+def _tag_match_score(artifact_tags: List[str], query_tags: Set[str]) -> Dict[str, Any]:
+    matches = sorted(set(artifact_tags) & set(query_tags))
+    score = 0.0
+    for tag in matches:
+        prefix = tag.split(":", 1)[0]
+        score += _TAG_WEIGHTS.get(prefix, 0.0)
+    return {"score": min(score, _MAX_TAG_BOOST), "matches": matches}
+
+
 def _artifact_tool_schema(artifact: SkillArtifact) -> Dict[str, object]:
     return {
         "type": "function",
@@ -490,7 +856,54 @@ def _artifact_snapshot(artifact: SkillArtifact) -> Dict[str, Any]:
     snapshot.pop("version_id", None)
     snapshot.pop("version_kind", None)
     snapshot.pop("dependency_versions", None)
+    # History snapshots must not recursively embed older history chains.
+    # Otherwise every same-name update nests the full prior ancestry again,
+    # causing superlinear memory and JSON growth.
+    snapshot["history"] = []
     return snapshot
+
+
+def _artifact_semantic_projection(artifact: SkillArtifact) -> Dict[str, Any]:
+    snapshot = _artifact_snapshot(artifact)
+    snapshot.pop("version", None)
+    snapshot.pop("usage_count", None)
+    snapshot.pop("success_count", None)
+    snapshot.pop("history", None)
+    snapshot.pop("stale", None)
+    metadata = dict(snapshot.get("metadata") or {})
+    for key in (
+        "version_kind",
+        "bundle_generated_at",
+        "bundle_inherited_from_version",
+        "bundle_input_signature",
+        "bundle_split_count",
+        "bundle_trimmed",
+        "last_bundle_test_signature",
+        "last_bundle_test_result_id",
+        "last_bundle_test_cached",
+        "semantic_unchanged_from_version",
+    ):
+        metadata.pop(key, None)
+    snapshot["metadata"] = metadata
+    bundle = dict(snapshot.get("bundle") or {})
+    bundle.pop("bundle_version", None)
+    fixtures = dict(bundle.get("fixtures") or {})
+    for key in (
+        "bundle_generated_at",
+        "bundle_input_signature",
+        "bundle_split_count",
+        "bundle_trimmed",
+        "last_bundle_test_signature",
+        "last_bundle_test_result_id",
+    ):
+        fixtures.pop(key, None)
+    bundle["fixtures"] = fixtures
+    snapshot["bundle"] = bundle
+    return snapshot
+
+
+def _artifact_semantically_changed(left: SkillArtifact, right: SkillArtifact) -> bool:
+    return _artifact_semantic_projection(left) != _artifact_semantic_projection(right)
 
 
 def _bundle_changed(left: SkillBundle, right: SkillBundle) -> bool:
@@ -519,6 +932,7 @@ def _evidence_empty(evidence: SkillEvidence) -> bool:
 
 def _coerce_artifact(value: SkillArtifact | Dict[str, Any] | None) -> SkillArtifact:
     if isinstance(value, SkillArtifact):
+        value.tags = _artifact_tags(value)
         if not isinstance(value.interface, SkillInterface):
             value.interface = _coerce_interface(value.interface)
         if not isinstance(value.bundle, SkillBundle):
@@ -550,6 +964,7 @@ def _coerce_artifact(value: SkillArtifact | Dict[str, Any] | None) -> SkillArtif
     artifact.status = str(item.get("status") or artifact.status or "active")
     artifact.stale = bool(item.get("stale", artifact.stale))
     artifact.metadata = dict(item.get("metadata") or artifact.metadata or {})
+    artifact.tags = _artifact_tags(artifact)
     if not artifact.bundle.bundle_id:
         artifact.bundle.bundle_id = f"{artifact.name}.bundle"
     return artifact

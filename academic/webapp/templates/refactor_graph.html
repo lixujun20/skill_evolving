@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Refactor Graph</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="refactor-graph-page">
+<div id="refactor-app" class="rg-app">
+  <header class="rg-header">
+    <nav class="top-nav">
+      <a href="/" class="nav-link">Skill Explorer</a>
+      <a href="/maintenance" class="nav-link">Maintenance Lab</a>
+      <a href="/refactor-graph" class="nav-link active">Refactor Graph</a>
+      <a href="/maintenance-docs" class="nav-link">Maintenance Docs</a>
+    </nav>
+    <div>
+      <h1>Refactor Graph</h1>
+      <p>Task-scoped refactor attempts, semantic frame changes, and skill diffs.</p>
+    </div>
+  </header>
+
+  <main class="rg-shell">
+    <aside class="rg-rail">
+      <div class="rg-rail-head">
+        <label for="refactor-search">Experiments</label>
+        <input id="refactor-search" placeholder="Search experiments..." autocomplete="off">
+      </div>
+      <ul id="refactor-experiment-list" class="rg-experiment-list"></ul>
+    </aside>
+
+    <section class="rg-workspace">
+      <div class="rg-toolbar">
+        <div class="rg-mode" aria-label="Graph mode">
+          <button id="refactor-mode-macro" class="active" type="button">
+            <strong>Macro</strong>
+            <span>skill graph</span>
+          </button>
+          <button id="refactor-mode-micro" type="button">
+            <strong>Micro</strong>
+            <span>segment graph</span>
+          </button>
+        </div>
+        <div class="rg-toolbar-main">
+          <div class="rg-title-block">
+            <span id="refactor-mode-help">Macro: skill-level overlap and change impact.</span>
+            <h2 id="refactor-title">Select an experiment</h2>
+          </div>
+          <div id="refactor-stats" class="rg-stats"></div>
+        </div>
+        <div class="rg-tools">
+          <label><input id="refactor-edge-labels" type="checkbox" checked> Edge labels</label>
+          <label><input id="refactor-fade-edges" type="checkbox" checked> Fade unrelated</label>
+          <select id="refactor-skill-filter" aria-label="Filter related skill">
+            <option value="">All skills</option>
+          </select>
+        </div>
+        <div id="refactor-loading" class="rg-loading" hidden></div>
+        <div id="refactor-error" class="rg-error" hidden></div>
+      </div>
+
+      <div class="rg-main">
+        <aside class="rg-task-panel">
+          <div class="rg-panel-head">
+            <span>Task Refactor Timeline</span>
+            <small id="refactor-frame-count">0 frames</small>
+          </div>
+          <div id="refactor-task-timeline" class="rg-task-timeline">
+            <div class="rg-empty">Select an experiment to inspect task-level refactors.</div>
+          </div>
+        </aside>
+
+        <section class="rg-center">
+          <section id="refactor-frame-change" class="rg-frame-change">
+            <div class="rg-empty">Frame change summary will appear here.</div>
+          </section>
+          <section class="rg-frame-controls">
+            <button id="refactor-prev" type="button">Prev</button>
+            <input id="refactor-frame" type="range" min="0" max="0" value="0">
+            <button id="refactor-next" type="button">Next</button>
+            <span id="refactor-frame-label">No frame selected</span>
+          </section>
+          <section class="rg-graph-pane">
+            <svg id="refactor-svg" role="img" aria-label="Refactor graph"></svg>
+            <div id="refactor-graph-empty" class="rg-graph-empty">Select an experiment to render the graph.</div>
+          </section>
+        </section>
+
+        <aside class="rg-inspector">
+          <div id="refactor-inspector-content">
+            <div class="rg-empty">Select a frame, node, edge, or diff.</div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <div id="refactor-diff-panel" class="rg-diff-panel" hidden>
+    <div class="rg-diff-backdrop" data-close-diff></div>
+    <section class="rg-diff-dialog" role="dialog" aria-modal="true" aria-labelledby="refactor-diff-title">
+      <header>
+        <div>
+          <span id="refactor-diff-kicker">Skill Diff</span>
+          <h2 id="refactor-diff-title">Diff</h2>
+        </div>
+        <button id="refactor-diff-close" type="button" aria-label="Close diff panel">Close</button>
+      </header>
+      <div id="refactor-diff-content" class="rg-diff-content"></div>
+    </section>
+  </div>
+</div>
+<script src="/static/refactor_graph.js"></script>
+</body>
+</html>

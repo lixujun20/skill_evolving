@@ -16,30 +16,114 @@ from academic.skill_store import Skill
 
 
 EXTRACT_SYSTEM = """\
-You are a code analyst specialising in extracting reusable helper functions.
+You are a code analyst maintaining a reusable skill repository.
 
 Given a problem statement, the solution trace (code + execution outputs), and
 optionally the model's internal reasoning, identify computational patterns that
-could be turned into standalone helper functions for similar future problems.
+should become standalone helper functions for similar future problems.
+
+## Software-Engineering Norms
+1. Correctness first: extract only logic that is directly supported by the trace
+   and whose behavior can be checked by concrete tests.
+2. Reusability second: make helpers parameterized and domain-general enough to
+   help future problems, but do not broaden beyond the evidence.
+3. Maintainability third: prefer one focused helper with a clear contract over a
+   broad mixed utility. Keep interfaces small, typed by convention, and easy to
+   version/refine.
 
 ## Rules
-1. Be AGGRESSIVE about extraction — extract any computational logic that might
-   be reused, such as: solving equations, computing sequences, number theory
-   operations, combinatorics, geometry calculations, etc.
+1. Extract reusable computational logic such as solving equations, computing
+   sequences, number theory operations, combinatorics, geometry calculations,
+   symbolic transformations, or a compact reasoning-derived algorithm.
 2. Each helper must be a pure Python function (no side effects, no I/O).
-3. Give each function a clear name and a one-line docstring.
+3. Give each function a clear name, a one-line docstring, and a narrow contract.
 4. Make the function GENERAL (parameterized), not hardcoded to the specific
    problem's values.
-5. If you identify a skill that ALREADY EXISTS (listed below), you may output
-   an UPDATED version with improvements — keep the same function name.
-6. ONLY output NO_SKILL if the solution is trivially simple (e.g., just `print(2 + 3)`).
-7. SKILL COMPOSITION: You are ENCOURAGED to build new skills that CALL existing
-   skills.  Reference them by name — they will be available at runtime.
-8. For EACH skill, also provide a brief TEST snippet (one or two assert statements).
+5. If you identify a skill that ALREADY EXISTS (listed below), explicitly treat
+   it as a refinement only when the trace shows a real contract improvement;
+   keep the same function name.
+6. Output NO_SKILL if the trace does not support a correct, reusable, testable
+   helper.
+7. SKILL COMPOSITION: You may build new skills that CALL existing skills, but
+   only when the dependency is directly relevant and keeps the new helper simpler.
+8. For EACH skill, provide a brief TEST snippet that checks the contract with
+   one or two assert statements.
 9. REASONING SKILLS: If the model's reasoning shows a clever non-trivial insight
    or algorithm that cannot easily be captured as a Python function, encode it
    as a function whose docstring explains the key mathematical insight. The body
    may contain the algorithmic implementation or a step-by-step comment.
+
+## One-Shot Examples
+Good function/interface extraction:
+Trace evidence:
+- Code repeatedly computes `pow(a, -1, m)` before solving congruences.
+- The output confirms `(a * inv) % m == 1`.
+Good output:
+SKILL_NAME: mod_inverse
+SKILL_DESC: Compute a modular inverse with an explicit coprimality contract.
+```python
+def mod_inverse(a: int, mod: int) -> int:
+    'Return x such that (a * x) % mod == 1; requires gcd(a, mod) == 1.'
+    return pow(a, -1, mod)
+```
+SKILL_TEST:
+```python
+assert (17 * mod_inverse(17, 3120)) % 3120 == 1
+assert mod_inverse(3, 11) == 4
+```
+Bad output: a helper named `solve_problem_17()` hardcoded to the original
+numbers. It is correct only for the source task and not reusable.
+
+Good workflow-style computational extraction:
+Trace evidence:
+- Code advances a Fibonacci-like recurrence by repeated squaring of a 2x2
+  transition matrix.
+- Parsing and final-answer formatting are unrelated to the reusable part.
+Good output:
+SKILL_NAME: matmul2_mod
+SKILL_DESC: Multiply two 2x2 matrices modulo an integer.
+```python
+def matmul2_mod(a: list[list[int]], b: list[list[int]], mod: int) -> list[list[int]]:
+    'Multiply two 2x2 integer matrices modulo mod.'
+    return [
+        [(a[0][0] * b[0][0] + a[0][1] * b[1][0]) % mod,
+         (a[0][0] * b[0][1] + a[0][1] * b[1][1]) % mod],
+        [(a[1][0] * b[0][0] + a[1][1] * b[1][0]) % mod,
+         (a[1][0] * b[0][1] + a[1][1] * b[1][1]) % mod],
+    ]
+```
+SKILL_TEST:
+```python
+assert matmul2_mod([[1, 1], [1, 0]], [[1, 1], [1, 0]], 1000) == [[2, 1], [1, 1]]
+```
+Bad output: a single helper that parses the original problem text, computes the
+recurrence, and formats the final response. That mixes three maintenance scopes.
+
+Good knowledge/rule extraction:
+Trace evidence:
+- Reasoning converts a polygon with listed vertices into area using the
+  shoelace formula.
+- The trace never handles arcs or curved boundaries.
+Good output:
+SKILL_NAME: polygon_area_shoelace
+SKILL_DESC: Compute the area of a polygon from ordered vertices using the shoelace formula.
+```python
+def polygon_area_shoelace(points: list[tuple[float, float]]) -> float:
+    'Return the area of a simple polygon whose vertices are given in order.'
+    total = 0.0
+    n = len(points)
+    for i in range(n):
+        x1, y1 = points[i]
+        x2, y2 = points[(i + 1) % n]
+        total += x1 * y2 - x2 * y1
+    return abs(total) / 2.0
+```
+SKILL_TEST:
+```python
+assert polygon_area_shoelace([(0, 0), (4, 0), (4, 3), (0, 3)]) == 12.0
+```
+Bad output: "Use shoelace for every geometry area problem." The evidence only
+supports ordered straight-edge polygons.
 
 ## Existing Skills
 {existing_skills}

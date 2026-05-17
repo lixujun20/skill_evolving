@@ -33,21 +33,31 @@ class DebugEventSink:
 
     base_context: Dict[str, Any] = field(default_factory=dict)
     jsonl_path: str = ""
+    collect_events: bool = True
     events: List[Dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
     _counter_ref: Dict[str, int] = field(default_factory=lambda: {"value": 0})
 
     @classmethod
-    def from_env(cls, *, base_context: Dict[str, Any] | None = None) -> "DebugEventSink":
+    def from_env(
+        cls,
+        *,
+        base_context: Dict[str, Any] | None = None,
+        collect_events: bool | None = None,
+    ) -> "DebugEventSink":
+        if collect_events is None:
+            collect_events = os.getenv("SKILL_MAINTENANCE_KEEP_EVENTS", "").strip().lower() in {"1", "true", "yes"}
         return cls(
             base_context=dict(base_context or {}),
             jsonl_path=os.getenv("SKILL_MAINTENANCE_DEBUG_LOG", "").strip(),
+            collect_events=bool(collect_events),
         )
 
     def child(self, **context: Any) -> "DebugEventSink":
         return DebugEventSink(
             base_context={**self.base_context, **context},
             jsonl_path=self.jsonl_path,
+            collect_events=self.collect_events,
             events=self.events,
             _counter=self._counter,
             _counter_ref=self._counter_ref,
@@ -66,7 +76,8 @@ class DebugEventSink:
             **_jsonable(self.base_context),
             **_jsonable(payload),
         }
-        self.events.append(event)
+        if self.collect_events:
+            self.events.append(event)
         if self.jsonl_path:
             path = Path(self.jsonl_path)
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -21,6 +21,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     _default_output_path,
     _load_saved_details,
     _mentioned_skill_names,
+    _micro_write_target_names,
     _mark_prior_artifacts_pending,
     _normalize_role_feedback_memory,
     _pending_skill_summary,
@@ -250,6 +251,87 @@ async def test_locked_micro_maintenance_serializes_same_target(monkeypatch) -> N
     )
 
     assert max_active_by_skill["skill_a"] == 1
+
+
+async def test_locked_micro_uses_credit_write_targets_not_shared_candidates(monkeypatch) -> None:
+    store = ArtifactStore(
+        [SkillArtifact(name="shared_candidate", kind="rule_card", description="d", body="b")]
+        + [
+            SkillArtifact(name=f"skill_{idx}", kind="rule_card", description="d", body="b")
+            for idx in range(4)
+        ]
+    )
+    locks = SkillMaintenanceLockManager(micro_concurrency=4)
+    active = 0
+    max_active = 0
+    locked_targets: List[List[str]] = []
+
+    async def fake_micro(**kwargs):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.03)
+        active -= 1
+        return {
+            "phase": "micro",
+            "task_index": kwargs["task_index"],
+            "maintenance_targets": _micro_write_target_names(
+                task_credit_events=kwargs["task_credit_events"],
+                credit_bundle_cases=kwargs["credit_bundle_cases"],
+                relevant_skill_names=kwargs["relevant_skill_names"],
+            ),
+            "relevant_skill_names": list(kwargs["relevant_skill_names"]),
+            "maintenance_test_results": [],
+            "refine_decisions": [],
+        }
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.related.experiment._run_micro_maintenance", fake_micro)
+
+    jobs = []
+    for idx in range(4):
+        relevant = ["shared_candidate", f"skill_{idx}"]
+        credit_cases = [{"skill_name": f"skill_{idx}", "case_id": f"case_{idx}", "polarity": "negative"}]
+        targets = _micro_write_target_names(
+            task_credit_events=[],
+            credit_bundle_cases=credit_cases,
+            relevant_skill_names=relevant,
+        )
+        locked_targets.append(targets)
+        jobs.append(
+            _run_locked_micro_maintenance(
+                lock_manager=locks,
+                store=store,
+                target_names=targets,
+                detail={"task_id": f"task_{idx}"},
+                task_credit_events=[],
+                credit_bundle_cases=credit_cases,
+                relevant_skill_names=relevant,
+                tools=[],
+                llm_config="test",
+                model_name=None,
+                execution_backend="official",
+                prompt_style="native",
+                tool_api_style="auto",
+                max_steps_per_turn=1,
+                max_task_seconds=1.0,
+                temperature=None,
+                synthetic_continue=False,
+                explicit_skill_tool=False,
+                round_index=0,
+                task_index=idx,
+                tag="narrow_lock_test",
+                credit_context_by_skill={},
+            )
+        )
+
+    reports = await asyncio.gather(*jobs)
+
+    assert locked_targets == [[f"skill_{idx}"] for idx in range(4)]
+    assert max_active == 4
+    assert all("shared_candidate" in report["relevant_skill_names"] for report in reports)
+    assert {tuple(report["locked_targets"]) for report in reports} == {
+        (f"skill_{idx}",) for idx in range(4)
+    }
 
 
 async def test_locked_micro_marks_target_stale_when_reference_changes(monkeypatch) -> None:

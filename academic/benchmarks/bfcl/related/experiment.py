@@ -361,6 +361,26 @@ def _strong_credit_targets(events: Sequence[Dict[str, Any]]) -> List[str]:
     return _unique_ordered(targets)
 
 
+def _micro_write_target_names(
+    *,
+    task_credit_events: Sequence[Dict[str, Any]],
+    credit_bundle_cases: Sequence[Dict[str, Any]],
+    relevant_skill_names: Sequence[str],
+) -> List[str]:
+    relevant = {str(name or "").strip() for name in relevant_skill_names if str(name or "").strip()}
+    changed_case_targets = _unique_ordered(
+        str(row.get("skill_name") or "")
+        for row in credit_bundle_cases
+        if isinstance(row, dict)
+    )
+    strong_targets = [
+        name
+        for name in _strong_credit_targets(task_credit_events)
+        if not relevant or name in relevant
+    ]
+    return _unique_ordered([*changed_case_targets, *strong_targets])
+
+
 def _credit_event_records(
     *,
     detail: Dict[str, Any],
@@ -2480,17 +2500,17 @@ async def _run_micro_maintenance(
     lock_manager: SkillMaintenanceLockManager | None = None,
 ) -> Dict[str, Any]:
     token_start = maintenance_token_event_count()
-    changed_case_targets = _unique_ordered(str(row.get("skill_name") or "") for row in credit_bundle_cases)
-    strong_targets = [
-        name for name in _strong_credit_targets(task_credit_events)
-        if name in set(relevant_skill_names)
-    ]
-    targets = _unique_ordered([*changed_case_targets, *strong_targets])
+    targets = _micro_write_target_names(
+        task_credit_events=task_credit_events,
+        credit_bundle_cases=credit_bundle_cases,
+        relevant_skill_names=relevant_skill_names,
+    )
     report: Dict[str, Any] = {
         "phase": "micro",
         "task_id": detail.get("task_id"),
         "task_index": task_index,
         "maintenance_targets": targets,
+        "relevant_skill_names": _unique_ordered(relevant_skill_names),
         "maintenance_test_results": [],
         "refine_decisions": [],
         "static_dependency_validation": [],
@@ -3155,11 +3175,17 @@ async def _run_related_evolve_experiment(
                 )
                 current_credit_context = _credit_context_by_skill(credit_events)
                 micro_targets = _unique_ordered([*candidate_names, *_strong_credit_targets(recent_credit_events)])
+                micro_write_targets = _micro_write_target_names(
+                    task_credit_events=recent_credit_events,
+                    credit_bundle_cases=credit_bundle_cases,
+                    relevant_skill_names=micro_targets,
+                )
                 micro_report: Dict[str, Any] = {
                     "phase": "micro",
                     "task_id": task.task_id,
                     "task_index": task_index,
-                    "maintenance_targets": micro_targets,
+                    "maintenance_targets": micro_write_targets,
+                    "relevant_skill_names": micro_targets,
                     "maintenance_test_results": [],
                     "refine_decisions": [],
                     "overlap_refactor": {"attempts": [], "refactor_segment_coverage": []},
@@ -3170,7 +3196,7 @@ async def _run_related_evolve_experiment(
                         copy.deepcopy(row) for row in credit_bundle_cases if row.get("polarity") == "negative"
                     ],
                 }
-                if micro_targets and ((task_index + 1) % micro_maintenance_step == 0):
+                if micro_write_targets and ((task_index + 1) % micro_maintenance_step == 0):
                     micro_kwargs = {
                         "detail": detail,
                         "task_credit_events": recent_credit_events,
@@ -3193,12 +3219,12 @@ async def _run_related_evolve_experiment(
                         "credit_context_by_skill": current_credit_context,
                     }
                     if train_window_concurrency > 1 and micro_concurrency > 1:
-                        pending_micro_jobs.append((task_index, list(micro_targets), micro_kwargs))
+                        pending_micro_jobs.append((task_index, list(micro_write_targets), micro_kwargs))
                     else:
                         micro_report = await _run_locked_micro_maintenance(
                             lock_manager=maintenance_locks,
                             store=store,
-                            target_names=micro_targets,
+                            target_names=micro_write_targets,
                             **micro_kwargs,
                         )
                         micro_report.update({"phase": "micro", "task_id": task.task_id, "task_index": task_index})

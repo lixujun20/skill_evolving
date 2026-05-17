@@ -1380,6 +1380,95 @@ def _build_candidate_group_feedback_rows(
     return rows[:24]
 
 
+def _candidate_group_total_usage(row: Dict[str, Any]) -> int:
+    return sum(
+        int(member.get("retrieved_count") or 0)
+        + int(member.get("injected_count") or 0)
+        + int(member.get("used_count") or 0)
+        for member in (row.get("members") or [])
+        if isinstance(member, dict)
+    )
+
+
+def _candidate_group_member_names(row: Dict[str, Any]) -> List[str]:
+    return _unique_ordered(
+        str(member.get("skill_name") or "")
+        for member in (row.get("members") or [])
+        if isinstance(member, dict)
+    )
+
+
+def _select_macro_candidate_group_feedback_rows(
+    *,
+    raw_rows: Sequence[Dict[str, Any]],
+    state: Dict[str, Dict[str, Any]],
+    macro_index: int,
+    min_usage: int,
+    no_usage_patience: int,
+) -> List[Dict[str, Any]]:
+    selected: List[Dict[str, Any]] = []
+    seen_groups = {str(row.get("candidate_group_id") or "").strip() for row in raw_rows if isinstance(row, dict)}
+    for row in raw_rows:
+        if not isinstance(row, dict):
+            continue
+        group_id = str(row.get("candidate_group_id") or "").strip()
+        if not group_id:
+            continue
+        usage = _candidate_group_total_usage(row)
+        group_state = state.setdefault(
+            group_id,
+            {
+                "candidate_group_id": group_id,
+                "consecutive_no_usage_macros": 0,
+                "last_feedback_macro_index": None,
+                "last_no_usage_feedback_macro_index": None,
+                "n_usage_feedback": 0,
+                "n_no_usage_feedback": 0,
+            },
+        )
+        group_state["last_seen_macro_index"] = macro_index
+        group_state["last_usage_count"] = usage
+        group_state["members"] = _candidate_group_member_names(row)
+        if usage >= max(1, int(min_usage or 1)):
+            group_state["consecutive_no_usage_macros"] = 0
+            group_state["n_usage_feedback"] = int(group_state.get("n_usage_feedback") or 0) + 1
+            group_state["last_feedback_macro_index"] = macro_index
+            selected.append(
+                {
+                    **copy.deepcopy(row),
+                    "feedback_reason": "sufficient_macro_usage",
+                    "macro_usage_count": usage,
+                    "macro_index": macro_index,
+                }
+            )
+            continue
+        group_state["consecutive_no_usage_macros"] = int(group_state.get("consecutive_no_usage_macros") or 0) + 1
+        if int(group_state["consecutive_no_usage_macros"]) >= max(1, int(no_usage_patience or 1)):
+            if group_state.get("last_no_usage_feedback_macro_index") != macro_index:
+                group_state["n_no_usage_feedback"] = int(group_state.get("n_no_usage_feedback") or 0) + 1
+                group_state["last_no_usage_feedback_macro_index"] = macro_index
+                group_state["last_feedback_macro_index"] = macro_index
+                selected.append(
+                    {
+                        **copy.deepcopy(row),
+                        "winner": "",
+                        "losers": _candidate_group_member_names(row),
+                        "feedback_reason": "low_reuse_after_consecutive_macros",
+                        "macro_usage_count": usage,
+                        "consecutive_no_usage_macros": int(group_state["consecutive_no_usage_macros"]),
+                        "macro_index": macro_index,
+                        "comparison_summary": (
+                            "No candidate in this group was retrieved, injected, or used for several macro windows; "
+                            "treat this as weak reusability evidence for the extractor."
+                        ),
+                    }
+                )
+    for group_id, group_state in state.items():
+        if group_id not in seen_groups:
+            group_state["last_missing_macro_index"] = macro_index
+    return selected
+
+
 def _apply_candidate_group_competition_decisions(
     *,
     store: ArtifactStore,
@@ -1684,6 +1773,7 @@ def _current_round_state_projection(
         "n_prefetched_train_details": len(current_round_state.get("prefetched_train_details") or []),
         "n_micro_maintenance_reports": len(current_round_state.get("micro_maintenance_reports") or []),
         "n_maintenance_windows": len(current_round_state.get("maintenance_windows") or []),
+        "n_candidate_group_feedback_state": len(current_round_state.get("candidate_group_feedback_state") or {}),
         "n_online_refactor_attempts": len(online_refactor_attempts),
         "train_details_preview": [
             _compact_task_detail(detail)
@@ -1798,6 +1888,7 @@ def _write_current_round_sidecars(
                 "extraction_events": list(current_round_state.get("extraction_events") or []),
                 "credit_events": list(current_round_state.get("credit_events") or []),
                 "prefetched_train_details": list(current_round_state.get("prefetched_train_details") or []),
+                "candidate_group_feedback_state": copy.deepcopy(current_round_state.get("candidate_group_feedback_state") or {}),
             },
         )
     if online_refactors_path is not None:
@@ -1855,6 +1946,11 @@ def _restore_current_round_state(
             restored["prefetched_train_details"] = [
                 dict(item or {}) for item in (payload.get("prefetched_train_details") or []) if isinstance(item, dict)
             ]
+            restored["candidate_group_feedback_state"] = {
+                str(key): dict(value or {})
+                for key, value in dict(payload.get("candidate_group_feedback_state") or {}).items()
+                if str(key)
+            }
         else:
             restored["train_details"] = []
             restored["window_train_details"] = []
@@ -1864,6 +1960,7 @@ def _restore_current_round_state(
             restored["extraction_events"] = []
             restored["credit_events"] = []
             restored["prefetched_train_details"] = []
+            restored["candidate_group_feedback_state"] = {}
     if "online_refactor_attempts" not in restored:
         attempts_path = str(restored.get("online_refactor_attempts_path") or "").strip()
         if attempts_path:
@@ -1896,6 +1993,11 @@ def _restore_current_round_state(
     restored["prefetched_train_details"] = [
         dict(item or {}) for item in (restored.get("prefetched_train_details") or []) if isinstance(item, dict)
     ]
+    restored["candidate_group_feedback_state"] = {
+        str(key): dict(value or {})
+        for key, value in dict(restored.get("candidate_group_feedback_state") or {}).items()
+        if str(key)
+    }
     restored["window_train_details"] = [
         item for item in (restored.get("window_train_details") or []) if isinstance(item, dict) and item.get("task_id")
     ]
@@ -1947,6 +2049,7 @@ def rebuild_checkpoint_from_sidecars(
         "role_feedback": _normalize_role_feedback_memory(restored.get("role_feedback")),
         "extraction_events": list(restored.get("extraction_events") or []),
         "credit_events": list(restored.get("credit_events") or []),
+        "candidate_group_feedback_state": copy.deepcopy(restored.get("candidate_group_feedback_state") or {}),
         "overlap_state": restored.get("overlap_state") if isinstance(restored.get("overlap_state"), OverlapGraphState) else OverlapGraphState(),
     }
     restored_store = copy.deepcopy(restored.get("store_snapshot") or {"artifacts": [], "test_results": []})
@@ -3143,6 +3246,8 @@ async def _run_related_evolve_experiment(
         int(os.environ.get("BFCL_CANDIDATE_SAMPLE_COUNT", str(candidate_sample_count)) or candidate_sample_count),
     )
     candidate_trial_retrieval = bool(candidate_trial_retrieval and _env_bool("BFCL_CANDIDATE_TRIAL_RETRIEVAL", True))
+    candidate_group_min_usage = max(1, _env_int("BFCL_CANDIDATE_GROUP_MIN_USAGE", 1))
+    candidate_group_no_usage_patience = max(1, _env_int("BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS", 3))
     train_tasks, test_tasks = _tasks_from_manifest(manifest, cache_dir=cache_dir, data_source=data_source)
     strict_embeddings = os.environ.get("BFCL_STRICT_SEGMENT_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes"}
     segment_index = SegmentVectorIndex(strict_embeddings=strict_embeddings)
@@ -3219,6 +3324,11 @@ async def _run_related_evolve_experiment(
                 ]
                 micro_maintenance_reports = list(resumed_round_state.get("micro_maintenance_reports") or [])
                 maintenance_windows = list(resumed_round_state.get("maintenance_windows") or [])
+                candidate_group_feedback_state = {
+                    str(key): dict(value or {})
+                    for key, value in dict(resumed_round_state.get("candidate_group_feedback_state") or {}).items()
+                    if str(key)
+                }
                 prefetched_train_details = {
                     int(row.get("task_index")): dict(row or {})
                     for row in (resumed_round_state.get("prefetched_train_details") or [])
@@ -3238,6 +3348,7 @@ async def _run_related_evolve_experiment(
                 window_segments = []
                 micro_maintenance_reports = []
                 maintenance_windows = []
+                candidate_group_feedback_state = {}
                 prefetched_train_details = {}
                 online_refactor_budget = _online_refactor_budget_from_env()
                 start_task_index = 0
@@ -3265,6 +3376,94 @@ async def _run_related_evolve_experiment(
                     row.setdefault("task_index", idx)
                     micro_maintenance_reports.append(row)
                 pending_micro_jobs = []
+
+            async def attach_macro_candidate_group_feedback(
+                macro_report: Dict[str, Any],
+                *,
+                window_details: Sequence[Dict[str, Any]],
+            ) -> Dict[str, Any]:
+                nonlocal role_feedback
+                if not candidate_competition_enabled:
+                    macro_report.setdefault("candidate_group_feedback_rows", [])
+                    macro_report.setdefault("candidate_group_decisions", [])
+                    macro_report.setdefault("extractor_trl_update", {"enabled": bool(extractor_trl_enabled), "ran": False})
+                    return macro_report
+                macro_index = len(maintenance_windows)
+                raw_rows = _build_candidate_group_feedback_rows(
+                    extraction_events=extraction_events,
+                    train_details=window_details,
+                    credit_events=credit_events,
+                    maintenance_test_results=macro_report.get("maintenance_test_results") or [],
+                )
+                feedback_rows = _select_macro_candidate_group_feedback_rows(
+                    raw_rows=raw_rows,
+                    state=candidate_group_feedback_state,
+                    macro_index=macro_index,
+                    min_usage=candidate_group_min_usage,
+                    no_usage_patience=candidate_group_no_usage_patience,
+                )
+                decisions = _apply_candidate_group_competition_decisions(
+                    store=store,
+                    group_feedback_rows=feedback_rows,
+                )
+                macro_report["candidate_group_feedback_rows"] = copy.deepcopy(feedback_rows)
+                macro_report["candidate_group_decisions"] = copy.deepcopy(decisions)
+                macro_report["candidate_group_feedback_policy"] = {
+                    "min_usage": candidate_group_min_usage,
+                    "no_usage_macros": candidate_group_no_usage_patience,
+                    "state_size": len(candidate_group_feedback_state),
+                }
+                if extractor_trl_enabled and feedback_rows:
+                    update = await update_extractor_rules_from_feedback_llm(
+                        current_rules=(role_feedback.get("extractor") or {}).get("rules"),
+                        feedback_rows=feedback_rows,
+                        llm_config=llm_config,
+                        model_name=model_name,
+                        max_rules=_ROLE_FEEDBACK_RULE_LIMIT,
+                        audit_context={
+                            "phase": "macro_candidate_group_feedback",
+                            "experiment": tag,
+                            "round_index": round_index,
+                            "macro_index": macro_index,
+                        },
+                    )
+                    macro_report["extractor_trl_update"] = {
+                        "enabled": True,
+                        "ran": True,
+                        "summary": update.get("summary") or "",
+                        "n_candidate_group_feedback_rows": len(feedback_rows),
+                    }
+                    role_feedback = _normalize_role_feedback_memory(
+                        {
+                            **role_feedback,
+                            "extractor": {
+                                **dict(role_feedback.get("extractor") or {}),
+                                "rules": update.get("rules") or [],
+                                "last_update_summary": update.get("summary") or "",
+                                "updated_at": update.get("updated_at"),
+                                "history": [
+                                    *list((role_feedback.get("extractor") or {}).get("history") or []),
+                                    {
+                                        "round_index": round_index,
+                                        "macro_index": macro_index,
+                                        "summary": update.get("summary") or "",
+                                        "rules": copy.deepcopy(update.get("rules") or []),
+                                        "n_feedback_rows": len(feedback_rows),
+                                        "n_candidate_group_feedback_rows": len(feedback_rows),
+                                        "trl_enabled": True,
+                                        "feedback_scope": "candidate_group_macro",
+                                    },
+                                ][-12:],
+                            },
+                        }
+                    )
+                else:
+                    macro_report["extractor_trl_update"] = {
+                        "enabled": bool(extractor_trl_enabled),
+                        "ran": False,
+                        "n_candidate_group_feedback_rows": len(feedback_rows),
+                    }
+                return macro_report
 
             async def precompute_window_records(
                 *,
@@ -3644,6 +3843,10 @@ async def _run_related_evolve_experiment(
                             "new_segment_ids": [segment.segment_id for segment in window_segments],
                         }
                     )
+                    macro_report = await attach_macro_candidate_group_feedback(
+                        macro_report,
+                        window_details=window_train_details,
+                    )
                     round_pending_promotions = _promote_pending_from_refactor_report(
                         store=store,
                         refactor_report=macro_report.get("overlap_refactor") or {},
@@ -3670,6 +3873,7 @@ async def _run_related_evolve_experiment(
                     "online_refactor_attempts": online_refactor_attempts,
                     "extraction_events": extraction_events,
                     "credit_events": credit_events,
+                    "candidate_group_feedback_state": copy.deepcopy(candidate_group_feedback_state),
                     "prefetched_train_details": [
                         dict(record)
                         for _idx, record in sorted(prefetched_train_details.items())
@@ -3736,6 +3940,10 @@ async def _run_related_evolve_experiment(
                         "new_segment_ids": [segment.segment_id for segment in window_segments],
                     }
                 )
+                final_macro = await attach_macro_candidate_group_feedback(
+                    final_macro,
+                    window_details=window_train_details,
+                )
                 final_promotions = _promote_pending_from_refactor_report(
                     store=store,
                     refactor_report=final_macro.get("overlap_refactor") or {},
@@ -3765,20 +3973,16 @@ async def _run_related_evolve_experiment(
                 train_details=train_details,
                 maintenance_test_results=round_maintenance.get("maintenance_test_results") or [],
             )
-            candidate_group_feedback_rows = _build_candidate_group_feedback_rows(
-                extraction_events=extraction_events,
-                train_details=train_details,
-                credit_events=credit_events,
-                maintenance_test_results=round_maintenance.get("maintenance_test_results") or [],
-            ) if candidate_competition_enabled else []
-            candidate_group_decisions = _apply_candidate_group_competition_decisions(
-                store=store,
-                group_feedback_rows=candidate_group_feedback_rows,
-            ) if candidate_competition_enabled else []
-            extractor_trl_rows = [
-                *({"feedback_type": "skill", **dict(row)} for row in extractor_feedback_rows),
-                *candidate_group_feedback_rows,
-            ] if candidate_competition_enabled else extractor_feedback_rows
+            candidate_group_feedback_rows = [
+                row
+                for window in maintenance_windows
+                for row in (window.get("candidate_group_feedback_rows") or [])
+            ]
+            candidate_group_decisions = [
+                row
+                for window in maintenance_windows
+                for row in (window.get("candidate_group_decisions") or [])
+            ]
             credit_summary = _aggregate_skill_credit(credit_events, store=store)
             credit_filter_threshold = max(1, int(os.environ.get("BFCL_CREDIT_FILTER_THRESHOLD", "2") or "2"))
             credit_filter_decisions = _apply_skill_credit_filter(
@@ -3789,7 +3993,7 @@ async def _run_related_evolve_experiment(
             if extractor_trl_enabled:
                 extractor_feedback_update = await update_extractor_rules_from_feedback_llm(
                     current_rules=(role_feedback.get("extractor") or {}).get("rules"),
-                    feedback_rows=extractor_trl_rows,
+                    feedback_rows=extractor_feedback_rows,
                     llm_config=llm_config,
                     model_name=model_name,
                     max_rules=_ROLE_FEEDBACK_RULE_LIMIT,
@@ -3813,9 +4017,8 @@ async def _run_related_evolve_experiment(
                                     "round_index": round_index,
                                     "summary": extractor_feedback_update.get("summary") or "",
                                     "rules": copy.deepcopy(extractor_feedback_update.get("rules") or []),
-                                    "n_feedback_rows": len(extractor_trl_rows),
+                                    "n_feedback_rows": len(extractor_feedback_rows),
                                     "n_skill_feedback_rows": len(extractor_feedback_rows),
-                                    "n_candidate_group_feedback_rows": len(candidate_group_feedback_rows),
                                     "trl_enabled": True,
                                 },
                             ][-12:],
@@ -3835,9 +4038,8 @@ async def _run_related_evolve_experiment(
                                     "round_index": round_index,
                                     "summary": "extractor_trl_disabled:no_rule_update",
                                     "rules": copy.deepcopy((role_feedback.get("extractor") or {}).get("rules") or []),
-                                    "n_feedback_rows": len(extractor_trl_rows),
+                                    "n_feedback_rows": len(extractor_feedback_rows),
                                     "n_skill_feedback_rows": len(extractor_feedback_rows),
-                                    "n_candidate_group_feedback_rows": len(candidate_group_feedback_rows),
                                     "trl_enabled": False,
                                 },
                             ][-12:],
@@ -3884,6 +4086,8 @@ async def _run_related_evolve_experiment(
                     "enabled": bool(candidate_competition_enabled),
                     "sample_count": int(candidate_sample_count),
                     "trial_retrieval": bool(candidate_trial_retrieval),
+                    "group_min_usage": int(candidate_group_min_usage),
+                    "group_no_usage_macros": int(candidate_group_no_usage_patience),
                 },
                 "refactor_segment_coverage": copy.deepcopy(round_maintenance.get("refactor_segment_coverage") or []),
                 "online_refactor_attempts": _project_online_refactor_attempts(online_refactor_attempts)
@@ -3979,6 +4183,8 @@ async def _run_related_evolve_experiment(
             "candidate_competition_enabled": bool(candidate_competition_enabled),
             "candidate_sample_count": int(candidate_sample_count),
             "candidate_trial_retrieval": bool(candidate_trial_retrieval),
+            "candidate_group_min_usage": int(candidate_group_min_usage),
+            "candidate_group_no_usage_macros": int(candidate_group_no_usage_patience),
             "top_k_skills": top_k_skills,
             "min_skill_score": min_skill_score,
             "skill_injection_mode": skill_injection_mode,
@@ -3996,6 +4202,8 @@ async def _run_related_evolve_experiment(
             "enabled": bool(candidate_competition_enabled),
             "sample_count": int(candidate_sample_count),
             "trial_retrieval": bool(candidate_trial_retrieval),
+            "group_min_usage": int(candidate_group_min_usage),
+            "group_no_usage_macros": int(candidate_group_no_usage_patience),
         },
         "maintenance_windows": [
             window
@@ -4170,6 +4378,8 @@ async def main_async() -> None:
     parser.add_argument("--train-window-concurrency", type=int, default=int(os.environ.get("BFCL_RELATED_TRAIN_WINDOW_CONCURRENCY", "1") or "1"))
     parser.add_argument("--enable-candidate-competition", action="store_true", default=_env_bool("BFCL_CANDIDATE_COMPETITION_ENABLED", False))
     parser.add_argument("--candidate-sample-count", type=int, default=int(os.environ.get("BFCL_CANDIDATE_SAMPLE_COUNT", "1") or "1"))
+    parser.add_argument("--candidate-group-min-usage", type=int, default=int(os.environ.get("BFCL_CANDIDATE_GROUP_MIN_USAGE", "1") or "1"))
+    parser.add_argument("--candidate-group-no-usage-macros", type=int, default=int(os.environ.get("BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS", "3") or "3"))
     parser.add_argument(
         "--disable-candidate-trial-retrieval",
         action="store_true",
@@ -4198,6 +4408,8 @@ async def main_async() -> None:
     parser.add_argument("--disable-extractor-trl", action="store_true")
     parser.add_argument("--experiment-variant", default="w_extractor_reusage_trl")
     args = parser.parse_args()
+    os.environ["BFCL_CANDIDATE_GROUP_MIN_USAGE"] = str(max(1, int(args.candidate_group_min_usage or 1)))
+    os.environ["BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS"] = str(max(1, int(args.candidate_group_no_usage_macros or 1)))
     resolved_output = args.output or _default_output_path(args.mode, args.tag)
     resolved_checkpoint = args.checkpoint or _phase_partial_path(resolved_output, "checkpoint")
 

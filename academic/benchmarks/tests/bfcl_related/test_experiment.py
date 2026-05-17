@@ -24,6 +24,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     _micro_write_target_names,
     _mark_candidate_competition_artifacts,
     _build_candidate_group_feedback_rows,
+    _select_macro_candidate_group_feedback_rows,
     _apply_candidate_group_competition_decisions,
     _mark_prior_artifacts_pending,
     _normalize_role_feedback_memory,
@@ -218,6 +219,57 @@ def test_candidate_group_feedback_selects_winner_and_marks_loser() -> None:
     assert store.get("skill_win").metadata["competition_status"] == "winner"
     assert store.get("skill_lose").metadata["competition_status"] == "loser"
     assert any(row["action"] == "winner" for row in decisions)
+
+
+def test_macro_candidate_group_feedback_filters_by_usage_and_no_usage_patience() -> None:
+    used_row = {
+        "candidate_group_id": "group_used",
+        "winner": "skill_used_a",
+        "members": [
+            {"skill_name": "skill_used_a", "retrieved_count": 1, "injected_count": 0, "used_count": 0},
+            {"skill_name": "skill_used_b", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+        ],
+    }
+    idle_row = {
+        "candidate_group_id": "group_idle",
+        "winner": "skill_idle_a",
+        "members": [
+            {"skill_name": "skill_idle_a", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+            {"skill_name": "skill_idle_b", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+        ],
+    }
+    state: Dict[str, Dict[str, Any]] = {}
+
+    first = _select_macro_candidate_group_feedback_rows(
+        raw_rows=[used_row, idle_row],
+        state=state,
+        macro_index=0,
+        min_usage=1,
+        no_usage_patience=3,
+    )
+    second = _select_macro_candidate_group_feedback_rows(
+        raw_rows=[idle_row],
+        state=state,
+        macro_index=1,
+        min_usage=1,
+        no_usage_patience=3,
+    )
+    third = _select_macro_candidate_group_feedback_rows(
+        raw_rows=[idle_row],
+        state=state,
+        macro_index=2,
+        min_usage=1,
+        no_usage_patience=3,
+    )
+
+    assert [row["candidate_group_id"] for row in first] == ["group_used"]
+    assert first[0]["feedback_reason"] == "sufficient_macro_usage"
+    assert second == []
+    assert third[0]["candidate_group_id"] == "group_idle"
+    assert third[0]["feedback_reason"] == "low_reuse_after_consecutive_macros"
+    assert third[0]["winner"] == ""
+    assert set(third[0]["losers"]) == {"skill_idle_a", "skill_idle_b"}
+    assert state["group_idle"]["consecutive_no_usage_macros"] == 3
 
 
 def test_prior_extraction_adds_pending_skills_that_do_not_retrieve() -> None:

@@ -221,7 +221,7 @@ def test_candidate_group_feedback_selects_winner_and_marks_loser() -> None:
     assert any(row["action"] == "winner" for row in decisions)
 
 
-def test_macro_candidate_group_feedback_filters_by_usage_and_no_usage_patience() -> None:
+def test_macro_candidate_group_feedback_filters_by_usage_and_low_usage_patience() -> None:
     used_row = {
         "candidate_group_id": "group_used",
         "winner": "skill_used_a",
@@ -245,31 +245,64 @@ def test_macro_candidate_group_feedback_filters_by_usage_and_no_usage_patience()
         state=state,
         macro_index=0,
         min_usage=1,
-        no_usage_patience=3,
+        low_usage_patience=3,
     )
     second = _select_macro_candidate_group_feedback_rows(
         raw_rows=[idle_row],
         state=state,
         macro_index=1,
         min_usage=1,
-        no_usage_patience=3,
+        low_usage_patience=3,
     )
     third = _select_macro_candidate_group_feedback_rows(
         raw_rows=[idle_row],
         state=state,
         macro_index=2,
         min_usage=1,
-        no_usage_patience=3,
+        low_usage_patience=3,
     )
 
     assert [row["candidate_group_id"] for row in first] == ["group_used"]
     assert first[0]["feedback_reason"] == "sufficient_macro_usage"
     assert second == []
     assert third[0]["candidate_group_id"] == "group_idle"
-    assert third[0]["feedback_reason"] == "low_reuse_after_consecutive_macros"
+    assert third[0]["feedback_reason"] == "low_reuse_below_usage_threshold"
     assert third[0]["winner"] == ""
     assert set(third[0]["losers"]) == {"skill_idle_a", "skill_idle_b"}
-    assert state["group_idle"]["consecutive_no_usage_macros"] == 3
+    assert state["group_idle"]["consecutive_low_usage_macros"] == 3
+
+
+def test_macro_candidate_group_low_usage_feedback_can_have_some_usage_below_threshold() -> None:
+    low_usage_row = {
+        "candidate_group_id": "group_low",
+        "winner": "skill_low_a",
+        "members": [
+            {"skill_name": "skill_low_a", "retrieved_count": 1, "injected_count": 0, "used_count": 0},
+            {"skill_name": "skill_low_b", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+        ],
+    }
+    state: Dict[str, Dict[str, Any]] = {}
+
+    first = _select_macro_candidate_group_feedback_rows(
+        raw_rows=[low_usage_row],
+        state=state,
+        macro_index=0,
+        min_usage=2,
+        low_usage_patience=2,
+    )
+    second = _select_macro_candidate_group_feedback_rows(
+        raw_rows=[low_usage_row],
+        state=state,
+        macro_index=1,
+        min_usage=2,
+        low_usage_patience=2,
+    )
+
+    assert first == []
+    assert second[0]["feedback_reason"] == "low_reuse_below_usage_threshold"
+    assert second[0]["macro_usage_count"] == 1
+    assert second[0]["min_usage_threshold"] == 2
+    assert "below the required macro usage threshold" in second[0]["comparison_summary"]
 
 
 def test_prior_extraction_adds_pending_skills_that_do_not_retrieve() -> None:

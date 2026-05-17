@@ -1404,7 +1404,7 @@ def _select_macro_candidate_group_feedback_rows(
     state: Dict[str, Dict[str, Any]],
     macro_index: int,
     min_usage: int,
-    no_usage_patience: int,
+    low_usage_patience: int,
 ) -> List[Dict[str, Any]]:
     selected: List[Dict[str, Any]] = []
     seen_groups = {str(row.get("candidate_group_id") or "").strip() for row in raw_rows if isinstance(row, dict)}
@@ -1419,18 +1419,25 @@ def _select_macro_candidate_group_feedback_rows(
             group_id,
             {
                 "candidate_group_id": group_id,
-                "consecutive_no_usage_macros": 0,
+                "consecutive_low_usage_macros": 0,
                 "last_feedback_macro_index": None,
-                "last_no_usage_feedback_macro_index": None,
+                "last_low_usage_feedback_macro_index": None,
                 "n_usage_feedback": 0,
-                "n_no_usage_feedback": 0,
+                "n_low_usage_feedback": 0,
             },
         )
+        if "consecutive_low_usage_macros" not in group_state and "consecutive_no_usage_macros" in group_state:
+            group_state["consecutive_low_usage_macros"] = int(group_state.get("consecutive_no_usage_macros") or 0)
+        if "last_low_usage_feedback_macro_index" not in group_state and "last_no_usage_feedback_macro_index" in group_state:
+            group_state["last_low_usage_feedback_macro_index"] = group_state.get("last_no_usage_feedback_macro_index")
+        if "n_low_usage_feedback" not in group_state and "n_no_usage_feedback" in group_state:
+            group_state["n_low_usage_feedback"] = int(group_state.get("n_no_usage_feedback") or 0)
         group_state["last_seen_macro_index"] = macro_index
         group_state["last_usage_count"] = usage
+        group_state["min_usage_threshold"] = max(1, int(min_usage or 1))
         group_state["members"] = _candidate_group_member_names(row)
         if usage >= max(1, int(min_usage or 1)):
-            group_state["consecutive_no_usage_macros"] = 0
+            group_state["consecutive_low_usage_macros"] = 0
             group_state["n_usage_feedback"] = int(group_state.get("n_usage_feedback") or 0) + 1
             group_state["last_feedback_macro_index"] = macro_index
             selected.append(
@@ -1442,24 +1449,25 @@ def _select_macro_candidate_group_feedback_rows(
                 }
             )
             continue
-        group_state["consecutive_no_usage_macros"] = int(group_state.get("consecutive_no_usage_macros") or 0) + 1
-        if int(group_state["consecutive_no_usage_macros"]) >= max(1, int(no_usage_patience or 1)):
-            if group_state.get("last_no_usage_feedback_macro_index") != macro_index:
-                group_state["n_no_usage_feedback"] = int(group_state.get("n_no_usage_feedback") or 0) + 1
-                group_state["last_no_usage_feedback_macro_index"] = macro_index
+        group_state["consecutive_low_usage_macros"] = int(group_state.get("consecutive_low_usage_macros") or 0) + 1
+        if int(group_state["consecutive_low_usage_macros"]) >= max(1, int(low_usage_patience or 1)):
+            if group_state.get("last_low_usage_feedback_macro_index") != macro_index:
+                group_state["n_low_usage_feedback"] = int(group_state.get("n_low_usage_feedback") or 0) + 1
+                group_state["last_low_usage_feedback_macro_index"] = macro_index
                 group_state["last_feedback_macro_index"] = macro_index
                 selected.append(
                     {
                         **copy.deepcopy(row),
                         "winner": "",
                         "losers": _candidate_group_member_names(row),
-                        "feedback_reason": "low_reuse_after_consecutive_macros",
+                        "feedback_reason": "low_reuse_below_usage_threshold",
                         "macro_usage_count": usage,
-                        "consecutive_no_usage_macros": int(group_state["consecutive_no_usage_macros"]),
+                        "min_usage_threshold": max(1, int(min_usage or 1)),
+                        "consecutive_low_usage_macros": int(group_state["consecutive_low_usage_macros"]),
                         "macro_index": macro_index,
                         "comparison_summary": (
-                            "No candidate in this group was retrieved, injected, or used for several macro windows; "
-                            "treat this as weak reusability evidence for the extractor."
+                            "This candidate group stayed below the required macro usage threshold for several "
+                            "macro windows; treat this as weak low-reusability evidence for the extractor."
                         ),
                     }
                 )
@@ -3247,7 +3255,13 @@ async def _run_related_evolve_experiment(
     )
     candidate_trial_retrieval = bool(candidate_trial_retrieval and _env_bool("BFCL_CANDIDATE_TRIAL_RETRIEVAL", True))
     candidate_group_min_usage = max(1, _env_int("BFCL_CANDIDATE_GROUP_MIN_USAGE", 1))
-    candidate_group_no_usage_patience = max(1, _env_int("BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS", 3))
+    candidate_group_low_usage_patience = max(
+        1,
+        _env_int(
+            "BFCL_CANDIDATE_GROUP_LOW_USAGE_MACROS",
+            _env_int("BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS", 3),
+        ),
+    )
     train_tasks, test_tasks = _tasks_from_manifest(manifest, cache_dir=cache_dir, data_source=data_source)
     strict_embeddings = os.environ.get("BFCL_STRICT_SEGMENT_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes"}
     segment_index = SegmentVectorIndex(strict_embeddings=strict_embeddings)
@@ -3400,7 +3414,7 @@ async def _run_related_evolve_experiment(
                     state=candidate_group_feedback_state,
                     macro_index=macro_index,
                     min_usage=candidate_group_min_usage,
-                    no_usage_patience=candidate_group_no_usage_patience,
+                    low_usage_patience=candidate_group_low_usage_patience,
                 )
                 decisions = _apply_candidate_group_competition_decisions(
                     store=store,
@@ -3410,7 +3424,7 @@ async def _run_related_evolve_experiment(
                 macro_report["candidate_group_decisions"] = copy.deepcopy(decisions)
                 macro_report["candidate_group_feedback_policy"] = {
                     "min_usage": candidate_group_min_usage,
-                    "no_usage_macros": candidate_group_no_usage_patience,
+                    "low_usage_macros": candidate_group_low_usage_patience,
                     "state_size": len(candidate_group_feedback_state),
                 }
                 if extractor_trl_enabled and feedback_rows:
@@ -4087,7 +4101,7 @@ async def _run_related_evolve_experiment(
                     "sample_count": int(candidate_sample_count),
                     "trial_retrieval": bool(candidate_trial_retrieval),
                     "group_min_usage": int(candidate_group_min_usage),
-                    "group_no_usage_macros": int(candidate_group_no_usage_patience),
+                    "group_low_usage_macros": int(candidate_group_low_usage_patience),
                 },
                 "refactor_segment_coverage": copy.deepcopy(round_maintenance.get("refactor_segment_coverage") or []),
                 "online_refactor_attempts": _project_online_refactor_attempts(online_refactor_attempts)
@@ -4184,7 +4198,7 @@ async def _run_related_evolve_experiment(
             "candidate_sample_count": int(candidate_sample_count),
             "candidate_trial_retrieval": bool(candidate_trial_retrieval),
             "candidate_group_min_usage": int(candidate_group_min_usage),
-            "candidate_group_no_usage_macros": int(candidate_group_no_usage_patience),
+            "candidate_group_low_usage_macros": int(candidate_group_low_usage_patience),
             "top_k_skills": top_k_skills,
             "min_skill_score": min_skill_score,
             "skill_injection_mode": skill_injection_mode,
@@ -4203,7 +4217,7 @@ async def _run_related_evolve_experiment(
             "sample_count": int(candidate_sample_count),
             "trial_retrieval": bool(candidate_trial_retrieval),
             "group_min_usage": int(candidate_group_min_usage),
-            "group_no_usage_macros": int(candidate_group_no_usage_patience),
+            "group_low_usage_macros": int(candidate_group_low_usage_patience),
         },
         "maintenance_windows": [
             window
@@ -4379,7 +4393,12 @@ async def main_async() -> None:
     parser.add_argument("--enable-candidate-competition", action="store_true", default=_env_bool("BFCL_CANDIDATE_COMPETITION_ENABLED", False))
     parser.add_argument("--candidate-sample-count", type=int, default=int(os.environ.get("BFCL_CANDIDATE_SAMPLE_COUNT", "1") or "1"))
     parser.add_argument("--candidate-group-min-usage", type=int, default=int(os.environ.get("BFCL_CANDIDATE_GROUP_MIN_USAGE", "1") or "1"))
-    parser.add_argument("--candidate-group-no-usage-macros", type=int, default=int(os.environ.get("BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS", "3") or "3"))
+    parser.add_argument(
+        "--candidate-group-low-usage-macros",
+        type=int,
+        default=int(os.environ.get("BFCL_CANDIDATE_GROUP_LOW_USAGE_MACROS", os.environ.get("BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS", "3")) or "3"),
+    )
+    parser.add_argument("--candidate-group-no-usage-macros", type=int, default=None, help=argparse.SUPPRESS)
     parser.add_argument(
         "--disable-candidate-trial-retrieval",
         action="store_true",
@@ -4409,7 +4428,8 @@ async def main_async() -> None:
     parser.add_argument("--experiment-variant", default="w_extractor_reusage_trl")
     args = parser.parse_args()
     os.environ["BFCL_CANDIDATE_GROUP_MIN_USAGE"] = str(max(1, int(args.candidate_group_min_usage or 1)))
-    os.environ["BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS"] = str(max(1, int(args.candidate_group_no_usage_macros or 1)))
+    low_usage_macros = args.candidate_group_no_usage_macros if args.candidate_group_no_usage_macros is not None else args.candidate_group_low_usage_macros
+    os.environ["BFCL_CANDIDATE_GROUP_LOW_USAGE_MACROS"] = str(max(1, int(low_usage_macros or 1)))
     resolved_output = args.output or _default_output_path(args.mode, args.tag)
     resolved_checkpoint = args.checkpoint or _phase_partial_path(resolved_output, "checkpoint")
 

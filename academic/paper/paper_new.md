@@ -119,52 +119,701 @@ This positioning leaves four concrete differentiators: first, peripheral-conditi
 
 ## 3. Methodology
 
-1. 总体原则
+### 3.1 Methodology (English)
 
-* 问题formulation：有若干个query的trace（sampled from one static distribution）按时间顺序到来，我们如何维护一个skill library，能够将其中尽可能多的trace表征成skill的执行输出？
+#### 3.1.1 Problem Formulation
 
-* 本质是trace的compression、最优表征问题（MPL）
+We formulate test-time skill evolution as online maintenance of an external,
+versioned skill repository. A sequence of training tasks
+\(q_1,\ldots,q_N\) arrives during deployment. The base model, executor, and
+official task runner are frozen; the algorithm may update only the external
+repository \(S\), a heterogeneous overlap graph \(G\), and compact textual
+feedback rules \(M\) used by the skill extractor. After training, held-out
+evaluation uses a frozen, read-only snapshot of \(S\).
 
-* 核心挑战：
-    - A. 如何发现潜在的可以提取为同一个skill的不同执行结果的trace segment？
-    - B. 如何提取出能够最适应未来trace的skill?（不只是贪心适应当下的所有trace）
+A skill is treated as a maintainable software artifact rather than as a one-off
+prompt patch. Each skill has versioned content, scope, interface metadata,
+dependency metadata, evidence, status, and a bounded bundle of regression tests.
+The repository accepts a skill only when the evidence suggests that it captures
+a reusable local invariant and when its bundle tests preserve the relevant tool
+and task contracts. This framing separates three goals: correctness under
+replayable contracts, reusability across related tasks, and maintainability
+under future refinement or refactoring.
 
-* 解决方案：
-    - A. 两阶段发掘：embedding+token overlap做粗筛，LLM做精筛
-    - B. 
-        信号：两种方案
-        - 测例增广：前向方案，利用模型的世界知识和过往开发经验，尽可能考虑更多的可能出现的未来需求
-        - LOO反馈信号：后向方案，只提供部分使用trace采样多个skill，比较谁能满足隐藏的trace
-        落地：
-        - skill筛选
-        - 改写skill extractor的prompt
-        - 生成information meta skill / notice反馈给skill extractor
+#### 3.1.2 Repository State and Roles
 
-* 针对「复用性」的测试方式：
-    - train set分若干个shard，每次结束之后检查test set的效果，持续提升证明有复用
-    - 对比没有做复用提取的算法，ablation显著说明复用有用
+The evolving system maintains four state objects. \(S\) is the versioned skill
+repository. A skill can be `pending`, `active`, `disabled`, or `archived`; only
+active skills are visible to the executor. \(G\) is a heterogeneous graph whose
+nodes are current-window trace segments, active skills, and pending skills.
+Edges encode lexical overlap, embedding similarity, tool/error similarity, and
+explicit skill-relation metadata. \(M\) stores compact extractor feedback rules
+obtained from runtime evidence. \(T\) stores execution traces and official task
+snapshots for audit, bundle construction, and maintenance.
 
-2. 逻辑顺序
+The implementation uses six functional roles. The executor solves the task with
+retrieved active skills. The retriever selects task-level and step-level skill
+context and may inject a new compact skill-context message after tool errors.
+The credit assigner attributes the completed trace to each retrieved, injected,
+or used skill and emits maintenance signals. The extractor proposes new
+trace-local skills as pending candidates. The bundle tester and refiner maintain
+existing skills using skill-local evidence. The macro refactorer operates on the
+heterogeneous graph to merge, split, promote, or reject reusable structure.
 
-* Skill Retrieval
-    - 时机：在 executor 调用前检索已有 skill / workflow history，供本次执行参考；在 executor 调用后检索相似历史 trace / skill，供 post-execute extraction 与 refactoring 使用。
-    - 按照特征嵌入相似度、TF-IDF、usage utility 等方法对 skill 进行检索，确保在后续调用中能够高效找到合适的 skill。
-    - 按照相似的办法对 query / workflow history 做检索，找到类似 query 的历史调用记录和已提取 skill。
+#### 3.1.3 Online Evolution Loop
 
-* New Skill Extraction
-    - 发生在executor调用trace生成之后
-    - 模型对自己的执行过程进行反思，提取出具备「复用属性」的部分作为skill
-    - 尽量追求编写完善的前向规范，确保每个skill的输入输出清晰，功能单一，易于理解和使用
+Training and evolution are serial because each training task can mutate the
+repository. For each task, the executor first uses the current active repository
+to solve the task. The resulting compact trace projection is then passed to the
+credit assigner, which produces skill-level attribution and focused bundle-case
+suggestions. The extractor proposes new pending skills from the same trace.
+Trace segments, active skill nodes, and pending skill nodes are inserted into the
+heterogeneous overlap graph. Micro maintenance runs at the task-local frequency,
+defaulting to every task. Macro maintenance runs at the window frequency,
+defaulting to every ten training tasks.
 
-* Skill Refactoring
-    - 时机：主线改为发生在 executor 调用 trace 生成之后。
-    - 根据本次 query、完整执行 trace、执行结果、token 成本、golden answer，以及检索到的历史相似 query trace / skill，对已有 skill 进行重新提取、合并、拆分或重构。
-    - 目标不是让当前 query 在 execute 前立刻用上新 skill，而是在 train 阶段多花成本沉淀更高质量 skill，使后续 test query 能稳定复用。
-    - 发生版本更迭，对上下游的 skill 进行版本控制维护（详见 `/home/lixujun/skill_evolving/copilot_cli/{DESIGN,DESIGN_V2}.md`）。
+```text
+Algorithm 1: Online Skill Repository Evolution
 
-* Skill Testing
-    - 结合真实运行实例和自己构造的测例，针对刚生成的skill尽可能进行测试，确保其正确性和有效性
-    - 针对测出的初步问题，进行迭代优化，直到满足预设的质量标准
+Input:
+  training tasks Q_train = (q_1, ..., q_N)
+  held-out tasks Q_test
+  initial active repository S_0
+  executor Exe, retriever Ret, extractor Ext
+  credit assigner Cdt, bundle tester Tst, refiner Rfn
+  graph refactorer Rfg, extractor-rule updater Trl
+  micro step k_micro = 1, macro step k_macro = 10
+
+State:
+  S <- S_0                         // versioned skill repository
+  G <- empty heterogeneous graph    // trace, active-skill, pending-skill nodes
+  M <- empty extractor feedback rules
+  W <- empty macro window           // traces, segments, and credit events
+
+for i = 1 to N:
+    trace_i, injected_i <- ExecuteWithRetrievedSkills(q_i, S, M)
+    relevant_i <- RetrievedInjectedOrUsedSkills(trace_i, S)
+
+    credit_i <- AssignCredit(
+        compact_task_summary(q_i, trace_i),
+        retrieved_injected_used_skills(trace_i),
+        compact_skill_projections(relevant_i),
+        focused_turns_with_tool_calls_and_errors(trace_i),
+        official_result_and_expected_calls(q_i),
+        token_and_step_metrics(trace_i)
+    )
+
+    credit_cases_i <- BuildFocusedBundleCases(
+        credit_i,
+        official_task_snapshot(q_i)
+    )
+
+    pending_i <- ExtractPendingSkills(trace_i, M)
+    for skill in pending_i:
+        S.add_pending(skill)
+        G.add_node(skill)
+
+    segments_i <- ExtractTraceSegments(trace_i)
+    G.incremental_update(segments_i, active_and_pending_skill_nodes(S))
+    W.add(trace_i, segments_i, credit_i)
+
+    if i mod k_micro == 0:
+        MicroMaintenance(S, q_i, credit_i, credit_cases_i, relevant_i)
+
+    if i mod k_macro == 0:
+        MacroMaintenance(S, G, W, M)
+        W <- empty
+
+if W is not empty:
+    MacroMaintenance(S, G, W, M)
+
+S_frozen <- Freeze(S)
+return EvaluateHeldout(Q_test, S_frozen)
+```
+
+#### 3.1.4 Execution and Step-Level Retrieval
+
+Executor retrieval is restricted to active skills. Pending skills participate in
+maintenance and graph refactoring, but they are not injected into the executor
+prompt. At each step, the retriever selects skills from the current task state,
+trace prefix, tool/domain predicates, and extractor feedback rules. If tool
+errors reveal a new relevant skill that was not already injected, the system
+appends a compact prompt-context update to the message list and records
+`step_retrieved_skills`, `step_injected_skills`, and a `prompt_context_update`
+event in the trace. If step retrieval returns no new skill, no duplicate context
+message is appended.
+
+```text
+Algorithm 2: Execution with Retrieved Skills
+
+function ExecuteWithRetrievedSkills(q, S, M):
+    trace <- empty
+    injected <- empty set
+    messages <- initial_messages(q)
+
+    while task is not finished:
+        step_skills <- Ret(q, trace, active_skills(S), M)
+        new_skills <- step_skills \ injected
+
+        if new_skills is not empty:
+            messages.append(CompactSkillContext(new_skills))
+            injected <- injected union new_skills
+            trace.record_prompt_context_update(new_skills)
+
+        step_output <- Exe(messages, trace)
+        trace.append(step_output)
+
+    return trace, injected
+```
+
+#### 3.1.5 Credit Assignment and Focused Bundle Cases
+
+Credit assignment is the central runtime feedback mechanism. Its prompt receives
+only a bounded task projection: compact task summary, retrieved/injected/used
+skill lists, compact projections of candidate skills, focused turns with tool
+calls and tool errors, official result and expected calls, and token/step
+metrics. It intentionally excludes the full raw trace, full debug events, the
+entire skill store, and unrelated replay results.
+
+For each candidate skill, the credit assigner predicts whether the skill was
+`helpful`, `harmful`, `neutral`, or `uncertain`. It also reports confidence,
+evidence strength, attribution scope, whether refinement is required, whether
+the skill is a filter candidate, and concrete maintenance actions. Bundle-case
+suggestions are fragment-level instructions, not requests to turn the whole task
+into a regression test. A suggestion must identify the skill name, polarity
+(`positive`, `negative`, or `integration`), reason, source task id,
+`focus_turn_indices`, expected contract, and task-fragment policy.
+
+The system constructs a replayable bundle case only by slicing the official task
+snapshot. The constructed fragment must reuse the official question, expected
+tool calls, input artifacts, and metadata. It cannot invent expected calls. If a
+focused official fragment cannot be constructed, the evidence is retained for
+audit and future maintenance, but no bundle case is added. Harmful credit
+creates a negative case only when the judgment is harmful and either confidence
+is at least 0.65 or the skill was actually used. Helpful credit creates a
+positive case only when the claimed benefit is explicit, such as token saving,
+schema help, workflow alignment, or correctness gain.
+
+```text
+Algorithm 3: Credit to Focused Bundle Cases
+
+function BuildFocusedBundleCases(credit, official_snapshot):
+    cases <- empty list
+
+    for event in credit.skill_events:
+        for suggestion in event.bundle_case_suggestions:
+            if suggestion.polarity == negative:
+                if event.judgment != harmful:
+                    continue
+                if event.confidence < 0.65 and not event.used:
+                    continue
+
+            if suggestion.polarity == positive:
+                if event.judgment != helpful:
+                    continue
+                if event.effect_type not in {
+                    token_saving,
+                    schema_help,
+                    workflow_alignment,
+                    correctness_gain
+                }:
+                    continue
+
+            fragment <- SliceOfficialTaskSnapshot(
+                official_snapshot,
+                suggestion.focus_turn_indices,
+                suggestion.task_fragment_policy
+            )
+
+            if fragment is replayable:
+                cases.append(BundleCase(suggestion, fragment))
+            else:
+                RecordEvidenceWithoutCase(event, suggestion)
+
+    return BoundedByPolarityAndRecency(cases)
+```
+
+#### 3.1.6 Micro Maintenance
+
+Micro maintenance is skill-local and task-local. It receives the current task,
+credit events for that task, credit-created bundle cases, and the current
+relevant skill names. It does not run overlap refactoring, text-rule updates,
+pending revocation, full-store bundle rebuilds, or broad per-skill refinement.
+If a skill receives strong credit evidence or a new focused bundle case, the
+system first allows a credit-guided pre-refinement of that target skill. It then
+runs strict bundle tests. If the bundle fails, the refiner receives the failed
+bundle cases, credit context for that skill, dependency neighborhood, and
+previous refinement history. The repair loop is bounded, with the default micro
+repair budget set to one round.
+
+```text
+Algorithm 4: Credit-Guided Micro Maintenance
+
+function MicroMaintenance(S, q, credit, credit_cases, relevant_skills):
+    targets <- SkillsWithNewCases(credit_cases)
+    targets <- targets union StrongHelpfulOrHarmfulCredit(credit, relevant_skills)
+
+    if targets is empty:
+        return empty_report
+
+    for s in targets:
+        if ShouldPreRefine(credit[s]):
+            S[s] <- Rfn(
+                artifact=S[s],
+                failed_cases=[],
+                credit_context=credit[s],
+                dependency_neighborhood=Neighbors(S, s),
+                refinement_history=History(S, s)
+            )
+
+        result <- Tst(S[s].bundle, strict_contract_gate=True)
+        rounds <- 0
+
+        while result fails and rounds < max_micro_repair_rounds:
+            S[s] <- Rfn(
+                artifact=S[s],
+                failed_cases=result.failed_cases,
+                credit_context=credit[s],
+                dependency_neighborhood=Neighbors(S, s),
+                refinement_history=History(S, s)
+            )
+            result <- Tst(S[s].bundle, strict_contract_gate=True)
+            rounds <- rounds + 1
+
+    return micro_report(targets)
+```
+
+#### 3.1.7 Pending Skills and Bundle Construction
+
+New skills enter the repository as pending candidates. This prevents a
+single-trace hypothesis from immediately polluting executor retrieval, while
+still allowing the candidate to participate in graph-level posterior analysis.
+A pending skill is inserted into \(G\) as a real node with node type, skill name,
+version, status, source task ids, allowed tools, and domain metadata. It may be
+promoted only if later macro evidence supports reusable structure involving the
+pending node; otherwise it is revoked at a macro boundary.
+
+Bundle construction is lifecycle-aware. For a new skill, the initial bundle
+builder may use compact source evidence from the originating trace. For an
+existing skill, bundle maintenance is a patch operation driven by credit-created
+cases, integration failures, and contract validation failures. Existing-skill
+bundle maintenance no longer receives full source traces or full replay traces
+and is not responsible for independently rediscovering trace-level failures.
+Bundle size is bounded by polarity and by total case count, retaining recent
+credit cases, high-confidence cases, and recent regression cases first.
+
+#### 3.1.8 Macro Maintenance and Heterogeneous Refactoring
+
+Macro maintenance is repository-level. It runs over the current window rather
+than the entire historical trace store. The overlap graph contains trace
+segments, active skill nodes, and pending skill nodes in the same graph. Before
+calling the refactorer, candidate cliques are filtered: a clique must include at
+least one current-window trace segment, must cover sufficient real train-task
+evidence, and must not be a pure skill-only clique. Candidate skills can be used
+only as weak supplementary recall; true participation comes from graph nodes and
+edges.
+
+The refactor prompt is deliberately compact. It provides the clique nodes, the
+clique edges, summaries of involved skill nodes, and optional repair context
+when a previous proposal failed bundle gates. The prompt does not include a full
+repository dump. The refactorer may propose a shared skill, merge/split actions,
+or affected updates to existing skills. All proposed commits are applied on a
+copy and must pass bundle gates for the affected skills before they are written
+to the repository. Macro maintenance also performs conservative skill-credit
+filtering, pending promotion or revocation, relation-graph updates, and optional
+extractor text-rule updates.
+
+```text
+Algorithm 5: Macro Maintenance with Heterogeneous Refactoring
+
+function MacroMaintenance(S, G, W, M):
+    G.incremental_update(W.trace_segments, active_and_pending_skill_nodes(S))
+
+    cliques <- FindCandidateCliques(G)
+    cliques <- FilterCliques(
+        cliques,
+        require_current_window_trace_segment=True,
+        forbid_pure_skill_only=True,
+        require_train_task_coverage=True
+    )
+
+    for clique in cliques:
+        proposal <- Rfg(
+            clique_nodes=clique.nodes,
+            clique_edges=clique.edges,
+            involved_skill_summaries=Summaries(S, clique.skill_nodes),
+            repair_context=None
+        )
+
+        candidate <- ApplyProposalOnCopy(S, proposal)
+        gate <- BundleGate(candidate, affected_skills(proposal))
+
+        if gate passes:
+            S <- candidate
+            PromotePendingEvidence(S, proposal)
+            UpdateSkillRelations(S, proposal)
+        else:
+            repair <- Rfg(
+                clique_nodes=clique.nodes,
+                clique_edges=clique.edges,
+                involved_skill_summaries=Summaries(S, clique.skill_nodes),
+                repair_context=gate.failures
+            )
+            CommitOnlyIfBundleGatePasses(S, repair)
+
+    ApplyConservativeCreditFilter(S, W.credit_events)
+    RevokeUnpromotedPendingSkills(S)
+
+    if extractor_rule_update_enabled:
+        M <- Trl(M, RuntimeFeedbackRows(S, W))
+
+    return macro_report(cliques)
+```
+
+#### 3.1.9 Held-Out Evaluation
+
+Held-out evaluation freezes the repository after the training/evolution loop.
+The runner uses a read-only skill snapshot, so held-out tasks may run
+concurrently while preserving manifest order in the output. Training and
+evolution remain serial. If a future retrieval implementation mutates usage
+counters during evaluation, each held-out task must receive a deep copy of the
+frozen repository. Reported outputs include task correctness, call-level
+quality, token cost, step count, retrieval statistics, credit events, micro
+maintenance reports, macro windows, refactor groups, and final skill versions.
+
+### 3.2 方法论（中文）
+
+#### 3.2.1 问题形式化
+
+我们将测试时 skill 演化定义为一个外部、带版本 skill 仓库的在线维护问题。训练任务序列
+\(q_1,\ldots,q_N\) 在部署过程中依次到达。基础模型、executor 和官方任务 runner 都保持
+冻结；算法只能更新外部 skill 仓库 \(S\)、异构 overlap graph \(G\)，以及供 extractor 使用
+的紧凑文本反馈规则 \(M\)。训练结束后，held-out evaluation 使用冻结的只读 \(S\) 快照。
+
+在这个框架中，skill 不是一次性的 prompt patch，而是一个可维护的软件工程制品。每个
+skill 都有带版本的正文、作用域、接口元数据、依赖元数据、证据、状态和有界 bundle
+regression tests。只有当证据表明该 skill 捕捉了可复用的局部不变量，并且 bundle tests
+保持相关工具/任务合约时，仓库才接受它。这个定义把三个目标分开：可重放合约下的正确性、
+跨相关任务的复用性，以及后续 refine/refactor 时的可维护性。
+
+#### 3.2.2 仓库状态与角色
+
+系统维护四类状态。\(S\) 是带版本的 skill 仓库，skill 状态可以是 `pending`、`active`、
+`disabled` 或 `archived`；只有 active skill 会进入 executor 上下文。\(G\) 是异构图，节点
+包括当前窗口 trace segment、active skill 和 pending skill；边表示词面重叠、embedding
+相似度、工具/错误相似度，以及显式 skill relation 元数据。\(M\) 存储由运行时证据得到的
+extractor 文本反馈规则。\(T\) 存储执行 trace 和官方 task snapshot，用于审计、bundle 构造
+和维护。
+
+实现中有六类功能角色。executor 使用检索到的 active skills 解题。retriever 选择 task-level
+和 step-level skill context，并可在工具错误后追加新的紧凑 skill-context message。credit
+assigner 对完成后的 trace 中每个 retrieved、injected 或 used skill 做归因，并输出维护信号。
+extractor 从 trace 中提出新的 pending skill。bundle tester 和 refiner 使用 skill-local
+证据维护已有 skill。macro refactorer 在异构图上决定 merge、split、promote 或 reject 可复用
+结构。
+
+#### 3.2.3 在线演化主循环
+
+训练和演化必须串行，因为每个训练任务都可能修改仓库。对每个任务，executor 先使用当前
+active repository 解题。随后，完成后的紧凑 trace projection 进入 credit assigner，生成
+skill-level attribution 和聚焦 bundle-case suggestions。extractor 从同一条 trace 中提出新的
+pending skills。trace segments、active skill nodes 和 pending skill nodes 被加入异构图。
+micro maintenance 按任务级频率运行，默认每个任务一次；macro maintenance 按窗口频率运行，
+默认每十个训练任务一次。
+
+```text
+算法 1：在线 Skill 仓库演化
+
+输入：
+  训练任务 Q_train = (q_1, ..., q_N)
+  held-out 测试任务 Q_test
+  初始 active 仓库 S_0
+  executor Exe，retriever Ret，extractor Ext
+  credit assigner Cdt，bundle tester Tst，refiner Rfn
+  graph refactorer Rfg，extractor-rule updater Trl
+  micro step k_micro = 1，macro step k_macro = 10
+
+状态：
+  S <- S_0                         // 带版本 skill 仓库
+  G <- empty heterogeneous graph    // trace、active-skill、pending-skill 节点
+  M <- empty extractor feedback rules
+  W <- empty macro window           // trace、segment 和 credit event
+
+for i = 1 to N:
+    trace_i, injected_i <- ExecuteWithRetrievedSkills(q_i, S, M)
+    relevant_i <- RetrievedInjectedOrUsedSkills(trace_i, S)
+
+    credit_i <- AssignCredit(
+        compact_task_summary(q_i, trace_i),
+        retrieved_injected_used_skills(trace_i),
+        compact_skill_projections(relevant_i),
+        focused_turns_with_tool_calls_and_errors(trace_i),
+        official_result_and_expected_calls(q_i),
+        token_and_step_metrics(trace_i)
+    )
+
+    credit_cases_i <- BuildFocusedBundleCases(
+        credit_i,
+        official_task_snapshot(q_i)
+    )
+
+    pending_i <- ExtractPendingSkills(trace_i, M)
+    for skill in pending_i:
+        S.add_pending(skill)
+        G.add_node(skill)
+
+    segments_i <- ExtractTraceSegments(trace_i)
+    G.incremental_update(segments_i, active_and_pending_skill_nodes(S))
+    W.add(trace_i, segments_i, credit_i)
+
+    if i mod k_micro == 0:
+        MicroMaintenance(S, q_i, credit_i, credit_cases_i, relevant_i)
+
+    if i mod k_macro == 0:
+        MacroMaintenance(S, G, W, M)
+        W <- empty
+
+if W is not empty:
+    MacroMaintenance(S, G, W, M)
+
+S_frozen <- Freeze(S)
+return EvaluateHeldout(Q_test, S_frozen)
+```
+
+#### 3.2.4 执行与 Step-Level Retrieval
+
+Executor retrieval 只允许使用 active skills。pending skills 参与维护和图重构，但不会注入
+executor prompt。每一步中，retriever 根据当前任务状态、trace prefix、工具/领域 predicate
+和 extractor feedback rules 选择 skill。如果工具错误暴露出新的相关 skill，且该 skill 尚未
+被注入，系统会向 message list 追加一条紧凑 prompt-context update，并在 trace 中记录
+`step_retrieved_skills`、`step_injected_skills` 和 `prompt_context_update` event。如果 step
+retrieval 没有新增 skill，则不会重复注入上下文。
+
+```text
+算法 2：带检索 Skill 的执行
+
+function ExecuteWithRetrievedSkills(q, S, M):
+    trace <- empty
+    injected <- empty set
+    messages <- initial_messages(q)
+
+    while task is not finished:
+        step_skills <- Ret(q, trace, active_skills(S), M)
+        new_skills <- step_skills \ injected
+
+        if new_skills is not empty:
+            messages.append(CompactSkillContext(new_skills))
+            injected <- injected union new_skills
+            trace.record_prompt_context_update(new_skills)
+
+        step_output <- Exe(messages, trace)
+        trace.append(step_output)
+
+    return trace, injected
+```
+
+#### 3.2.5 Credit Assignment 与聚焦 Bundle Cases
+
+Credit assignment 是运行时反馈的核心机制。它的 prompt 只接收有界 task projection：紧凑任务
+摘要、retrieved/injected/used skill 列表、候选 skill 的紧凑投影、包含 tool calls 和 tool
+errors 的聚焦 turns、官方结果和 expected calls，以及 token/step metrics。它刻意不接收完整
+raw trace、完整 debug events、整个 skill store 或无关 replay results。
+
+对于每个候选 skill，credit assigner 判断该 skill 是 `helpful`、`harmful`、`neutral` 还是
+`uncertain`。同时输出 confidence、evidence strength、attribution scope、是否需要 refinement、
+是否是 filter candidate，以及具体 maintenance actions。bundle-case suggestion 是片段级指令，
+不是把整个 task 变成 regression test 的请求。每个 suggestion 必须包含 skill name、polarity
+（`positive`、`negative` 或 `integration`）、reason、source task id、`focus_turn_indices`、
+expected contract 和 task-fragment policy。
+
+系统只能通过切片官方 task snapshot 构造可重放 bundle case。构造出的 fragment 必须复用官方
+question、expected tool calls、input artifacts 和 metadata，不能发明 expected calls。如果无法
+构造聚焦的官方 fragment，则只记录证据，不加入 bundle case。harmful credit 只有在 judgment 为
+harmful 且 confidence 至少 0.65 或该 skill 实际被使用时，才生成 negative case。helpful credit
+只有在收益明确属于 token saving、schema help、workflow alignment 或 correctness gain 时，才生成
+positive case。
+
+```text
+算法 3：从 Credit 构造聚焦 Bundle Cases
+
+function BuildFocusedBundleCases(credit, official_snapshot):
+    cases <- empty list
+
+    for event in credit.skill_events:
+        for suggestion in event.bundle_case_suggestions:
+            if suggestion.polarity == negative:
+                if event.judgment != harmful:
+                    continue
+                if event.confidence < 0.65 and not event.used:
+                    continue
+
+            if suggestion.polarity == positive:
+                if event.judgment != helpful:
+                    continue
+                if event.effect_type not in {
+                    token_saving,
+                    schema_help,
+                    workflow_alignment,
+                    correctness_gain
+                }:
+                    continue
+
+            fragment <- SliceOfficialTaskSnapshot(
+                official_snapshot,
+                suggestion.focus_turn_indices,
+                suggestion.task_fragment_policy
+            )
+
+            if fragment is replayable:
+                cases.append(BundleCase(suggestion, fragment))
+            else:
+                RecordEvidenceWithoutCase(event, suggestion)
+
+    return BoundedByPolarityAndRecency(cases)
+```
+
+#### 3.2.6 Micro Maintenance
+
+Micro maintenance 是 skill-local 和 task-local 的。它接收当前 task、该 task 的 credit events、
+credit 生成的 bundle cases，以及当前 relevant skill names。它不运行 overlap refactor、不更新
+文本规则、不撤销 pending skill、不做全仓库 bundle rebuild，也不做 broad per-skill refinement。
+如果某个 skill 收到强 credit evidence 或新的聚焦 bundle case，系统先允许对该目标 skill 做
+credit-guided pre-refinement，然后再运行 strict bundle tests。如果 bundle 失败，refiner 接收
+failed bundle cases、该 skill 的 credit context、dependency neighborhood 和 previous refinement
+history。repair loop 是有界的，默认 micro repair budget 为一轮。
+
+```text
+算法 4：Credit 引导的 Micro Maintenance
+
+function MicroMaintenance(S, q, credit, credit_cases, relevant_skills):
+    targets <- SkillsWithNewCases(credit_cases)
+    targets <- targets union StrongHelpfulOrHarmfulCredit(credit, relevant_skills)
+
+    if targets is empty:
+        return empty_report
+
+    for s in targets:
+        if ShouldPreRefine(credit[s]):
+            S[s] <- Rfn(
+                artifact=S[s],
+                failed_cases=[],
+                credit_context=credit[s],
+                dependency_neighborhood=Neighbors(S, s),
+                refinement_history=History(S, s)
+            )
+
+        result <- Tst(S[s].bundle, strict_contract_gate=True)
+        rounds <- 0
+
+        while result fails and rounds < max_micro_repair_rounds:
+            S[s] <- Rfn(
+                artifact=S[s],
+                failed_cases=result.failed_cases,
+                credit_context=credit[s],
+                dependency_neighborhood=Neighbors(S, s),
+                refinement_history=History(S, s)
+            )
+            result <- Tst(S[s].bundle, strict_contract_gate=True)
+            rounds <- rounds + 1
+
+    return micro_report(targets)
+```
+
+#### 3.2.7 Pending Skills 与 Bundle 构造
+
+新 skill 先以 pending candidate 进入仓库。这样可以避免单条 trace 上的假设立刻污染 executor
+retrieval，同时仍允许该 candidate 参与 graph-level posterior analysis。pending skill 会作为真实
+节点进入 \(G\)，并携带 node type、skill name、version、status、source task ids、allowed tools
+和 domain metadata。只有当后续 macro evidence 支持包含该 pending node 的可复用结构时，它才会
+被 promote；否则会在 macro 边界被 revoke。
+
+Bundle 构造按 skill 生命周期处理。对于新 skill，initial bundle builder 可以使用来自原始 trace
+的 compact source evidence。对于已有 skill，bundle maintenance 是由 credit-created cases、
+integration failures 和 contract validation failures 驱动的 patch 操作。已有 skill 的 bundle
+maintenance 不再接收完整 source traces 或 replay traces，也不负责从 trace 中重新发现问题。
+bundle size 受每类 polarity 和总 case 数限制，优先保留最近 credit cases、高置信 cases 和最近
+regression cases。
+
+#### 3.2.8 Macro Maintenance 与异构图重构
+
+Macro maintenance 是仓库级维护。它处理当前 window，而不是全部历史 trace store。overlap graph
+在同一张图中包含 trace segments、active skill nodes 和 pending skill nodes。调用 refactorer
+前，候选 clique 会被过滤：必须包含至少一个当前窗口 trace segment，必须覆盖足够真实训练任务证据，
+并且不能是 pure skill-only clique。candidate skills 只能作为弱 recall 补充；真正的参与关系来自
+图节点和边。
+
+Refactor prompt 被刻意压缩。它提供 clique nodes、clique edges、involved skill summaries，以及
+当上一次 proposal 未通过 bundle gate 时的可选 repair context。prompt 不包含完整仓库 dump。
+refactorer 可以提出 shared skill、merge/split actions 或对已有 skill 的 affected updates。所有
+proposal 都先应用在副本上，并且必须让 affected skills 通过 bundle gates 后才能写回仓库。macro
+maintenance 还会执行保守 skill-credit filtering、pending promotion/revocation、relation graph
+updates，以及可选 extractor text-rule updates。
+
+```text
+算法 5：基于异构图重构的 Macro Maintenance
+
+function MacroMaintenance(S, G, W, M):
+    G.incremental_update(W.trace_segments, active_and_pending_skill_nodes(S))
+
+    cliques <- FindCandidateCliques(G)
+    cliques <- FilterCliques(
+        cliques,
+        require_current_window_trace_segment=True,
+        forbid_pure_skill_only=True,
+        require_train_task_coverage=True
+    )
+
+    for clique in cliques:
+        proposal <- Rfg(
+            clique_nodes=clique.nodes,
+            clique_edges=clique.edges,
+            involved_skill_summaries=Summaries(S, clique.skill_nodes),
+            repair_context=None
+        )
+
+        candidate <- ApplyProposalOnCopy(S, proposal)
+        gate <- BundleGate(candidate, affected_skills(proposal))
+
+        if gate passes:
+            S <- candidate
+            PromotePendingEvidence(S, proposal)
+            UpdateSkillRelations(S, proposal)
+        else:
+            repair <- Rfg(
+                clique_nodes=clique.nodes,
+                clique_edges=clique.edges,
+                involved_skill_summaries=Summaries(S, clique.skill_nodes),
+                repair_context=gate.failures
+            )
+            CommitOnlyIfBundleGatePasses(S, repair)
+
+    ApplyConservativeCreditFilter(S, W.credit_events)
+    RevokeUnpromotedPendingSkills(S)
+
+    if extractor_rule_update_enabled:
+        M <- Trl(M, RuntimeFeedbackRows(S, W))
+
+    return macro_report(cliques)
+```
+
+#### 3.2.9 Held-Out Evaluation
+
+Held-out evaluation 在训练/演化循环结束后冻结仓库。runner 使用只读 skill snapshot，因此可以并发
+运行 held-out tasks，同时在输出中保持 manifest 顺序。训练和演化仍保持串行。如果未来 retrieval
+实现会在 evaluation 中修改 usage counters，则每个 held-out task 必须拿到 frozen repository 的
+deep copy。报告结果包括 task correctness、call-level quality、token cost、step count、retrieval
+statistics、credit events、micro maintenance reports、macro windows、refactor groups 和 final skill
+versions。
+
+### 3.3 Implementation-Oriented Python-Style Pseudocode (Preserved)
+
+The following block preserves the original Python-style pseudocode as an
+implementation-oriented companion to the standard pseudocode above. It is kept
+unchanged so the paper retains the previous code-reading view while adding the
+more formal algorithms in Sections 3.1 and 3.2.
+
+下面保留原来的 Python-style 伪代码，作为上面标准伪代码的实现导向补充。该代码块保持不变，
+用于保留原来的代码阅读视角；正式算法以 3.1 和 3.2 中的标准伪代码为准。
 
 ```
 Input: Query $\{q_n: 1\le n\le N\}$, Initial skill library $S=\Phi$, Reusage Graph $G=\Phi$, Execution Traces $T=\Phi$, Meta-skills $MS=\Phi$, Evolve turn T.
@@ -310,17 +959,6 @@ def main(S, MS, G, T, N, micro_maintenance_step, marco_maintenance_step):
                 check_pending_skills(S)
                 
 ```
-
-future TODO:
-1. 加skill注入门控：使用一个小llm判断是否真的应该注入当前skill到executor context。
-2. 更多反馈链路：关于正确性的信号集中在executor执行结束之后产生，包括：
-|              | correctness                                     | reusability                                  |
-| ------------ | ----------------------------------------------- | -------------------------------------------- |
-| 信号产生环节 | executor执行结束之后                            | 每次marco_maintenance_step                   |
-| 度量方式     | 执行正误<br />online的with/without对比执行结果  | skill的被检索次数<br />skill的被正确执行次数 |
-| 反馈信息     | skill是否写错<br />skill gate是否做了正确的筛选 | skill是否能够复用                            |
-| 反馈对象     | executor, skill gate                            | executor                                     |
-
 
 
 ## 4. Experiments

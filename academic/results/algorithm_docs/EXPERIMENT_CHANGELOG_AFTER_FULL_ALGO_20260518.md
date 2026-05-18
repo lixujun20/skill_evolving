@@ -130,16 +130,138 @@ Spreadsheet 结论：
 
 BFCL 50-test：
 
-| setting | success_rate | avg_score | avg_total_tokens | avg_input | avg_output | elapsed_s |
-|---|---:|---:|---:|---:|---:|---:|
-| baseline | 0.18 | 0.7339 | 63632.5 | 62672.9 | 959.6 | 1841.873 |
-| full skill | 0.22 | 0.7968 | 74711.6 | 73700.7 | 1010.9 | 1691.405 |
-| compact skill | 0.22 | 0.7937 | 71810.7 | 70812.6 | 998.1 | 1727.631 |
+| setting | success/pass_at_k | official_valid_rate | avg_score | avg_call_recall | avg_call_precision | avg_total_tokens | avg_input | avg_output | elapsed_s |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| baseline | 0.18 | 0.4898 | 0.7339 | 0.7958 | 0.6983 | 63632.5 | 62672.9 | 959.6 | 1841.873 |
+| full skill | 0.22 | 0.6600 | 0.7968 | 0.8766 | 0.7493 | 74711.6 | 73700.7 | 1010.9 | 1691.405 |
+| compact skill | 0.22 | 0.6400 | 0.7937 | 0.8666 | 0.7511 | 71810.7 | 70812.6 | 998.1 | 1727.631 |
 
 BFCL 结论：
 - full/compact skill 都提升了 avg_score 与 success_rate，但 BFCL baseline 的 tool schema/input 已经非常大。
 - token overhead 主要来自 input/tool context 和 skill context，不是 completion。
 - BFCL callable function skill 中间层已通过单元测试；当前 learned BFCL store 中可展开的 composite function skill 仍少，因此更多影响未来训练产物。
+
+## 未单独提交但需要保留的中间实验结果
+
+这些结果发生在多次代码修改之间，有些当时用于诊断，没有各自对应的独立 git commit。它们仍然应保留在实验链路中，因为它们解释了后续为什么继续改 injector、callable、parser 和 cost 口径。
+
+### 2026-05-17 23:32 BFCL 50/50 guardfix baseline
+
+文件：`academic/results/claude_proxy_related50_50_guardfix_20260517_232531_baseline.json`
+
+| metric | value |
+|---|---:|
+| success/pass_at_k | 0.06 |
+| official_valid_rate | 0.44 |
+| avg_score | 0.7312 |
+| avg_call_recall | 0.8099 |
+| avg_call_precision | 0.6946 |
+| avg_total_tokens | 70323.8 |
+
+解释：这是用户记得的“baseline valid rate 0.4 左右”的来源。这里的 0.44 是 official valid/pass 口径，不是 avg_score。
+
+### 2026-05-18 00:30 BFCL evolve train/test 诊断结果
+
+文件：`academic/results/claude_proxy_related50_50_guardfix_20260517_232531_evolve.json`
+
+Train round：
+
+| metric | value |
+|---|---:|
+| success/pass_at_k | 0.24 |
+| official_valid_rate | 0.62 |
+| avg_score | 0.8262 |
+| avg_call_recall | 0.8794 |
+| avg_call_precision | 0.7962 |
+| avg_total_tokens | 62468.9 |
+
+Heldout test：
+
+| metric | value |
+|---|---:|
+| success/pass_at_k | 0.02 |
+| official_valid_rate | 0.80 |
+| avg_score | 0.3314 |
+| avg_call_recall | 0.3718 |
+| avg_call_precision | 0.3018 |
+| avg_total_tokens | 41788.7 |
+
+解释：这个结果暴露了早期 evolve test 的异常：official_valid_rate 高，但 avg_score/call recall 很低，说明“官方 valid”不能单独作为质量指标，必须同时报 strict success、avg_score、call recall/precision。后续我们才强化了 case study、guardfix、injector 和细粒度 cost 统计。
+
+### 2026-05-18 01:29 使用训练后 store 重测 BFCL test50
+
+文件：`academic/results/bfcl_guardfix_trainedstore_test50_rerun2_20260518_012134.json`
+
+| metric | value |
+|---|---:|
+| success/pass_at_k | 0.08 |
+| official_valid_rate | 0.74 |
+| avg_score | 0.7991 |
+| avg_call_recall | 0.8987 |
+| avg_call_precision | 0.7314 |
+| avg_turn_success_rate | 0.5555 |
+| avg_relaxed_turn_success_rate | 0.8620 |
+| avg_total_tokens | 86813.3 |
+| elapsed_s | 446.895 |
+
+解释：这个中间结果说明 learned store 对 call recall/avg_score 有帮助，但 strict success 仍低，并且 token 开销明显偏高。它直接推动了后续 compact injector、cost accounting 和 function skill callable 方向。
+
+### 2026-05-18 16:50 Spreadsheet cost retest
+
+文件：
+- `academic/results/cost_retest_sheet_baseline_20260518.json`
+- `academic/results/cost_retest_sheet_fullskill_20260518.json`
+- `academic/results/cost_retest_sheet_compact_20260518.json`
+
+| setting | success | success_rate | avg_score | avg_total_tokens | avg_input | avg_output |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline | 13/50 | 0.26 | 0.3189 | 1621.3 | 747.9 | 873.5 |
+| full skill | 18/50 | 0.36 | 0.4501 | 3816.3 | 3006.0 | 810.4 |
+| compact skill | 12/50 | 0.24 | 0.3186 | 1873.2 | 1038.7 | 834.5 |
+
+解释：full skill 最好，但主要靠输入侧塞完整代码。compact 省 token 后效果掉回 baseline，说明 function/code skill 不能只做摘要，需要可调用机制或更高 utility 的 contract。
+
+### 2026-05-18 19:38 Spreadsheet compact callable v1
+
+文件：`academic/results/cost_retest_sheet_compact_callable_20260518.json`
+
+| metric | value |
+|---|---:|
+| success_rate | 0.22 |
+| avg_score | 0.2895 |
+| avg_total_tokens | 1925.8 |
+| avg_input_tokens | 1072.3 |
+| avg_output_tokens | 853.5 |
+| callable available traces | 7 |
+| actual `skill_library` imports | 1 |
+
+解释：v1 证明旧 evolved store 里确实有 executable skill 被错误标成 informational，但事后 callable 化不够；一个真实 import case 还因为 kwargs 没注入到 snippet 局部环境而失败。这推动了 v2 的 parser/wrapper/callable-map 修复。
+
+### 2026-05-18 19:45 Spreadsheet compact callable v2
+
+文件：`academic/results/cost_retest_sheet_compact_callable_v2_20260518.json`
+
+| metric | value |
+|---|---:|
+| success_rate | 0.28 |
+| avg_score | 0.3385 |
+| avg_total_tokens | 2010.4 |
+| avg_input_tokens | 1126.9 |
+| avg_output_tokens | 883.5 |
+| callable available traces | 18 |
+| actual `skill_library` imports | 0 |
+
+解释：v2 修复了官方 answer range parser 和 snippet wrapper，并恢复到略高于 baseline/old compact；但模型仍主要参考 callable map 重写代码，而不是 import。这说明后续必须在 extractor/refiner 阶段生成真正“函数优先”的 skill，而不是事后包装自由文本代码片段。
+
+## 指标口径说明
+
+- `success_rate` / `pass_at_k`：最严格的 task-level pass。
+- `official_valid_rate` / `official_pass_at_k`：BFCL official runner 的 valid/pass 口径，可能与 strict success 不一致。
+- `avg_score`：连续质量分数，通常更接近 call-level F1/partial credit。
+- `avg_call_recall` / `avg_call_precision`：工具调用覆盖和精度，对 BFCL 诊断尤其重要。
+- `avg_total_tokens = input + cache_input + output`。当前这些实验 cache input 为 0。
+
+因此，baseline 并没有从 0.4 valid 变成 0.7 valid；`0.7339` 是 cost retest baseline 的 `avg_score`，同一结果里的 `official_valid_rate` 是 `0.4898`。
 
 ## 当前可追溯结论
 
@@ -150,12 +272,16 @@ BFCL 结论：
 
 ## 中期目标
 
+- 在每次 macro maintenance 后保存 skill store snapshot。该开销主要是磁盘，不是 LLM：当前 BFCL 43 个 skills 的 final store 约 1.9MB；150 train、macro step 10 时约 15 个 snapshot，预计几十 MB 量级，可接受。真正昂贵的是“每个 snapshot 都跑完整 heldout test”。
+- 增加 `macro_skill_snapshots[]` 元数据：window index、task range、n_active/n_pending/n_disabled、changed skill names、snapshot path、store hash。
+- 增加 periodic heldout probe：每个 macro 或每 2-3 个 macro 对固定 5-10 个 sentinel test task 测一次；完整 50 test 只在关键 macro、最终 store、或 ablation 需要时跑。
 - 将 extractor/refiner 的 function skill schema 标准化：稳定函数名、参数表、适用条件、调用示例、非适用条件。
 - 让 test-time injector 按 utility 压缩：优先 callable import map + contract，少给完整历史代码。
 - 对训练阶段也接入同样的 injector，验证是否降低 token 且不损害 skill extraction/credit。
 - 对 BFCL 继续增强 composite function skill：将常见 raw tool call 序列学习成可展开 function skill，并在 scoring 前展开为 raw calls。
 - 将结果表按 cost 口径固定：accuracy/score、input/cache-input/output、executor/injector、correct-only cost、utility per million tokens。
 - 重新跑 BFCL/Spreadsheet 的小规模和 50/50 对照，分清 prompt-only skill、compact skill、callable skill 的贡献。
+- 设计 Spreadsheet multi-turn setting：把单个 SpreadsheetBench 指令拆成 inspect/plan/execute/verify 修复多轮，保留同一 workbook state，使 workflow skill、credit assigner 和运行时反馈更有发挥空间。
 
 ## 远期目标
 

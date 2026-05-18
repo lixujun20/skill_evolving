@@ -12,6 +12,7 @@ from academic.benchmarks.core.types import BenchmarkResult, BenchmarkTask, Skill
 from academic.benchmarks.spreadsheet.adapter import (
     SPREADSHEET_DONE_PATTERN,
     SpreadsheetMaintenanceAdapter,
+    _called_spreadsheet_skill_functions,
     _execute_spreadsheet_bundle_tests,
     _answer_range_refs,
     _is_spreadsheet_callable_skill,
@@ -58,7 +59,18 @@ def test_spreadsheet_answer_range_parser_handles_quoted_sheet_prefix_and_trailin
     ]
 
 
-def _detail(task: BenchmarkTask, *, success: bool, score: float, retrieved: List[str], code: str) -> Dict[str, Any]:
+def _detail(
+    task: BenchmarkTask,
+    *,
+    success: bool,
+    score: float,
+    retrieved: List[str],
+    code: str,
+    prompt_injected: List[str] | None = None,
+    called: List[str] | None = None,
+) -> Dict[str, Any]:
+    injected = prompt_injected if prompt_injected is not None else retrieved
+    called = called or []
     result = BenchmarkResult(
         benchmark="spreadsheet",
         task_id=task.task_id,
@@ -73,8 +85,17 @@ def _detail(task: BenchmarkTask, *, success: bool, score: float, retrieved: List
             "returncode": 0,
             "total_tokens": 120,
             "retrieved_skills": retrieved,
+            "prompt_injected_skills": injected,
+            "called_skill_functions": called,
         },
-        trace={"retrieved_skills": retrieved, "code": code, "stderr": "", "stdout": ""},
+        trace={
+            "retrieved_skills": retrieved,
+            "prompt_injected_skills": injected,
+            "called_skill_functions": called,
+            "code": code,
+            "stderr": "",
+            "stdout": "",
+        },
     )
     return {
         "task_id": task.task_id,
@@ -142,6 +163,7 @@ spreadsheet_double_a1_to_b1(INPUT_XLSX, OUTPUT_XLSX)
 
     assert result.success is True
     assert result.metrics["prompt_injected_skills"] == ["spreadsheet_double_a1_to_b1"]
+    assert result.metrics["called_skill_functions"] == ["spreadsheet_double_a1_to_b1"]
     assert result.trace["callable_skills"][0]["function_name"] == "spreadsheet_double_a1_to_b1"
     assert (tmp_path / "work" / "skill_library.py").exists()
 
@@ -199,6 +221,7 @@ spreadsheet_legacy_double_callable(INPUT_XLSX, OUTPUT_XLSX)
 
     assert result.success is True
     assert result.trace["callable_skills"][0]["skill_name"] == "spreadsheet_legacy_double_callable"
+    assert result.metrics["called_skill_functions"] == ["spreadsheet_legacy_double_callable"]
 
 
 async def test_spreadsheet_workflow_skill_is_not_exported_as_callable(monkeypatch, tmp_path: Path) -> None:
@@ -248,6 +271,27 @@ wb.save(OUTPUT_XLSX)
     assert result.success is True
     assert result.trace["callable_skills"] == []
     assert not (tmp_path / "work" / "skill_library.py").exists()
+
+
+def test_spreadsheet_called_skill_function_parser_handles_alias_and_module_import() -> None:
+    rows = [
+        {"skill_name": "spreadsheet_double_a1_to_b1", "function_name": "spreadsheet_double_a1_to_b1"},
+        {"skill_name": "spreadsheet_sum_column", "function_name": "spreadsheet_sum_column"},
+    ]
+
+    direct = _called_spreadsheet_skill_functions(
+        "from skill_library import spreadsheet_double_a1_to_b1 as dbl\n"
+        "dbl(INPUT_XLSX, OUTPUT_XLSX)\n",
+        rows,
+    )
+    module = _called_spreadsheet_skill_functions(
+        "import skill_library as skills\n"
+        "skills.spreadsheet_sum_column(INPUT_XLSX, OUTPUT_XLSX)\n",
+        rows,
+    )
+
+    assert direct == ["spreadsheet_double_a1_to_b1"]
+    assert module == ["spreadsheet_sum_column"]
 
 
 async def test_spreadsheet_notebook_mode_returns_errors_and_reuses_variables(monkeypatch, tmp_path: Path) -> None:
@@ -553,6 +597,145 @@ async def test_spreadsheet_credit_creates_focused_case_and_micro_refines_before_
     assert call_order.index("refiner") < call_order.index("bundle_test")
     assert report["refine_decisions"][0]["action"] == "refine_minor"
     assert "ws['A1'].value * 2" in store.get(skill.name).body
+
+
+async def test_spreadsheet_credit_ignores_retrieved_only_skill(monkeypatch, tmp_path: Path) -> None:
+    task = _task(tmp_path, "sheet_credit_candidates", "Double A1 into B1.", source=7, answer=14)
+    retrieved_only = SkillArtifact(
+        name="spreadsheet_retrieved_only",
+        kind="workflow_guardrail_card",
+        description="Should not receive credit if not injected.",
+        body="Retrieved-only guidance.",
+        metadata={"domains": ["SpreadsheetBench"], "intent_keywords": ["double"]},
+    )
+    injected = SkillArtifact(
+        name="spreadsheet_injected_workflow",
+        kind="workflow_guardrail_card",
+        description="Injected workflow guidance.",
+        body="Injected guidance.",
+        metadata={"domains": ["SpreadsheetBench"], "intent_keywords": ["double"]},
+    )
+    called = SkillArtifact(
+        name="spreadsheet_called_function",
+        kind="executable_tool",
+        description="Called function skill.",
+        body="```python\ndef spreadsheet_called_function(INPUT_XLSX, OUTPUT_XLSX, **kwargs):\n    return OUTPUT_XLSX\n```",
+        metadata={"domains": ["SpreadsheetBench"], "intent_keywords": ["double"]},
+    )
+    store = ArtifactStore([retrieved_only, injected, called])
+    detail = _detail(
+        task,
+        success=True,
+        score=1.0,
+        retrieved=[retrieved_only.name, injected.name, called.name],
+        prompt_injected=[injected.name],
+        called=[called.name],
+        code="from skill_library import spreadsheet_called_function\nspreadsheet_called_function(INPUT_XLSX, OUTPUT_XLSX)",
+    )
+    captured: Dict[str, Any] = {}
+
+    async def fake_ask_json(**kwargs: Any) -> Dict[str, Any]:
+        captured["payload"] = kwargs["user"]
+        payload = json.loads(kwargs["user"])
+        candidate_names = [item["skill_name"] for item in payload["candidate_skills"]]
+        assert candidate_names == [injected.name, called.name]
+        assert payload["retrieval_audit"]["retrieved_only_skills"] == [retrieved_only.name]
+        return {
+            "task_summary": {"task_id": task.task_id, "score": 1.0, "success": True},
+            "skill_judgments": [
+                {
+                    "skill_name": injected.name,
+                    "judgment": "neutral",
+                    "effect_type": "no_material_effect",
+                    "confidence": 0.5,
+                    "reason": "present but not causal",
+                    "maintenance_actions": [],
+                    "refine_required": False,
+                    "filter_candidate": False,
+                    "evidence_strength": "weak",
+                    "attribution_scope": "prompt_influence",
+                    "bundle_case_suggestions": [],
+                    "evidence": {"retrieved": True, "injected": True, "used": False},
+                },
+                {
+                    "skill_name": called.name,
+                    "judgment": "helpful",
+                    "effect_type": "correctness_gain",
+                    "confidence": 0.8,
+                    "reason": "called helper matched task",
+                    "maintenance_actions": [],
+                    "refine_required": False,
+                    "filter_candidate": False,
+                    "evidence_strength": "strong",
+                    "attribution_scope": "direct_use",
+                    "bundle_case_suggestions": [],
+                    "evidence": {"retrieved": True, "injected": False, "used": True},
+                },
+            ],
+        }
+
+    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter._ask_json", fake_ask_json)
+
+    events = await SpreadsheetMaintenanceAdapter().assign_credit(
+        detail=detail,
+        store=store,
+        config=MaintenanceRunConfig(llm_config="mock"),
+        round_index=0,
+        task_index=0,
+    )
+
+    assert [event["skill_name"] for event in events] == [injected.name, called.name]
+    assert "retrieved_only_skills" in captured["payload"]
+    assert "prompt_injected_or_called_only" in captured["payload"]
+    assert store.get(retrieved_only.name).usage_count == 0
+    assert store.get(injected.name).usage_count == 1
+    assert store.get(called.name).success_count == 1
+
+
+async def test_spreadsheet_credit_fallback_ignores_retrieved_only_skill(monkeypatch, tmp_path: Path) -> None:
+    task = _task(tmp_path, "sheet_credit_fallback", "Double A1 into B1.", source=7, answer=14)
+    retrieved_only = SkillArtifact(
+        name="spreadsheet_fallback_retrieved_only",
+        kind="workflow_guardrail_card",
+        description="Should not receive fallback credit if not injected.",
+        body="Retrieved-only guidance.",
+        metadata={"domains": ["SpreadsheetBench", "formula_generation"], "intent_keywords": ["double"]},
+    )
+    injected = SkillArtifact(
+        name="spreadsheet_fallback_injected",
+        kind="workflow_guardrail_card",
+        description="Injected guidance.",
+        body="Injected guidance.",
+        metadata={"domains": ["SpreadsheetBench", "formula_generation"], "intent_keywords": ["double"]},
+    )
+    store = ArtifactStore([retrieved_only, injected])
+    detail = _detail(
+        task,
+        success=True,
+        score=1.0,
+        retrieved=[retrieved_only.name, injected.name],
+        prompt_injected=[injected.name],
+        code="ws['B1']=ws['A1'].value*2\nwb.save(OUTPUT_XLSX)",
+    )
+
+    async def failing_ask_json(**kwargs: Any) -> Dict[str, Any]:
+        raise RuntimeError("mock credit failure")
+
+    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter._ask_json", failing_ask_json)
+
+    events = await SpreadsheetMaintenanceAdapter().assign_credit(
+        detail=detail,
+        store=store,
+        config=MaintenanceRunConfig(llm_config="mock"),
+        round_index=0,
+        task_index=0,
+    )
+
+    assert [event["skill_name"] for event in events] == [injected.name]
+    assert events[0]["evidence"]["retrieved"] is True
+    assert events[0]["evidence"]["injected"] is True
+    assert events[0]["evidence"]["used"] is False
+    assert store.get(retrieved_only.name).usage_count == 0
 
 
 async def test_spreadsheet_failed_formula_mismatch_extracts_repair_skill_when_llm_empty(monkeypatch, tmp_path: Path) -> None:

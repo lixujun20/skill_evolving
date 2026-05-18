@@ -173,7 +173,7 @@ Return schema:
 SPREADSHEET_CREDIT_SYSTEM = """\
 You are the SpreadsheetBench credit assigner and maintenance-attribution judge.
 
-You receive one compact task trace and only the retrieved candidate skills.
+You receive one compact task trace and only the exposed/called candidate skills.
 Judge whether each skill was helpful, harmful, neutral, or uncertain for this
 specific task.
 
@@ -277,6 +277,7 @@ class SpreadsheetTrace:
     elapsed_s: float = 0.0
     retrieved_skills: List[str] = field(default_factory=list)
     prompt_injected_skills: List[str] = field(default_factory=list)
+    called_skill_functions: List[str] = field(default_factory=list)
     callable_skills: List[Dict[str, Any]] = field(default_factory=list)
     filtered_skills: List[Dict[str, Any]] = field(default_factory=list)
     injector_events: List[Dict[str, Any]] = field(default_factory=list)
@@ -298,6 +299,7 @@ class SpreadsheetTrace:
             "elapsed_s": self.elapsed_s,
             "retrieved_skills": self.retrieved_skills,
             "prompt_injected_skills": self.prompt_injected_skills,
+            "called_skill_functions": self.called_skill_functions,
             "callable_skills": self.callable_skills,
             "filtered_skills": self.filtered_skills,
             "injector_events": self.injector_events,
@@ -497,6 +499,10 @@ async def run_spreadsheet_task(
                 metrics={"reason": "no_python_code"},
                 trace=trace.as_dict(),
             )
+        trace.called_skill_functions = _called_spreadsheet_skill_functions(
+            trace.code,
+            callable_prompt["skills"],
+        )
         stdout, stderr, returncode = await asyncio.to_thread(
             _run_code, trace.code, input_copy, output_path, base_work_dir
         )
@@ -532,6 +538,7 @@ async def run_spreadsheet_task(
     verify["elapsed_s"] = trace.elapsed_s
     verify["retrieved_skills"] = trace.retrieved_skills
     verify["prompt_injected_skills"] = trace.prompt_injected_skills
+    verify["called_skill_functions"] = trace.called_skill_functions
     verify["filtered_skills"] = trace.filtered_skills
     verify["injector_events"] = trace.injector_events
     verify["skill_injector_mode"] = injector_mode
@@ -671,6 +678,10 @@ async def run_spreadsheet_task_notebook(
                 "completion_tokens": response.completion_tokens,
             }
             if code:
+                called_this_turn = _called_spreadsheet_skill_functions(
+                    code,
+                    callable_prompt["skills"],
+                )
                 exec_result = session.run_cell(code, timeout=CODE_EXEC_TIMEOUT)
                 turn.update(exec_result)
                 trace.code = (trace.code + "\n\n# %% notebook turn " + str(turn_index) + "\n" + code).strip()
@@ -681,7 +692,11 @@ async def run_spreadsheet_task_notebook(
                         "stdout": exec_result.get("stdout", ""),
                         "stderr": exec_result.get("stderr", ""),
                         "returncode": exec_result.get("returncode"),
+                        "called_skill_functions": called_this_turn,
                     }
+                )
+                trace.called_skill_functions = list(
+                    dict.fromkeys([*trace.called_skill_functions, *called_this_turn])
                 )
             else:
                 turn.update({"stdout": "", "stderr": "", "returncode": None})
@@ -759,6 +774,7 @@ async def run_spreadsheet_task_notebook(
     verify["elapsed_s"] = trace.elapsed_s
     verify["retrieved_skills"] = trace.retrieved_skills
     verify["prompt_injected_skills"] = trace.prompt_injected_skills
+    verify["called_skill_functions"] = trace.called_skill_functions
     verify["filtered_skills"] = trace.filtered_skills
     verify["injector_events"] = trace.injector_events
     verify["skill_injector_mode"] = injector_mode
@@ -1033,6 +1049,61 @@ def _is_spreadsheet_callable_skill(skill: SkillArtifact) -> bool:
     if kind not in {"executable_tool", "function_tool", "script_tool"}:
         return False
     return bool(_spreadsheet_skill_code(skill))
+
+
+def _called_spreadsheet_skill_functions(
+    code: str,
+    callable_rows: Sequence[Dict[str, Any]],
+) -> List[str]:
+    function_to_skill = {
+        str(row.get("function_name") or ""): str(row.get("skill_name") or "")
+        for row in callable_rows
+        if str(row.get("function_name") or "") and str(row.get("skill_name") or "")
+    }
+    if not function_to_skill or not str(code or "").strip():
+        return []
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return _called_spreadsheet_skill_functions_from_text(code, function_to_skill)
+    imported_aliases: Dict[str, str] = {}
+    module_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "skill_library":
+            for alias in node.names:
+                imported = str(alias.name)
+                if imported in function_to_skill:
+                    imported_aliases[str(alias.asname or alias.name)] = imported
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "skill_library":
+                    module_aliases.add(str(alias.asname or alias.name))
+    called: List[str] = []
+    for node in ast.walk(tree):
+        func = getattr(node, "func", None)
+        function_name = ""
+        if isinstance(func, ast.Name):
+            function_name = imported_aliases.get(func.id, func.id if func.id in function_to_skill else "")
+        elif isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            if func.value.id in module_aliases and func.attr in function_to_skill:
+                function_name = func.attr
+        if function_name:
+            skill_name = function_to_skill.get(function_name)
+            if skill_name and skill_name not in called:
+                called.append(skill_name)
+    return called
+
+
+def _called_spreadsheet_skill_functions_from_text(
+    code: str,
+    function_to_skill: Dict[str, str],
+) -> List[str]:
+    called: List[str] = []
+    for function_name, skill_name in function_to_skill.items():
+        if re.search(rf"\b{re.escape(function_name)}\s*\(", str(code or "")):
+            if skill_name not in called:
+                called.append(skill_name)
+    return called
 
 
 def _spreadsheet_skill_function_name(name: str) -> str:
@@ -1379,9 +1450,9 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
     ) -> List[Dict[str, Any]]:
         del round_index
         projection = _spreadsheet_trace_projection(detail)
-        retrieved_names = projection.get("retrieved_skills") or []
+        candidate_names = _spreadsheet_credit_candidate_names(projection)
         candidate_artifacts = [
-            artifact for name in retrieved_names for artifact in [store.get(str(name))] if artifact
+            artifact for name in candidate_names for artifact in [store.get(str(name))] if artifact
         ]
         if not candidate_artifacts:
             return []
@@ -1392,6 +1463,10 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
                     {
                         "task": _spreadsheet_task_fragment(detail),
                         "trace_projection": projection,
+                        "retrieval_audit": {
+                            "retrieved_only_skills": projection.get("retrieved_only_skills") or [],
+                            "candidate_policy": "prompt_injected_or_called_only",
+                        },
                         "candidate_skills": [
                             _spreadsheet_skill_projection(artifact, projection=projection)
                             for artifact in candidate_artifacts
@@ -1623,6 +1698,9 @@ def _spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
     first = runs[0] if runs else {}
     metrics = first.get("metrics") or {}
     trace = first.get("trace") or {}
+    retrieved_skills = metrics.get("retrieved_skills") or trace.get("retrieved_skills") or []
+    prompt_injected_skills = metrics.get("prompt_injected_skills") or trace.get("prompt_injected_skills") or []
+    called_skill_functions = metrics.get("called_skill_functions") or trace.get("called_skill_functions") or []
     return {
         "task_id": detail.get("task_id"),
         "success": first.get("success"),
@@ -1633,9 +1711,36 @@ def _spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
         "mismatched_cells": metrics.get("mismatched_cells", [])[:5],
         "execution_ok": metrics.get("execution_ok"),
         "llm_api_style": metrics.get("llm_api_style"),
-        "retrieved_skills": metrics.get("retrieved_skills") or trace.get("retrieved_skills") or [],
+        "retrieved_skills": retrieved_skills,
+        "prompt_injected_skills": prompt_injected_skills,
+        "callable_skills": metrics.get("callable_skills") or trace.get("callable_skills") or [],
+        "called_skill_functions": called_skill_functions,
+        "retrieved_only_skills": _list_difference_preserve_order(
+            retrieved_skills,
+            [*prompt_injected_skills, *called_skill_functions],
+        ),
         "stderr_tail": str(trace.get("stderr") or "")[-800:],
     }
+
+
+def _list_difference_preserve_order(items: Sequence[Any], excluded: Sequence[Any]) -> List[str]:
+    excluded_set = {str(item) for item in excluded}
+    out: List[str] = []
+    for item in items:
+        value = str(item)
+        if value and value not in excluded_set and value not in out:
+            out.append(value)
+    return out
+
+
+def _spreadsheet_credit_candidate_names(projection: Dict[str, Any]) -> List[str]:
+    names: List[str] = []
+    for key in ("prompt_injected_skills", "called_skill_functions"):
+        for item in projection.get(key) or []:
+            name = str(item).strip()
+            if name and name not in names:
+                names.append(name)
+    return names
 
 
 def _json_block(value: Any) -> str:
@@ -1739,6 +1844,8 @@ def _spreadsheet_skill_projection(
             "non_applicability": artifact.metadata.get("non_applicability"),
         },
         "retrieved": artifact.name in set(projection.get("retrieved_skills") or []),
+        "injected": artifact.name in set(projection.get("prompt_injected_skills") or []),
+        "used": artifact.name in set(projection.get("called_skill_functions") or []),
         "usage_count": artifact.usage_count,
         "success_count": artifact.success_count,
         "recent_helpful": artifact.evidence.helpful_cases[-3:],
@@ -2153,7 +2260,12 @@ def _heuristic_spreadsheet_credit_events(
                 "evidence_strength": "weak",
                 "attribution_scope": "prompt_influence" if judgment == "helpful" else "none",
                 "bundle_case_suggestions": suggestions,
-                "evidence": {"retrieved": True, "trace_signals": [reason]},
+                "evidence": {
+                    "retrieved": artifact.name in set(projection.get("retrieved_skills") or []),
+                    "injected": artifact.name in set(projection.get("prompt_injected_skills") or []),
+                    "used": artifact.name in set(projection.get("called_skill_functions") or []),
+                    "trace_signals": [reason],
+                },
                 "projection": copy.deepcopy(projection),
             }
         )

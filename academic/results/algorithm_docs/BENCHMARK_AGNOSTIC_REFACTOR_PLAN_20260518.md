@@ -683,6 +683,403 @@ Lines 33-195 add five focused tests for the new common layer.
 
 Passed.
 
+#### Test Coverage Expansion 2026-05-19
+
+The original Chapter 1 test pass covered only five main paths. The test file was expanded from 5 tests to 14 tests so each common component has explicit normal-path, boundary, and failure-path coverage.
+
+##### Updated imports in `academic/benchmarks/tests/test_common_maintenance_core.py`
+
+Lines 4-31 now import every public helper that receives direct component coverage.
+
+```python
+     4	from academic.benchmarks.core.artifacts import ArtifactStore
+     5	from academic.benchmarks.core.bundle_cases import (
+     6	    apply_credit_bundle_suggestions,
+     7	    bundle_case_rows_by_skill,
+     8	    normalize_bundle_case_suggestions,
+     9	)
+    10	from academic.benchmarks.core.credit_events import (
+    11	    apply_credit_evidence,
+    12	    credit_target_names,
+    13	    is_actionable_helpful_credit,
+    14	    is_strong_harmful_credit,
+    15	    normalize_credit_events,
+    16	    normalize_evidence_strength,
+    17	    normalize_judgment,
+    18	    summarize_credit_events,
+    19	)
+    20	from academic.benchmarks.core.macro_maintenance import MacroMaintenanceHooks, run_generic_macro_maintenance, store_summary
+    21	from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig
+    22	from academic.benchmarks.core.micro_maintenance import MicroMaintenanceHooks, micro_target_names, run_generic_micro_maintenance
+    23	from academic.benchmarks.core.relation_graph import (
+    24	    RelationEdge,
+    25	    RelationGraphState,
+    26	    RelationNode,
+    27	    pending_skill_relation_node,
+    28	    skill_relation_node,
+    29	    trace_relation_node,
+    30	)
+    31	from academic.benchmarks.core.types import SkillArtifact, SkillBundleCase
+```
+
+##### Credit event component tests
+
+Lines 77-130 cover alias fields, invalid confidence fallback, judgment normalization, evidence strength thresholds, target selection, summary counts, missing skill handling, and evidence bucket limits.
+
+```python
+    77	def test_credit_event_helpers_cover_aliases_strengths_targets_and_limits() -> None:
+    78	    rows = normalize_credit_events(
+    79	        [
+    80	            {"name": "missing_name_is_kept", "label": "unknown", "confidence": "bad"},
+    81	            {"skill_name": "", "judgment": "helpful"},
+    82	            {"skill_name": "skill_h", "judgment": "regression", "confidence": 0.1, "used": True},
+    83	            {"skill_name": "skill_p", "judgment": "positive", "confidence": 0.51, "reasons": "schema_help"},
+    84	            {"skill_name": "skill_n", "judgment": "neutral", "confidence": 0.99},
+    85	        ],
+    86	        task_id="task_alias",
+    87	        benchmark="bench",
+    88	        default_source="unit_source",
+    89	    )
+    91	    assert [row["skill_name"] for row in rows] == ["missing_name_is_kept", "skill_h", "skill_p", "skill_n"]
+    92	    assert rows[0]["judgment"] == "uncertain"
+    93	    assert rows[0]["confidence"] == 0.0
+    94	    assert rows[0]["source"] == "unit_source"
+    95	    assert normalize_judgment("negative") == "harmful"
+    96	    assert normalize_judgment("positive") == "helpful"
+    97	    assert normalize_judgment("") == "uncertain"
+    98	    assert normalize_evidence_strength(None, confidence=0.8, judgment="harmful") == "strong"
+    99	    assert normalize_evidence_strength(None, confidence=0.55, judgment="helpful") == "medium"
+   100	    assert normalize_evidence_strength(None, confidence=0.2, judgment="helpful") == "weak"
+   101	    assert is_strong_harmful_credit(rows[1]) is True
+   102	    assert is_actionable_helpful_credit(rows[2]) is True
+   103	    assert credit_target_names(rows) == ["skill_h", "skill_p"]
+   105	    summary = summarize_credit_events(rows)
+   107	    assert summary["total"] == 4
+   108	    assert summary["harmful"] == 1
+   109	    assert summary["helpful"] == 1
+   110	    assert summary["neutral"] == 1
+   111	    assert summary["uncertain"] == 1
+   112	    assert summary["skills"]["skill_h"]["harmful"] == 1
+```
+
+```python
+   115	def test_apply_credit_evidence_handles_missing_skills_and_bucket_limits() -> None:
+   116	    store = ArtifactStore([_artifact("skill_a")])
+   117	    events = normalize_credit_events(
+   118	        [
+   119	            {"skill_name": "skill_a", "judgment": "neutral", "confidence": 0.1, "task_id": f"task_{idx}"}
+   120	            for idx in range(4)
+   121	        ]
+   122	        + [{"skill_name": "missing", "judgment": "harmful", "confidence": 0.9}],
+   123	        benchmark="fake",
+   124	    )
+   126	    applied = apply_credit_evidence(store=store, credit_events=events, limit_per_skill=2)
+   128	    assert applied[-1] == {"skill_name": "missing", "applied": False, "reason": "missing_skill"}
+   129	    repeated = store.get("skill_a").evidence.repeated_evidence
+   130	    assert [row["task_id"] for row in repeated] == ["task_2", "task_3"]
+```
+
+##### Bundle case component tests
+
+Lines 176-287 cover helpful positive cases, neutral integration cases, missing skill rows, non-actionable credit rows, duplicate case suppression, `build_case=None`, grouping by skill, and budget trimming.
+
+```python
+   176	def test_bundle_case_helpers_cover_positive_integration_duplicates_and_failures() -> None:
+   177	    store = ArtifactStore([_artifact("skill_a"), _artifact("skill_b")])
+   178	    events = normalize_credit_events(
+   179	        [
+   180	            {
+   181	                "skill_name": "skill_a",
+   182	                "judgment": "helpful",
+   183	                "confidence": 0.8,
+   184	                "helpful_reasons": ["workflow_alignment"],
+   185	                "bundle_case_suggestions": {"polarity": "positive", "expected_contract": {"score": 1}},
+   186	            },
+   187	            {
+   188	                "skill_name": "skill_b",
+   189	                "judgment": "neutral",
+   190	                "bundle_case_suggestions": [{"polarity": "integration", "expected_contract": {"valid": True}}],
+   191	            },
+   192	            {
+   193	                "skill_name": "skill_missing",
+   194	                "judgment": "harmful",
+   195	                "confidence": 1.0,
+   196	                "bundle_case_suggestions": [{"polarity": "negative"}],
+   197	            },
+   198	            {"skill_name": "skill_a", "judgment": "neutral", "bundle_case_suggestions": []},
+   199	        ],
+   200	        task_id="task_2",
+   201	    )
+   202	    calls: List[str] = []
+   204	    def build_case(detail: Dict[str, Any], event: Dict[str, Any], suggestion: Dict[str, Any]) -> SkillBundleCase | None:
+   205	        calls.append(suggestion["skill_name"])
+   206	        if detail.get("return_none"):
+   207	            return None
+   208	        return SkillBundleCase(
+   209	            case_id=f"{suggestion['skill_name']}::{suggestion['polarity']}",
+   210	            source=f"credit_assigner_{suggestion['polarity']}",
+   211	            prompt="fragment",
+   212	            expected=suggestion.get("expected_contract") or {},
+   213	            context={"credit_event": event},
+   214	            polarity=suggestion["polarity"],
+   215	        )
+   217	    assert normalize_bundle_case_suggestions(events[0])[0]["task_fragment_policy"] == "focused_official_fragment"
+   218	    rows = apply_credit_bundle_suggestions(
+   219	        store=store,
+   220	        detail={"task_id": "task_2"},
+   221	        credit_events=events,
+   222	        build_case=build_case,
+   223	    )
+   224	    duplicate_rows = apply_credit_bundle_suggestions(
+   225	        store=store,
+   226	        detail={"task_id": "task_2"},
+   227	        credit_events=[events[0]],
+   228	        build_case=build_case,
+   229	    )
+   230	    none_rows = apply_credit_bundle_suggestions(
+   231	        store=store,
+   232	        detail={"return_none": True},
+   233	        credit_events=[events[1]],
+   234	        build_case=build_case,
+   235	    )
+   237	    assert [row["reason"] for row in rows if not row["created"]] == [
+   238	        "missing_skill",
+   239	        "credit_not_actionable_for_bundle",
+   240	    ]
+   241	    assert rows[0]["bucket"] == "positive_cases"
+   242	    assert rows[1]["bucket"] == "integration_cases"
+   243	    assert duplicate_rows[0]["reason"] == "duplicate_case"
+   244	    assert none_rows[0]["reason"] == "case_builder_returned_none"
+   245	    assert bundle_case_rows_by_skill(rows)["skill_a"][0]["polarity"] == "positive"
+   246	    assert store.get("skill_a").bundle.positive_cases[0].case_id == "skill_a::positive"
+   247	    assert store.get("skill_b").bundle.integration_cases[0].case_id == "skill_b::integration"
+   248	    assert calls[:2] == ["skill_a", "skill_b"]
+```
+
+```python
+   251	def test_bundle_case_budget_is_applied_after_credit_cases() -> None:
+   252	    store = ArtifactStore([_artifact("skill_a")])
+   253	    events = normalize_credit_events(
+   254	        [
+   255	            {
+   256	                "skill_name": "skill_a",
+   257	                "judgment": "harmful",
+   258	                "confidence": 0.9,
+   259	                "bundle_case_suggestions": [
+   260	                    {"polarity": "negative", "expected_contract": {"idx": idx}}
+   261	                    for idx in range(4)
+   262	                ],
+   263	            }
+   264	        ],
+   265	        task_id="task_budget",
+   266	    )
+   268	    def build_case(detail: Dict[str, Any], event: Dict[str, Any], suggestion: Dict[str, Any]) -> SkillBundleCase:
+   269	        return SkillBundleCase(
+   270	            case_id=f"case_{suggestion['suggestion_index']}",
+   271	            source="credit_assigner_negative",
+   272	            prompt="p",
+   273	            expected=suggestion["expected_contract"],
+   274	            context={"confidence": suggestion["suggestion_index"] / 10},
+   275	            polarity="negative",
+   276	        )
+   278	    rows = apply_credit_bundle_suggestions(
+   279	        store=store,
+   280	        detail={},
+   281	        credit_events=events,
+   282	        build_case=build_case,
+   283	    )
+   285	    assert len([row for row in rows if row["created"]]) == 4
+   286	    assert len(store.get("skill_a").bundle.negative_cases) == 2
+   287	    assert store.get("skill_a").bundle.fixtures["bundle_trimmed"] is True
+```
+
+##### Micro maintenance component tests
+
+Lines 290-406 cover target ordering/deduplication, no-target returns, missing skill skip, refine-before-test ordering, post-failure repair, and explicit repair limit override.
+
+```python
+   290	def test_micro_target_names_deduplicates_and_orders_sources() -> None:
+   291	    targets = micro_target_names(
+   292	        relevant_skill_names=["skill_z", "skill_h", "skill_z"],
+   293	        credit_events=normalize_credit_events(
+   294	            [
+   295	                {"skill_name": "skill_h", "judgment": "harmful", "confidence": 0.8},
+   296	                {"skill_name": "skill_p", "judgment": "helpful", "helpful_reasons": ["correctness_gain"]},
+   297	            ],
+   298	            task_id="task",
+   299	        ),
+   300	        credit_bundle_cases=[
+   301	            {"skill_name": "skill_bundle", "created": True},
+   302	            {"skill_name": "skill_h", "created": True},
+   303	        ],
+   304	    )
+   306	    assert targets == ["skill_z", "skill_h", "skill_p", "skill_bundle"]
+```
+
+```python
+   340	async def test_generic_micro_no_targets_and_missing_skill_paths() -> None:
+   341	    calls: List[str] = []
+   343	    async def refine_skill(**kwargs: Any) -> Dict[str, Any]:
+   344	        calls.append("refine")
+   345	        return {"skill_name": kwargs["skill_name"]}
+   347	    async def run_bundle_test(**kwargs: Any) -> Dict[str, Any]:
+   348	        calls.append("test")
+   349	        return {"passed": True}
+   351	    no_target = await run_generic_micro_maintenance(
+   352	        detail={"task_id": "task_none"},
+   353	        credit_events=[],
+   354	        credit_bundle_cases=[],
+   355	        store=ArtifactStore(),
+   356	        config=MaintenanceRunConfig(llm_config="fake"),
+   357	        hooks=MicroMaintenanceHooks(refine_skill=refine_skill, run_bundle_test=run_bundle_test),
+   358	        round_index=0,
+   359	        task_index=0,
+   360	    )
+   361	    missing = await run_generic_micro_maintenance(
+   362	        detail={"task_id": "task_missing"},
+   363	        credit_events=[],
+   364	        credit_bundle_cases=[],
+   365	        store=ArtifactStore(),
+   366	        config=MaintenanceRunConfig(llm_config="fake"),
+   367	        hooks=MicroMaintenanceHooks(refine_skill=refine_skill, run_bundle_test=run_bundle_test),
+   368	        round_index=0,
+   369	        task_index=1,
+   370	        relevant_skill_names=["missing_skill"],
+   371	    )
+   373	    assert no_target["reason"] == "no_micro_targets"
+   374	    assert missing["refine_decisions"] == [{"skill_name": "missing_skill", "action": "skip", "reason": "missing_skill"}]
+   375	    assert calls == []
+```
+
+```python
+   378	async def test_generic_micro_passes_without_repair_and_honors_explicit_repair_limit() -> None:
+   379	    store = ArtifactStore([_artifact("skill_a")])
+   380	    order: List[str] = []
+   382	    async def refine_skill(**kwargs: Any) -> Dict[str, Any]:
+   383	        order.append(f"refine:{kwargs['repair_round']}")
+   384	        return {"skill_name": kwargs["skill_name"], "repair_round": kwargs["repair_round"]}
+   386	    async def run_bundle_test(**kwargs: Any) -> Dict[str, Any]:
+   387	        order.append(f"test:{kwargs['repair_round']}")
+   388	        return {"skill_name": kwargs["skill_name"], "passed": False}
+   390	    report = await run_generic_micro_maintenance(
+   391	        detail={"task_id": "task_limit"},
+   392	        credit_events=normalize_credit_events(
+   393	            [{"skill_name": "skill_a", "judgment": "harmful", "confidence": 1.0}],
+   394	            task_id="task_limit",
+   395	        ),
+   396	        credit_bundle_cases=[],
+   397	        store=store,
+   398	        config=MaintenanceRunConfig(llm_config="fake", extra={"micro_refine_max_repair_rounds": 9}),
+   399	        hooks=MicroMaintenanceHooks(refine_skill=refine_skill, run_bundle_test=run_bundle_test),
+   400	        round_index=0,
+   401	        task_index=0,
+   402	        max_repair_rounds=0,
+   403	    )
+   405	    assert order == ["refine:0", "test:0"]
+   406	    assert len(report["maintenance_test_results"]) == 1
+```
+
+##### Macro maintenance component tests
+
+Lines 435-494 cover final-window default report behavior, store summary counts, all optional hook branches, and result field mapping.
+
+```python
+   435	async def test_generic_macro_final_window_no_hooks_and_all_hooks() -> None:
+   436	    store = ArtifactStore([_artifact("active"), _artifact("pending"), _artifact("disabled")])
+   437	    store.get("pending").status = "pending"
+   438	    store.get("disabled").status = "disabled"
+   439	    calls: List[str] = []
+   441	    no_hooks = await run_generic_macro_maintenance(
+   442	        window_details=[{"task_id": "task_final"}],
+   443	        all_train_details=[{"task_id": "task_final"}],
+   444	        credit_events=[],
+   445	        store=store,
+   446	        config=MaintenanceRunConfig(llm_config="fake"),
+   447	        round_index=1,
+   448	        window_index=2,
+   449	        final_window=True,
+   450	    )
+   452	    async def promote_pending(**kwargs: Any) -> Dict[str, Any]:
+   453	        calls.append(f"promote:{kwargs['final_window']}")
+   454	        return {"promoted": ["pending"]}
+   456	    async def refactor_overlap(**kwargs: Any) -> Dict[str, Any]:
+   457	        calls.append("refactor")
+   458	        return {"attempts": [{"group": "g"}], "refactor_segment_coverage": ["task_final"]}
+   460	    async def filter_skills(**kwargs: Any) -> Dict[str, Any]:
+   461	        calls.append("filter")
+   462	        return {"disabled_skills": ["disabled"]}
+   464	    async def update_trl(**kwargs: Any) -> Dict[str, Any]:
+   465	        calls.append("trl")
+   466	        return {"feedback_events": 1}
+   468	    all_hooks = await run_generic_macro_maintenance(
+   469	        window_details=[{"task_id": "task_final"}],
+   470	        all_train_details=[{"task_id": "task_final"}],
+   471	        credit_events=[],
+   472	        store=store,
+   473	        config=MaintenanceRunConfig(llm_config="fake"),
+   474	        hooks=MacroMaintenanceHooks(
+   475	            promote_pending=promote_pending,
+   476	            refactor_overlap=refactor_overlap,
+   477	            filter_skills=filter_skills,
+   478	            update_trl=update_trl,
+   479	        ),
+   480	        round_index=1,
+   481	        window_index=3,
+   482	        final_window=True,
+   483	    )
+   485	    assert no_hooks["phase"] == "macro_final"
+   486	    assert no_hooks["overlap_refactor"] == {"attempts": [], "refactor_segment_coverage": []}
+   487	    assert store_summary(store)["n_active"] == 1
+   488	    assert store_summary(store)["n_pending"] == 1
+   489	    assert store_summary(store)["n_disabled"] == 1
+   490	    assert calls == ["promote:True", "refactor", "filter", "trl"]
+   491	    assert all_hooks["promoted_pending_skills"] == ["pending"]
+   492	    assert all_hooks["overlap_refactor"]["attempts"][0]["group"] == "g"
+   493	    assert all_hooks["filtered_skills"] == ["disabled"]
+   494	    assert all_hooks["trl_feedback"] == {"feedback_events": 1}
+```
+
+##### Relation graph component tests
+
+Lines 528-543 cover node metadata merging, undirected edge deduplication, max-weight preservation, metadata merging, and missing-node neighbor lookup.
+
+```python
+   528	def test_relation_graph_merges_nodes_edges_and_preserves_max_weight() -> None:
+   529	    graph = RelationGraphState()
+   530	    graph.upsert_node(RelationNode(node_id="skill:s", node_type="skill", label="old", metadata={"a": 1}))
+   531	    graph.upsert_node(RelationNode(node_id="skill:s", node_type="skill", label="new", metadata={"b": 2}))
+   532	    graph.upsert_node(trace_relation_node("task_1", "seg_1"))
+   533	    graph.upsert_edge(RelationEdge(source="skill:s", target="trace_segment:seg_1", relation="overlap", weight=0.2, metadata={"first": True}))
+   534	    graph.upsert_edge(RelationEdge(source="trace_segment:seg_1", target="skill:s", relation="overlap", weight=0.9, metadata={"second": True}))
+   536	    snapshot = graph.snapshot()
+   538	    assert snapshot["nodes"][0]["label"] == "new"
+   539	    assert snapshot["nodes"][0]["metadata"] == {"a": 1, "b": 2}
+   540	    assert len(snapshot["edges"]) == 1
+   541	    assert snapshot["edges"][0]["weight"] == 0.9
+   542	    assert snapshot["edges"][0]["metadata"] == {"first": True, "second": True}
+   543	    assert graph.neighbors("missing") == []
+```
+
+Updated test result:
+
+```text
+$ pytest -q academic/benchmarks/tests/test_common_maintenance_core.py
+..............                                                           [100%]
+14 passed, 2 warnings in 0.06s
+```
+
+Regression checks:
+
+```text
+$ pytest -q academic/benchmarks/tests/test_generic_evolution.py academic/benchmarks/tests/test_credit_scope.py academic/benchmarks/tests/test_skill_injector_budget.py
+.........                                                                [100%]
+9 passed, 10 warnings in 0.44s
+```
+
+```text
+$ python -m py_compile academic/benchmarks/core/credit_events.py academic/benchmarks/core/bundle_cases.py academic/benchmarks/core/micro_maintenance.py academic/benchmarks/core/macro_maintenance.py academic/benchmarks/core/relation_graph.py academic/benchmarks/tests/test_common_maintenance_core.py
+```
+
 ```text
 $ pytest -q academic/benchmarks/tests/test_common_maintenance_core.py
 .....                                                                    [100%]

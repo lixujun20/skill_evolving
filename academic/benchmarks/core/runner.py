@@ -332,10 +332,12 @@ async def main_async() -> None:
         train, test = load_spreadsheet_tasks(
             cache_dir=args.cache_dir / "spreadsheet",
             split_seed=args.seed,
-            n_train=n_train,
-            n_test=n_test,
+            n_train=n_train + max(args.train_offset, 0),
+            n_test=n_test + max(args.test_offset, 0),
             refresh=args.refresh_data,
         )
+        train = train[max(args.train_offset, 0): max(args.train_offset, 0) + n_train]
+        test = test[max(args.test_offset, 0): max(args.test_offset, 0) + n_test]
         if args.mode == "evolve":
             runner = OnlineSkillEvolutionRunner(
                 adapter=SpreadsheetMaintenanceAdapter(),
@@ -368,6 +370,9 @@ async def main_async() -> None:
             summary["elapsed_s"] = round(time.monotonic() - t0, 3)
             summary["spreadsheet_execution_mode"] = args.spreadsheet_execution_mode
             summary["spreadsheet_max_turns"] = args.spreadsheet_max_turns
+            if args.save_skills:
+                args.save_skills.parent.mkdir(parents=True, exist_ok=True)
+                args.save_skills.write_text(json.dumps(summary.get("skills") or [], ensure_ascii=False, indent=2))
             out = args.output or RESULTS_DIR / f"{args.benchmark}_{args.tag}_{args.mode}.json"
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(summary, ensure_ascii=False, indent=2))

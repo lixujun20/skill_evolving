@@ -141,6 +141,12 @@ async def main_async() -> None:
     parser.add_argument("--bfcl-explicit-skill-tool", action="store_true")
     parser.add_argument("--save-skills", type=Path, default=None)
     parser.add_argument(
+        "--macro-snapshot-dir",
+        type=Path,
+        default=None,
+        help="Optional directory for per-macro skill/store snapshots in evolve mode.",
+    )
+    parser.add_argument(
         "--load-train-details",
         type=Path,
         default=None,
@@ -349,6 +355,7 @@ async def main_async() -> None:
                         "skill_context_budget_chars": args.skill_context_budget_chars,
                         "spreadsheet_execution_mode": args.spreadsheet_execution_mode,
                         "spreadsheet_max_turns": args.spreadsheet_max_turns,
+                        "macro_snapshot_dir": str(args.macro_snapshot_dir) if args.macro_snapshot_dir else "",
                     },
                 ),
             )

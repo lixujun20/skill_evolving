@@ -1882,6 +1882,48 @@ def _write_json(path: Path | None, payload: Dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
+def _write_bfcl_macro_skill_snapshot(
+    *,
+    snapshot_dir: Path | None,
+    store: ArtifactStore,
+    macro_report: Dict[str, Any],
+    round_index: int,
+    train_tasks_completed: int,
+    tag: str,
+) -> Dict[str, Any]:
+    if snapshot_dir is None:
+        return {}
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    window_index = int(macro_report.get("window_index") or 0)
+    prefix = f"round_{round_index:02d}_macro_{window_index:03d}"
+    skills_path = snapshot_dir / f"{prefix}_skills.json"
+    meta_path = snapshot_dir / f"{prefix}_meta.json"
+    store.save(skills_path)
+    meta = {
+        "benchmark": "bfcl_v3_related",
+        "tag": tag,
+        "round_index": round_index,
+        "window_index": window_index,
+        "phase": macro_report.get("phase"),
+        "train_tasks_completed": train_tasks_completed,
+        "start_task_index": macro_report.get("start_task_index"),
+        "end_task_index": macro_report.get("end_task_index"),
+        "task_ids": list(macro_report.get("task_ids") or []),
+        "skill_count": len(store.all()),
+        "n_active": len([item for item in store.all() if item.status == "active"]),
+        "n_pending": len([item for item in store.all() if item.status == "pending"]),
+        "n_disabled": len([item for item in store.all() if item.status == "disabled" or item.is_disabled()]),
+        "skills_path": str(skills_path),
+        "macro_report_summary": {
+            "pending_skill_promotions": macro_report.get("pending_skill_promotions") or [],
+            "filtered_skills": (macro_report.get("overlap_refactor") or {}).get("filtered_skills") or [],
+            "candidate_group_feedback_rows": len(macro_report.get("candidate_group_feedback_rows") or []),
+        },
+    }
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+    return dict(meta, meta_path=str(meta_path))
+
+
 def _remove_file(path: Path | None) -> None:
     if path is None or not path.exists():
         return
@@ -3269,6 +3311,7 @@ async def _run_related_evolve_experiment(
     candidate_competition_enabled: bool = False,
     candidate_sample_count: int = 1,
     candidate_trial_retrieval: bool = True,
+    macro_snapshot_dir: Path | None = None,
 ) -> Dict[str, Any]:
     reset_maintenance_token_stats()
     effective_epochs = max(1, int(epochs if epochs is not None else 1))
@@ -3905,6 +3948,16 @@ async def _run_related_evolve_experiment(
                         if segment_ids:
                             seen_refactor_cliques.add(segment_ids)
                     maintenance_windows.append(macro_report)
+                    macro_snapshot = _write_bfcl_macro_skill_snapshot(
+                        snapshot_dir=macro_snapshot_dir,
+                        store=store,
+                        macro_report=macro_report,
+                        round_index=round_index,
+                        train_tasks_completed=len(train_details),
+                        tag=tag,
+                    )
+                    if macro_snapshot:
+                        macro_report["skill_snapshot"] = copy.deepcopy(macro_snapshot)
                     window_train_details = []
                     window_segments = []
                 if pending_micro_jobs:
@@ -4002,6 +4055,16 @@ async def _run_related_evolve_experiment(
                     if segment_ids:
                         seen_refactor_cliques.add(segment_ids)
                 maintenance_windows.append(final_macro)
+                macro_snapshot = _write_bfcl_macro_skill_snapshot(
+                    snapshot_dir=macro_snapshot_dir,
+                    store=store,
+                    macro_report=final_macro,
+                    round_index=round_index,
+                    train_tasks_completed=len(train_details),
+                    tag=tag,
+                )
+                if macro_snapshot:
+                    final_macro["skill_snapshot"] = copy.deepcopy(macro_snapshot)
                 window_train_details = []
                 window_segments = []
             round_maintenance = _combine_maintenance_reports([*micro_maintenance_reports, *maintenance_windows])
@@ -4456,6 +4519,7 @@ async def main_async() -> None:
     parser.add_argument("--use-handwritten-skills", action="store_true")
     parser.add_argument("--save-skills", type=Path, default=None)
     parser.add_argument("--checkpoint", type=Path, default=None)
+    parser.add_argument("--macro-snapshot-dir", type=Path, default=None)
     parser.add_argument("--output-detail-level", choices=["compact", "full"], default="compact")
     parser.add_argument("--disable-extractor-trl", action="store_true")
     parser.add_argument("--experiment-variant", default="w_extractor_reusage_trl")
@@ -4590,6 +4654,7 @@ async def main_async() -> None:
             candidate_competition_enabled=args.enable_candidate_competition,
             candidate_sample_count=args.candidate_sample_count,
             candidate_trial_retrieval=not args.disable_candidate_trial_retrieval,
+            macro_snapshot_dir=args.macro_snapshot_dir,
         )
         out = resolved_output
 

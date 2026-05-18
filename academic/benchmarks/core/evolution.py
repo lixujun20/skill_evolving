@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
 from academic.benchmarks.core.artifacts import ArtifactStore
@@ -36,6 +38,7 @@ class OnlineSkillEvolutionRunner:
         skill_credit_events: List[Dict[str, Any]] = []
         micro_reports: List[Dict[str, Any]] = []
         maintenance_windows: List[Dict[str, Any]] = []
+        macro_skill_snapshots: List[Dict[str, Any]] = []
 
         effective_rounds = max(1, int(rounds or 1))
         micro_step = max(1, int(self.config.micro_maintenance_step or 1))
@@ -98,23 +101,7 @@ class OnlineSkillEvolutionRunner:
                     )
 
                 if (task_index + 1) % macro_step == 0:
-                    maintenance_windows.append(
-                        await self.adapter.run_macro_maintenance(
-                            window_details=window_details,
-                            all_train_details=train_details,
-                            credit_events=skill_credit_events,
-                            store=store,
-                            config=self.config,
-                            round_index=round_index,
-                            window_index=len(maintenance_windows),
-                            final_window=False,
-                        )
-                    )
-                    window_details = []
-
-            if window_details:
-                maintenance_windows.append(
-                    await self.adapter.run_macro_maintenance(
+                    macro_report = await self.adapter.run_macro_maintenance(
                         window_details=window_details,
                         all_train_details=train_details,
                         credit_events=skill_credit_events,
@@ -122,6 +109,40 @@ class OnlineSkillEvolutionRunner:
                         config=self.config,
                         round_index=round_index,
                         window_index=len(maintenance_windows),
+                        final_window=False,
+                    )
+                    maintenance_windows.append(macro_report)
+                    macro_skill_snapshots.append(
+                        self._write_macro_skill_snapshot(
+                            store=store,
+                            macro_report=macro_report,
+                            round_index=round_index,
+                            window_index=len(maintenance_windows) - 1,
+                            train_details=train_details,
+                            final_window=False,
+                        )
+                    )
+                    window_details = []
+
+            if window_details:
+                macro_report = await self.adapter.run_macro_maintenance(
+                    window_details=window_details,
+                    all_train_details=train_details,
+                    credit_events=skill_credit_events,
+                    store=store,
+                    config=self.config,
+                    round_index=round_index,
+                    window_index=len(maintenance_windows),
+                    final_window=True,
+                )
+                maintenance_windows.append(macro_report)
+                macro_skill_snapshots.append(
+                    self._write_macro_skill_snapshot(
+                        store=store,
+                        macro_report=macro_report,
+                        round_index=round_index,
+                        window_index=len(maintenance_windows) - 1,
+                        train_details=train_details,
                         final_window=True,
                     )
                 )
@@ -157,9 +178,55 @@ class OnlineSkillEvolutionRunner:
             "skill_credit_events": skill_credit_events,
             "micro_maintenance_reports": micro_reports,
             "maintenance_windows": maintenance_windows,
+            "macro_skill_snapshots": [row for row in macro_skill_snapshots if row],
             "store_snapshot": self.adapter.store_snapshot(store),
             "skills": [artifact.as_dict() for artifact in store.all()],
         }
+
+    def _write_macro_skill_snapshot(
+        self,
+        *,
+        store: ArtifactStore,
+        macro_report: Dict[str, Any],
+        round_index: int,
+        window_index: int,
+        train_details: Sequence[Dict[str, Any]],
+        final_window: bool,
+    ) -> Dict[str, Any]:
+        raw_dir = str(self.config.extra.get("macro_snapshot_dir") or "").strip()
+        if not raw_dir:
+            return {}
+        snapshot_dir = Path(raw_dir)
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        prefix = f"round_{round_index:02d}_macro_{window_index:03d}"
+        skills_path = snapshot_dir / f"{prefix}_skills.json"
+        meta_path = snapshot_dir / f"{prefix}_meta.json"
+        store.save(skills_path)
+        meta = {
+            "benchmark": self.adapter.benchmark,
+            "tag": self.config.tag,
+            "round_index": round_index,
+            "window_index": window_index,
+            "final_window": bool(final_window),
+            "train_tasks_completed": len(train_details),
+            "n_active": len([item for item in store.all() if item.status == "active"]),
+            "n_pending": len([item for item in store.all() if item.status == "pending"]),
+            "n_disabled": len([item for item in store.all() if item.status == "disabled" or item.is_disabled()]),
+            "skill_count": len(store.all()),
+            "skills_path": str(skills_path),
+            "macro_report_summary": {
+                "phase": macro_report.get("phase"),
+                "window_index": macro_report.get("window_index", window_index),
+                "promoted_pending_skills": (macro_report.get("overlap_refactor") or {}).get("promoted_pending_skills")
+                or macro_report.get("promoted_pending_skills")
+                or [],
+                "filtered_skills": (macro_report.get("overlap_refactor") or {}).get("filtered_skills")
+                or macro_report.get("filtered_skills")
+                or [],
+            },
+        }
+        meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+        return dict(meta, meta_path=str(meta_path))
 
     async def _run_test_tasks(
         self,

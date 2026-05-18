@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import ast
 import copy
-import hashlib
 import json
 import os
 import queue
@@ -23,21 +22,25 @@ import threading
 import time
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import openpyxl
 
 from academic.benchmarks.core.artifacts import ArtifactStore
+from academic.benchmarks.core.bundle_policy import (
+    bundle_bucket,
+    default_bundle_case_priority,
+    trim_bundle_cases_to_budget,
+)
 from academic.benchmarks.core.cost_accounting import make_cost_event
 from academic.benchmarks.core.credit_scope import (
     credit_candidate_skill_names,
     skill_exposure_flags,
-    skill_exposure_from_mappings,
 )
 from academic.benchmarks.core.llm_text import ask_text_llm
 from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig, NoOpMaintenanceAdapter
+from academic.benchmarks.core.maintenance_utils import json_block, now_iso, stable_id
 from academic.benchmarks.core.skill_injector import BudgetSkillInjector
 from academic.benchmarks.core.types import (
     BenchmarkResult,
@@ -50,6 +53,21 @@ from academic.benchmarks.core.types import (
     SkillTestCaseRun,
     SkillTestResult,
 )
+from academic.benchmarks.spreadsheet.prompts import (
+    DATASET_URL,
+    SPREADSHEET_CREDIT_SYSTEM,
+    SPREADSHEET_DONE_PATTERN,
+    SPREADSHEET_EXTRACT_SYSTEM,
+    SPREADSHEET_NOTEBOOK_SYSTEM,
+    SPREADSHEET_SYSTEM,
+)
+from academic.benchmarks.spreadsheet.trace_projection import (
+    spreadsheet_code_snippet as _spreadsheet_code_snippet,
+    spreadsheet_result_projection as _spreadsheet_result_projection,
+    spreadsheet_skill_projection as _spreadsheet_skill_projection,
+    spreadsheet_task_fragment as _spreadsheet_task_fragment,
+    spreadsheet_trace_projection as _spreadsheet_trace_projection,
+)
 from academic.config import CODE_EXEC_TIMEOUT
 from academic.skill_repository.llm_maintenance import (
     _ask_json,
@@ -58,219 +76,6 @@ from academic.skill_repository.llm_maintenance import (
     refine_skill_artifact_llm,
     summarize_dependency_context,
 )
-
-DATASET_URL = (
-    "https://huggingface.co/datasets/KAKA22/SpreadsheetBench/resolve/main/"
-    "spreadsheetbench_verified_400.tar.gz"
-)
-
-SPREADSHEET_SYSTEM = """You are a spreadsheet manipulation agent.
-
-Write Python code using openpyxl to modify the workbook at INPUT_XLSX and save
-the final answer workbook to OUTPUT_XLSX. Do not explain instead of editing the
-file. Preserve sheets, formats, and unrelated cells when possible.
-
-Retrieved skill package guidance:
-{skills}
-
-Callable function skills:
-{callable_skills}
-
-Return exactly one fenced python code block.
-"""
-
-SPREADSHEET_DONE_PATTERN = "<SPREADSHEET_DONE>"
-
-SPREADSHEET_NOTEBOOK_SYSTEM = """You are a spreadsheet manipulation agent working in a persistent Python notebook.
-
-You can iteratively write Python/openpyxl code against INPUT_XLSX and OUTPUT_XLSX.
-Each code block is executed in the same Python process, so later turns may reuse
-variables, functions, imports, and workbook objects created earlier.
-
-Retrieved skill package guidance:
-{skills}
-
-Callable function skills:
-{callable_skills}
-
-Return exactly one fenced python code block when you need to inspect, edit, or
-repair the workbook. After each execution you will receive stdout, stderr, and
-the return code. Save the final workbook to OUTPUT_XLSX before finishing.
-
-When you are finished, include the exact token {done_pattern}. If you include a
-code block and {done_pattern} in the same response, the code will run first and
-then the task will be verified.
-"""
-
-SPREADSHEET_EXTRACT_SYSTEM = """\
-You are the SpreadsheetBench skill extractor in a benchmark-agnostic skill
-evolution system.
-
-You receive one compact SpreadsheetBench task trace. Extract reusable,
-testable spreadsheet skills only when the trace evidence supports them.
-
-Field semantics:
-- `artifacts`: [] when the trace is failed, speculative, too local, or already
-  covered by an existing artifact.
-- `name`: narrow snake_case name.
-- `kind`: use `executable_tool` when the body contains a concrete reusable
-  openpyxl code idiom; use `workflow_guardrail_card` for ordering/inspection
-  workflows; use `interface_contract_card` for exact workbook/range contracts.
-- `body`: actionable guidance shown to the model. For function/code skills,
-  include a concise executable openpyxl snippet, required variables
-  INPUT_XLSX/OUTPUT_XLSX, and non-applicability.
-- `metadata.domains`: must include `SpreadsheetBench` and exact instruction
-  type(s), not broad "all".
-- `metadata.allowed_tools`: use ["openpyxl"].
-- `metadata.intent_keywords`: terms that should retrieve this skill.
-- `metadata.source_task_ids`: current task id.
-- `metadata.evidence_span`: the compact trace/code/verifier evidence.
-- `metadata.non_applicability`: when not to use the skill.
-- `dependencies`: named skills this artifact explicitly relies on; [] when
-  none.
-
-Rules:
-1. Preserve workbook sheets, formulas, styles, and unrelated cells unless the
-   task explicitly requires replacement.
-2. Prefer reusable openpyxl idioms over task transcripts.
-3. Do not copy full code. Keep snippets short and parameterized by active sheet,
-   answer range, or detected headers.
-4. Do not invent benchmark answers or hidden workbook structure.
-5. If the trace failed or score is below 0.9, extract only when verifier
-   mismatches or stderr prove a concrete corrective contract. For example,
-   predicted-vs-expected formula mismatches can become a narrow formula-pattern
-   skill; do not extract from opaque failures.
-6. Return strict JSON only. End every object and array explicitly.
-
-Return schema:
-{
-  "artifacts": [
-    {
-      "name": "snake_case_name",
-      "kind": "executable_tool | workflow_guardrail_card | interface_contract_card",
-      "description": "short summary",
-      "body": "actionable content",
-      "interface": {
-        "summary": "one-line contract",
-        "usage": "when/how to use",
-        "input_contract": {},
-        "output_contract": {},
-        "invocation_contract": {"injection_type": "informational"},
-        "compatibility_notes": "non-applicability"
-      },
-      "metadata": {
-        "domains": ["SpreadsheetBench"],
-        "allowed_tools": ["openpyxl"],
-        "intent_keywords": [],
-        "source_task_ids": [],
-        "source": "spreadsheet_llm_trace_extraction",
-        "evidence_span": "",
-        "scope": "",
-        "non_applicability": "",
-        "maintenance_action": "new_skill"
-      },
-      "dependencies": []
-    }
-  ]
-}
-"""
-
-SPREADSHEET_CREDIT_SYSTEM = """\
-You are the SpreadsheetBench credit assigner and maintenance-attribution judge.
-
-You receive one compact task trace and only the exposed/called candidate skills.
-Judge whether each skill was helpful, harmful, neutral, or uncertain for this
-specific task.
-
-Field semantics:
-- `judgment`: helpful if the skill likely improved correctness or efficiency;
-  harmful if it likely caused wrong cells, wrong sheet/range, execution errors,
-  formula/value mistakes, or irrelevant prompt pollution; neutral when present
-  but irrelevant; uncertain when evidence is insufficient.
-- `effect_type`: use one of correctness_gain, correctness_harm, token_saving,
-  token_overhead, workflow_alignment, workflow_pollution, schema_help,
-  schema_harm, domain_match, domain_mismatch, no_material_effect, unknown.
-- `maintenance_actions`: skill-local actions. Use [] for neutral/uncertain.
-- `refine_required`: true only when the skill should be edited before bundle
-  testing due to concrete scope/schema/workflow/code evidence.
-- `filter_candidate`: true only if the skill should be disabled or removed from
-  retrieval, not merely because this task failed.
-- `evidence_strength`: strong for direct retrieved-skill/code/verifier evidence,
-  medium for close trace match, weak for circumstantial prompt noise.
-- `attribution_scope`: prompt_influence, direct_use, retrieval_noise,
-  integration_context, or none.
-- `bundle_case_suggestions`: focused SpreadsheetBench task cases. The case
-  should use only the official task snapshot and answer range. Do not invent a
-  new golden workbook, answer cells, or expected values.
-- `focus_turn_indices`: SpreadsheetBench is single-turn; use [0] only when a
-  replayable official task fragment exists, otherwise [].
-- `task_fragment_policy`: reuse_official_fragment when the official workbook,
-  instruction, and answer range are enough to replay; no_replayable_fragment
-  otherwise.
-
-Rules:
-1. Retrieved does not mean helpful. Judge causality from the code, stderr, cell
-   mismatches, score, and skill scope.
-2. For successful tasks with a relevant retrieved skill, positive suggestions
-   require explicit correctness_gain, workflow_alignment, schema_help, or
-   token_saving.
-3. For failed tasks, mark harmful only when the failure matches the skill's
-   instruction or code pattern, or the skill's scope clearly conflicts with the
-   task.
-4. If no candidate skill is causally implicated, return neutral/uncertain.
-5. Return strict JSON only. End every object and array explicitly.
-
-Return schema:
-{
-  "task_summary": {
-    "task_id": "",
-    "score": 0.0,
-    "success": false,
-    "total_tokens": 0
-  },
-  "skill_judgments": [
-    {
-      "skill_name": "",
-      "judgment": "helpful | harmful | neutral | uncertain",
-      "effect_type": "correctness_gain | correctness_harm | token_saving | token_overhead | workflow_alignment | workflow_pollution | schema_help | schema_harm | domain_match | domain_mismatch | no_material_effect | unknown",
-      "confidence": 0.0,
-      "reason": "",
-      "maintenance_actions": [
-        {
-          "action": "keep | narrow_scope | fix_schema_contract | refine_workflow | disable_candidate | add_bundle_case | record_evidence",
-          "reason": "",
-          "target_scope": ""
-        }
-      ],
-      "refine_required": false,
-      "filter_candidate": false,
-      "evidence_strength": "strong | medium | weak",
-      "attribution_scope": "direct_use | prompt_influence | retrieval_noise | integration_context | none",
-      "bundle_case_suggestions": [
-        {
-          "polarity": "positive | negative | integration",
-          "reason": "",
-          "source_task_id": "",
-          "focus_turn_indices": [0],
-          "required_context_turn_indices": [],
-          "state_requirements": {},
-          "expected_contract": "",
-          "task_fragment_policy": "reuse_official_fragment | no_replayable_fragment"
-        }
-      ],
-      "evidence": {
-        "retrieved": true,
-        "used": false,
-        "relevant_turn_indices": [0],
-        "related_tool_names": ["openpyxl"],
-        "error_refs": [],
-        "trace_signals": []
-      }
-    }
-  ]
-}
-"""
-
 
 @dataclass
 class SpreadsheetTrace:
@@ -1464,7 +1269,7 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
         try:
             payload = await _ask_json(
                 system=SPREADSHEET_CREDIT_SYSTEM,
-                user=_json_block(
+                user=json_block(
                     {
                         "task": _spreadsheet_task_fragment(detail),
                         "trace_projection": projection,
@@ -1542,7 +1347,7 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
                 )
                 if case is None:
                     continue
-                bucket = _bundle_bucket(case.polarity)
+                bucket = bundle_bucket(case.polarity)
                 existing = {item.case_id for item in getattr(artifact.bundle, bucket)}
                 if case.case_id not in existing:
                     getattr(artifact.bundle, bucket).append(case)
@@ -1698,142 +1503,6 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
         }
 
 
-def _spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
-    runs = detail.get("runs") or []
-    first = runs[0] if runs else {}
-    metrics = first.get("metrics") or {}
-    trace = first.get("trace") or {}
-    exposure = skill_exposure_from_mappings(metrics, trace)
-    return {
-        "task_id": detail.get("task_id"),
-        "success": first.get("success"),
-        "score": first.get("score"),
-        "answer_sheet": metrics.get("answer_sheet"),
-        "answer_position": metrics.get("answer_position"),
-        "checked_cells": metrics.get("checked_cells"),
-        "mismatched_cells": metrics.get("mismatched_cells", [])[:5],
-        "execution_ok": metrics.get("execution_ok"),
-        "llm_api_style": metrics.get("llm_api_style"),
-        "retrieved_skills": exposure["retrieved_skills"],
-        "prompt_injected_skills": exposure["prompt_injected_skills"],
-        "callable_skills": metrics.get("callable_skills") or trace.get("callable_skills") or [],
-        "called_skill_functions": exposure["called_skill_functions"],
-        "retrieved_only_skills": exposure["retrieved_only_skills"],
-        "stderr_tail": str(trace.get("stderr") or "")[-800:],
-    }
-
-
-def _json_block(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2)
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _stable_id(*parts: Any, length: int = 10) -> str:
-    raw = "\n".join(str(part) for part in parts)
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:length]
-
-
-def _spreadsheet_task_fragment(detail: Dict[str, Any]) -> Dict[str, Any]:
-    task = dict(detail.get("task") or {})
-    expected = dict(task.get("expected") or {})
-    metadata = dict(task.get("metadata") or {})
-    return {
-        "benchmark": task.get("benchmark") or "spreadsheet",
-        "task_id": task.get("task_id") or detail.get("task_id"),
-        "question": task.get("question"),
-        "expected": {
-            "answer_sheet": expected.get("answer_sheet"),
-            "answer_position": expected.get("answer_position"),
-            "golden_xlsx": expected.get("golden_xlsx"),
-        },
-        "input_artifacts": {
-            "input_xlsx": (task.get("input_artifacts") or {}).get("input_xlsx"),
-            "prompt_txt_preview": str((task.get("input_artifacts") or {}).get("prompt_txt") or "")[:1200],
-        },
-        "metadata": {
-            "instruction_type": metadata.get("instruction_type"),
-            "data_position": metadata.get("data_position"),
-            "spreadsheet_path": metadata.get("spreadsheet_path"),
-        },
-    }
-
-
-def _spreadsheet_code_snippet(code: str, limit: int = 1600) -> str:
-    text = str(code or "").strip()
-    if len(text) <= limit:
-        return text
-    lines = text.splitlines()
-    kept: List[str] = []
-    total = 0
-    for line in lines:
-        if total + len(line) + 1 > limit:
-            break
-        kept.append(line)
-        total += len(line) + 1
-    return "\n".join(kept).rstrip() + "\n# ... truncated ..."
-
-
-def _spreadsheet_result_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
-    run = dict((detail.get("runs") or [{}])[0] or {})
-    trace = dict(run.get("trace") or {})
-    metrics = dict(run.get("metrics") or {})
-    return {
-        "task": _spreadsheet_task_fragment(detail),
-        "success": run.get("success"),
-        "score": run.get("score"),
-        "metrics": {
-            "answer_sheet": metrics.get("answer_sheet"),
-            "answer_position": metrics.get("answer_position"),
-            "cell_accuracy": metrics.get("cell_accuracy"),
-            "checked_cells": metrics.get("checked_cells"),
-            "mismatched_cells": (metrics.get("mismatched_cells") or [])[:8],
-            "execution_ok": metrics.get("execution_ok"),
-            "returncode": metrics.get("returncode"),
-            "total_tokens": metrics.get("total_tokens"),
-        },
-        "trace": {
-            "retrieved_skills": trace.get("retrieved_skills") or metrics.get("retrieved_skills") or [],
-            "code_snippet": _spreadsheet_code_snippet(trace.get("code") or ""),
-            "stderr_tail": str(trace.get("stderr") or "")[-1200:],
-            "stdout_tail": str(trace.get("stdout") or "")[-800:],
-        },
-    }
-
-
-def _spreadsheet_skill_projection(
-    artifact: SkillArtifact,
-    *,
-    projection: Dict[str, Any],
-) -> Dict[str, Any]:
-    exposure = skill_exposure_flags(artifact.name, projection)
-    return {
-        "skill_name": artifact.name,
-        "version": artifact.version,
-        "kind": artifact.kind,
-        "status": artifact.status,
-        "description": artifact.description,
-        "body": artifact.body[:1800],
-        "interface": artifact.interface.as_dict(),
-        "metadata": {
-            "domains": artifact.metadata.get("domains") or [],
-            "allowed_tools": artifact.metadata.get("allowed_tools") or [],
-            "intent_keywords": artifact.metadata.get("intent_keywords") or [],
-            "source_task_ids": artifact.metadata.get("source_task_ids") or [],
-            "non_applicability": artifact.metadata.get("non_applicability"),
-        },
-        "retrieved": exposure["retrieved"],
-        "injected": exposure["injected"],
-        "used": exposure["used"],
-        "usage_count": artifact.usage_count,
-        "success_count": artifact.success_count,
-        "recent_helpful": artifact.evidence.helpful_cases[-3:],
-        "recent_harmful": artifact.evidence.harmful_cases[-3:],
-    }
-
-
 def _coerce_spreadsheet_artifact(raw: Dict[str, Any], *, detail: Dict[str, Any]) -> SkillArtifact | None:
     name = normalize_skill_name(str(raw.get("name") or ""))
     description = str(raw.get("description") or "").strip()
@@ -1928,7 +1597,7 @@ async def _extract_spreadsheet_skills_from_detail(
     try:
         payload = await _ask_json(
             system=SPREADSHEET_EXTRACT_SYSTEM,
-            user=_json_block(
+            user=json_block(
                 {
                     "existing_artifacts": existing[-40:],
                     "result": _spreadsheet_result_projection(detail),
@@ -2315,7 +1984,7 @@ def _spreadsheet_case_from_task(
     credit_event: Dict[str, Any] | None = None,
 ) -> SkillBundleCase:
     task = _spreadsheet_task_fragment(detail)
-    case_id = f"{skill_name}:{polarity}:{_stable_id(task.get('task_id'), reason, source)}"
+    case_id = f"{skill_name}:{polarity}:{stable_id(task.get('task_id'), reason, source)}"
     return SkillBundleCase(
         case_id=case_id,
         source=source,
@@ -2340,63 +2009,12 @@ def _spreadsheet_case_from_task(
     )
 
 
-def _bundle_bucket(polarity: str) -> str:
-    return {
-        "positive": "positive_cases",
-        "negative": "negative_cases",
-        "integration": "integration_cases",
-    }.get(str(polarity), "integration_cases")
-
-
-def _bundle_case_limit_per_polarity() -> int:
-    try:
-        return max(1, int(os.environ.get("BFCL_BUNDLE_CASE_LIMIT_PER_POLARITY", "2") or "2"))
-    except Exception:
-        return 2
-
-
-def _bundle_max_total_cases() -> int:
-    try:
-        return max(1, int(os.environ.get("BFCL_BUNDLE_MAX_TOTAL_CASES", "6") or "6"))
-    except Exception:
-        return 6
-
-
 def _trim_spreadsheet_bundle_cases(artifact: SkillArtifact) -> None:
-    per = _bundle_case_limit_per_polarity()
-    total = _bundle_max_total_cases()
-    for attr in ("positive_cases", "negative_cases", "integration_cases"):
-        cases = list(getattr(artifact.bundle, attr) or [])
-        if len(cases) > per:
-            cases.sort(key=_spreadsheet_case_priority, reverse=True)
-            setattr(artifact.bundle, attr, cases[:per])
-    all_cases = [
-        ("positive_cases", case) for case in artifact.bundle.positive_cases
-    ] + [
-        ("negative_cases", case) for case in artifact.bundle.negative_cases
-    ] + [
-        ("integration_cases", case) for case in artifact.bundle.integration_cases
-    ]
-    if len(all_cases) <= total:
-        return
-    all_cases.sort(key=lambda item: _spreadsheet_case_priority(item[1]), reverse=True)
-    kept = {id(case) for _bucket, case in all_cases[:total]}
-    for attr in ("positive_cases", "negative_cases", "integration_cases"):
-        setattr(artifact.bundle, attr, [case for case in getattr(artifact.bundle, attr) if id(case) in kept])
-    artifact.bundle.fixtures = {
-        **dict(artifact.bundle.fixtures or {}),
-        "bundle_trimmed": True,
-        "bundle_split_count": len(all_cases) - total,
-    }
+    trim_bundle_cases_to_budget(artifact, priority_fn=_spreadsheet_case_priority)
 
 
-def _spreadsheet_case_priority(case: SkillBundleCase) -> tuple[int, float, str]:
-    ctx = dict(case.context or {})
-    source = str(case.source or "")
-    confidence = float(ctx.get("confidence") or (ctx.get("credit_event") or {}).get("confidence") or 0.0)
-    credit = 1 if source.startswith("credit_assigner") else 0
-    regression = 1 if case.polarity in {"negative", "integration"} else 0
-    return (credit + regression, confidence, case.case_id)
+def _spreadsheet_case_priority(case: SkillBundleCase, index: int = 0) -> tuple[Any, ...]:
+    return default_bundle_case_priority(case, index)
 
 
 def _spreadsheet_micro_targets(
@@ -2436,7 +2054,7 @@ async def _refine_spreadsheet_skill_from_credit(
     if not strong:
         return {"skill_name": artifact.name, "action": "keep", "reason": "no_strong_credit_signal"}
     test_result = {
-        "result_id": f"{artifact.name}:credit:{_stable_id(detail.get('task_id'), _now_iso())}",
+        "result_id": f"{artifact.name}:credit:{stable_id(detail.get('task_id'), now_iso())}",
         "aggregate": {"passed": False, "reason": "pre_bundle_credit_refine"},
         "failed_cases": [_spreadsheet_result_projection(detail)],
     }
@@ -2598,7 +2216,7 @@ async def _execute_spreadsheet_bundle_tests(
         4,
     )
     result = SkillTestResult(
-        result_id=f"{artifact.name}:spreadsheet_bundle:{_stable_id(artifact.version, _now_iso())}",
+        result_id=f"{artifact.name}:spreadsheet_bundle:{stable_id(artifact.version, now_iso())}",
         skill_name=artifact.name,
         skill_version=artifact.version,
         bundle_id=artifact.bundle.bundle_id or f"{artifact.name}.bundle",
@@ -2611,7 +2229,7 @@ async def _execute_spreadsheet_bundle_tests(
             "n_passed": sum(1 for run in case_runs if run.passed),
             "avg_accuracy": avg_accuracy,
         },
-        created_at=_now_iso(),
+        created_at=now_iso(),
     )
     return result
 
@@ -2631,7 +2249,7 @@ def _promote_spreadsheet_pending_from_window(
         if store.promote_pending(
             artifact.name,
             reason="spreadsheet_successful_source_trace_in_macro_window",
-            refactor_group_id=f"spreadsheet_macro:{_stable_id(*sorted(window_task_ids))}",
+            refactor_group_id=f"spreadsheet_macro:{stable_id(*sorted(window_task_ids))}",
         ):
             promoted.append(artifact.name)
     return promoted
@@ -2675,7 +2293,7 @@ def _spreadsheet_dedupe_key(artifact: SkillArtifact) -> str:
     instruction_type = str(artifact.metadata.get("instruction_type") or "").lower()
     keywords = sorted(str(item).lower() for item in (artifact.metadata.get("intent_keywords") or [])[:6])
     text = " ".join([instruction_type, artifact.kind, *keywords])
-    return _stable_id(text, length=12)
+    return stable_id(text, length=12)
 
 
 def _filter_spreadsheet_harmful_skills(

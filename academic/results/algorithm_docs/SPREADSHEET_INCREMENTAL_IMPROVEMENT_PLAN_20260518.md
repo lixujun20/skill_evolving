@@ -644,6 +644,210 @@ async def test_spreadsheet_credit_fallback_ignores_retrieved_only_skill(...):
 - 没有改 compact skill projection，`body[:1800]` 仍保留；留到 Chapter 5。
 - 没有把 generic runner 并发下沉；留到 Chapter 7。
 
+## Chapter 1.6: 公共层与 Spreadsheet 文件结构重构
+
+提交：待提交。
+
+状态：已完成，测试通过。
+
+动机：Spreadsheet adapter 已经超过 2800 行，混合了 executor、verifier、prompt、trace projection、credit、bundle、micro/macro adapter。为了后续逐章改功能时不继续把算法结构写散，本章只做结构重构，不改变算法行为；BFCL 业务路径暂不改，等后续口令再迁移。
+
+本章新增两个可由 BFCL/Spreadsheet/后续 benchmark 共用的公共层：
+
+- `academic/benchmarks/core/maintenance_utils.py`
+- `academic/benchmarks/core/bundle_policy.py`
+
+同时把 Spreadsheet 的 prompt 与维护输入 projection 拆到独立文件：
+
+- `academic/benchmarks/spreadsheet/prompts.py`
+- `academic/benchmarks/spreadsheet/trace_projection.py`
+
+验证命令：
+
+```bash
+python -m py_compile \
+  academic/benchmarks/core/maintenance_utils.py \
+  academic/benchmarks/core/bundle_policy.py \
+  academic/benchmarks/spreadsheet/prompts.py \
+  academic/benchmarks/spreadsheet/trace_projection.py \
+  academic/benchmarks/spreadsheet/adapter.py \
+  academic/benchmarks/tests/test_spreadsheet_evolution.py \
+  academic/benchmarks/tests/test_credit_scope.py
+
+pytest -q \
+  academic/benchmarks/tests/test_credit_scope.py \
+  academic/benchmarks/tests/test_spreadsheet_evolution.py \
+  academic/benchmarks/tests/test_skill_injector_budget.py
+```
+
+结果：`22 passed`。pytest 只出现已有 warning。
+
+### 1. 公共 maintenance utils 层
+
+位置：`academic/benchmarks/core/maintenance_utils.py:1-28`
+
+职责：维护代码里反复出现的小工具，避免 BFCL/Spreadsheet 各自定义 `_json_block`、`_now_iso`、`_stable_id`、`_env_int`。
+
+代码片段：
+
+```python
+def json_block(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def stable_id(*parts: Any, length: int = 10) -> str:
+    raw = "\n".join(str(part) for part in parts)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:length]
+
+
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)) or default)
+    except Exception:
+        return default
+```
+
+Spreadsheet adapter 对应迁移位置：`academic/benchmarks/spreadsheet/adapter.py:43`、`1272`、`1922`、`2309`、`2379`、`2541`、`2554`、`2574`、`2618`。
+
+示例代码片段：
+
+```python
+from academic.benchmarks.core.maintenance_utils import json_block, now_iso, stable_id
+
+payload = await _ask_json(
+    system=SPREADSHEET_CREDIT_SYSTEM,
+    user=json_block({...}),
+)
+
+case_id = f"{skill_name}:{polarity}:{stable_id(task.get('task_id'), reason, source)}"
+```
+
+### 2. 公共 bundle policy 层
+
+位置：`academic/benchmarks/core/bundle_policy.py:1-154`
+
+职责：统一 bundle case bucket、case budget env、通用 trim 策略。该层不懂 BFCL 或 Spreadsheet replay，只处理 `SkillArtifact.bundle` 的 `positive_cases` / `negative_cases` / `integration_cases`。
+
+代码片段：
+
+```python
+BUNDLE_CASE_ATTRS = ("positive_cases", "negative_cases", "integration_cases")
+
+
+def bundle_bucket(polarity: str) -> str:
+    return {
+        "positive": "positive_cases",
+        "negative": "negative_cases",
+        "integration": "integration_cases",
+    }.get(str(polarity), "integration_cases")
+
+
+def trim_bundle_cases_to_budget(
+    artifact: SkillArtifact,
+    *,
+    per_polarity_limit: int | None = None,
+    total_limit: int | None = None,
+    priority_fn: Callable[[SkillBundleCase, int], tuple[Any, ...]] | None = None,
+) -> bool:
+    limit = max(1, int(per_polarity_limit or bundle_case_limit_per_polarity()))
+    total = max(1, int(total_limit or bundle_max_total_cases()))
+    priority = priority_fn or default_bundle_case_priority
+    ...
+```
+
+Spreadsheet adapter 对应迁移位置：`academic/benchmarks/spreadsheet/adapter.py:31-35`、`1549`、`2348-2352`。
+
+代码片段：
+
+```python
+from academic.benchmarks.core.bundle_policy import (
+    bundle_bucket,
+    default_bundle_case_priority,
+    trim_bundle_cases_to_budget,
+)
+
+bucket = bundle_bucket(case.polarity)
+
+def _trim_spreadsheet_bundle_cases(artifact: SkillArtifact) -> None:
+    trim_bundle_cases_to_budget(artifact, priority_fn=_spreadsheet_case_priority)
+
+def _spreadsheet_case_priority(case: SkillBundleCase, index: int = 0) -> tuple[Any, ...]:
+    return default_bundle_case_priority(case, index)
+```
+
+说明：本次只让 Spreadsheet 使用公共 bundle policy。BFCL 的 `trim_bundle_cases()` 暂不迁移，避免在用户要求前改 BFCL 业务路径。
+
+### 3. Spreadsheet prompt 拆分
+
+位置：`academic/benchmarks/spreadsheet/prompts.py:1-219`
+
+职责：集中存放 Spreadsheet executor/extractor/credit prompt，不再放在 adapter 顶部。
+
+Spreadsheet adapter 对应迁移位置：`academic/benchmarks/spreadsheet/adapter.py:56-63`。
+
+代码片段：
+
+```python
+from academic.benchmarks.spreadsheet.prompts import (
+    DATASET_URL,
+    SPREADSHEET_CREDIT_SYSTEM,
+    SPREADSHEET_DONE_PATTERN,
+    SPREADSHEET_EXTRACT_SYSTEM,
+    SPREADSHEET_NOTEBOOK_SYSTEM,
+    SPREADSHEET_SYSTEM,
+)
+```
+
+### 4. Spreadsheet trace projection 拆分
+
+位置：`academic/benchmarks/spreadsheet/trace_projection.py:1-130`
+
+职责：维护 agent 的 compact input projection，包括 task fragment、result projection、skill projection 和 code snippet。它仍然是 Spreadsheet-specific，因为 official workbook、answer range、openpyxl code/stdout/stderr 都是 benchmark 原生概念。
+
+代码片段：
+
+```python
+def spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
+    runs = detail.get("runs") or []
+    first = runs[0] if runs else {}
+    metrics = first.get("metrics") or {}
+    trace = first.get("trace") or {}
+    exposure = skill_exposure_from_mappings(metrics, trace)
+    return {
+        "task_id": detail.get("task_id"),
+        "success": first.get("success"),
+        "score": first.get("score"),
+        "retrieved_skills": exposure["retrieved_skills"],
+        "prompt_injected_skills": exposure["prompt_injected_skills"],
+        "called_skill_functions": exposure["called_skill_functions"],
+        "retrieved_only_skills": exposure["retrieved_only_skills"],
+        "stderr_tail": str(trace.get("stderr") or "")[-800:],
+    }
+```
+
+Spreadsheet adapter 保留旧私有函数名作为 import alias，降低本章改动面：
+
+```python
+from academic.benchmarks.spreadsheet.trace_projection import (
+    spreadsheet_code_snippet as _spreadsheet_code_snippet,
+    spreadsheet_result_projection as _spreadsheet_result_projection,
+    spreadsheet_skill_projection as _spreadsheet_skill_projection,
+    spreadsheet_task_fragment as _spreadsheet_task_fragment,
+    spreadsheet_trace_projection as _spreadsheet_trace_projection,
+)
+```
+
+### 5. 本章刻意不做的事
+
+- 不改 BFCL 的 `maintenance/adapter.py` 和 `related/experiment.py` 业务流程。
+- 不迁移 Spreadsheet executor/verifier/notebook runtime。
+- 不改变 skill extraction、credit、bundle replay、micro/macro 的行为。
+- 不重跑真实实验，只跑结构重构相关 regression tests。
+
 ## Chapter 2: Micro target 收窄
 
 目标：helpful credit 默认只记录 evidence，不触发 immediate refine/test。

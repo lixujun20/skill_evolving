@@ -12,12 +12,14 @@ import copy
 import hashlib
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
 import tarfile
 import tempfile
 import textwrap
+import threading
 import time
 import urllib.request
 from dataclasses import dataclass, field
@@ -70,6 +72,29 @@ Callable function skills:
 {callable_skills}
 
 Return exactly one fenced python code block.
+"""
+
+SPREADSHEET_DONE_PATTERN = "<SPREADSHEET_DONE>"
+
+SPREADSHEET_NOTEBOOK_SYSTEM = """You are a spreadsheet manipulation agent working in a persistent Python notebook.
+
+You can iteratively write Python/openpyxl code against INPUT_XLSX and OUTPUT_XLSX.
+Each code block is executed in the same Python process, so later turns may reuse
+variables, functions, imports, and workbook objects created earlier.
+
+Retrieved skill package guidance:
+{skills}
+
+Callable function skills:
+{callable_skills}
+
+Return exactly one fenced python code block when you need to inspect, edit, or
+repair the workbook. After each execution you will receive stdout, stderr, and
+the return code. Save the final workbook to OUTPUT_XLSX before finishing.
+
+When you are finished, include the exact token {done_pattern}. If you include a
+code block and {done_pattern} in the same response, the code will run first and
+then the task will be verified.
 """
 
 SPREADSHEET_EXTRACT_SYSTEM = """\
@@ -256,6 +281,8 @@ class SpreadsheetTrace:
     filtered_skills: List[Dict[str, Any]] = field(default_factory=list)
     injector_events: List[Dict[str, Any]] = field(default_factory=list)
     cost_events: List[Dict[str, Any]] = field(default_factory=list)
+    notebook_turns: List[Dict[str, Any]] = field(default_factory=list)
+    execution_mode: str = "single"
     total_tokens: int = 0
     input_tokens: int = 0
     cache_input_tokens: int = 0
@@ -275,6 +302,8 @@ class SpreadsheetTrace:
             "filtered_skills": self.filtered_skills,
             "injector_events": self.injector_events,
             "cost_events": self.cost_events,
+            "notebook_turns": self.notebook_turns,
+            "execution_mode": self.execution_mode,
             "total_tokens": self.total_tokens,
             "input_tokens": self.input_tokens,
             "cache_input_tokens": self.cache_input_tokens,
@@ -518,6 +547,236 @@ async def run_spreadsheet_task(
     )
 
 
+async def run_spreadsheet_task_notebook(
+    task: BenchmarkTask,
+    *,
+    llm_config: str,
+    model_name: Optional[str] = None,
+    artifact_store: Optional[ArtifactStore] = None,
+    top_k_skills: int = 5,
+    skill_injector_mode: str | None = None,
+    skill_context_budget_chars: int | None = None,
+    max_turns: int = 5,
+    work_dir: Optional[Path] = None,
+) -> BenchmarkResult:
+    t0 = time.monotonic()
+    trace = SpreadsheetTrace(task_id=task.task_id, execution_mode="notebook")
+    query = str(task.question)
+    retrieved = artifact_store.retrieve(query, top_k=top_k_skills) if artifact_store else []
+    trace.retrieved_skills = [skill.name for skill in retrieved]
+    injector_mode = (
+        skill_injector_mode
+        or os.environ.get("SPREADSHEET_SKILL_INJECTOR_MODE")
+        or os.environ.get("SKILL_INJECTOR_MODE")
+        or "full"
+    ).strip().lower()
+    injected = list(retrieved)
+    skill_prompt = artifact_store.build_prompt(injected) if artifact_store else "(none)"
+    if artifact_store and injector_mode not in {"", "full"}:
+        injector = BudgetSkillInjector(
+            mode=injector_mode,
+            max_full_skills=int(os.environ.get("SPREADSHEET_SKILL_INJECTOR_MAX_FULL_SKILLS", os.environ.get("SKILL_INJECTOR_MAX_FULL_SKILLS", "0")) or "0"),
+            max_summary_skills=int(os.environ.get("SPREADSHEET_SKILL_INJECTOR_MAX_SUMMARY_SKILLS", os.environ.get("SKILL_INJECTOR_MAX_SUMMARY_SKILLS", "2")) or "2"),
+            budget_chars=int(skill_context_budget_chars or os.environ.get("SPREADSHEET_SKILL_CONTEXT_BUDGET_CHARS", os.environ.get("SKILL_INJECTOR_BUDGET_CHARS", "2200")) or "2200"),
+            compact_chars_per_skill=int(os.environ.get("SPREADSHEET_SKILL_COMPACT_CHARS_PER_SKILL", os.environ.get("SKILL_INJECTOR_COMPACT_CHARS_PER_SKILL", "900")) or "900"),
+        )
+        injection = injector.select(
+            retrieved,
+            query=query,
+            allowed_injection_types={"informational", "workflow", "functional"},
+        )
+        injected = injection.artifacts
+        skill_prompt = injection.prompt()
+        trace.filtered_skills = list(injection.filtered)
+        trace.injector_events = [injection.as_event()]
+        trace.cost_events.append(
+            make_cost_event(
+                role="injector",
+                phase="executor",
+                benchmark="spreadsheet",
+                task_id=task.task_id,
+                model=model_name or "",
+                llm_config=llm_config,
+                skill_prompt_chars=int(trace.injector_events[0].get("prompt_chars") or 0),
+                metadata={
+                    "mode": trace.injector_events[0].get("mode"),
+                    "injected_count": trace.injector_events[0].get("injected_count"),
+                    "filtered_count": trace.injector_events[0].get("filtered_count"),
+                    "deterministic": True,
+                    "execution_mode": "notebook",
+                },
+            )
+        )
+
+    base_work_dir = work_dir or Path(tempfile.mkdtemp(prefix="spreadsheetbench_nb_"))
+    base_work_dir.mkdir(parents=True, exist_ok=True)
+    callable_prompt = _write_spreadsheet_skill_library(injected, base_work_dir)
+    trace.callable_skills = callable_prompt["skills"]
+    skill_prompt_for_system = (
+        skill_prompt
+        + ("\n\nCallable skill import map:\n" + callable_prompt["prompt"] if callable_prompt["prompt"] else "")
+    )
+    trace.prompt_injected_skills = [skill.name for skill in injected]
+    system = SPREADSHEET_NOTEBOOK_SYSTEM.format(
+        skills=skill_prompt,
+        callable_skills=callable_prompt["prompt"] or "(no callable function skills available)",
+        done_pattern=SPREADSHEET_DONE_PATTERN,
+    )
+    input_copy = base_work_dir / f"{task.task_id}_input.xlsx"
+    output_path = base_work_dir / f"{task.task_id}_output.xlsx"
+    shutil.copyfile(task.input_artifacts["input_xlsx"], input_copy)
+    shutil.copyfile(input_copy, output_path)
+
+    base_prompt = _build_spreadsheet_notebook_prompt(task, input_copy, output_path, max_turns=max_turns)
+    trace.prompt = base_prompt
+    session: _NotebookPythonSession | None = None
+    stopped_by_done = False
+    try:
+        session = _NotebookPythonSession(base_work_dir)
+        session.run_cell(
+            f"INPUT_XLSX = Path({str(input_copy)!r})\nOUTPUT_XLSX = Path({str(output_path)!r})",
+            timeout=CODE_EXEC_TIMEOUT,
+        )
+        history: List[Dict[str, Any]] = []
+        response_model = model_name
+        response_api_style = ""
+        for turn_index in range(max(1, int(max_turns or 5))):
+            prompt = _build_spreadsheet_notebook_turn_prompt(
+                base_prompt=base_prompt,
+                history=history,
+                turn_index=turn_index,
+                max_turns=max_turns,
+            )
+            response = await ask_text_llm(
+                llm_config=llm_config,
+                model_name=model_name,
+                system=system,
+                prompt=prompt,
+            )
+            response_model = response.model_name or model_name
+            response_api_style = response.api_style
+            trace.input_tokens += response.prompt_tokens
+            trace.cache_input_tokens += response.cache_input_tokens
+            trace.completion_tokens += response.completion_tokens
+            trace.total_tokens += response.prompt_tokens + response.cache_input_tokens + response.completion_tokens
+            code = _extract_code(response.content)
+            done_requested = SPREADSHEET_DONE_PATTERN in (response.content or "")
+            turn: Dict[str, Any] = {
+                "turn_index": turn_index,
+                "response": (response.content or "")[-4000:],
+                "code": code,
+                "done_requested": done_requested,
+                "prompt_tokens": response.prompt_tokens,
+                "cache_input_tokens": response.cache_input_tokens,
+                "completion_tokens": response.completion_tokens,
+            }
+            if code:
+                exec_result = session.run_cell(code, timeout=CODE_EXEC_TIMEOUT)
+                turn.update(exec_result)
+                trace.code = (trace.code + "\n\n# %% notebook turn " + str(turn_index) + "\n" + code).strip()
+                history.append(
+                    {
+                        "turn_index": turn_index,
+                        "code": code,
+                        "stdout": exec_result.get("stdout", ""),
+                        "stderr": exec_result.get("stderr", ""),
+                        "returncode": exec_result.get("returncode"),
+                    }
+                )
+            else:
+                turn.update({"stdout": "", "stderr": "", "returncode": None})
+                history.append(
+                    {
+                        "turn_index": turn_index,
+                        "code": "",
+                        "stdout": "",
+                        "stderr": "No fenced python code was returned.",
+                        "returncode": None,
+                    }
+                )
+            trace.notebook_turns.append(turn)
+            trace.cost_events.append(
+                make_cost_event(
+                    role="executor",
+                    phase="task_rollout",
+                    benchmark="spreadsheet",
+                    task_id=task.task_id,
+                    model=response.model_name or model_name or "",
+                    llm_config=llm_config,
+                    input_tokens=response.prompt_tokens,
+                    cache_input_tokens=response.cache_input_tokens,
+                    output_tokens=response.completion_tokens,
+                    prompt_chars=len(prompt),
+                    skill_prompt_chars=len(skill_prompt_for_system),
+                    system_prompt_chars=len(system),
+                    final_conversation_chars=len(system) + len(prompt) + len(response.content or ""),
+                    metadata={
+                        "api_style": response.api_style,
+                        "skill_injector_mode": injector_mode,
+                        "prompt_injected_skills": list(trace.prompt_injected_skills),
+                        "callable_skills": list(trace.callable_skills),
+                        "execution_mode": "notebook",
+                        "turn_index": turn_index,
+                    },
+                )
+            )
+            if done_requested:
+                stopped_by_done = True
+                break
+        trace.stdout = "\n".join(str(turn.get("stdout") or "") for turn in trace.notebook_turns)[-4000:]
+        trace.stderr = "\n".join(str(turn.get("stderr") or "") for turn in trace.notebook_turns)[-4000:]
+        verify = verify_spreadsheet_output(
+            predicted_xlsx=output_path,
+            golden_xlsx=Path(task.expected["golden_xlsx"]),
+            sheet_name=task.expected.get("answer_sheet"),
+            answer_range=task.expected.get("answer_position"),
+        )
+        last_returncode = trace.notebook_turns[-1].get("returncode") if trace.notebook_turns else None
+        verify["returncode"] = last_returncode
+        verify["execution_ok"] = not any((turn.get("returncode") not in {0, None}) for turn in trace.notebook_turns)
+        success = bool(verify["pass"])
+    except Exception as exc:
+        trace.elapsed_s = round(time.monotonic() - t0, 3)
+        return BenchmarkResult(
+            benchmark="spreadsheet",
+            task_id=task.task_id,
+            success=False,
+            score=0.0,
+            metrics={"exception": type(exc).__name__, "execution_mode": "notebook"},
+            trace=trace.as_dict(),
+            error=str(exc),
+        )
+    finally:
+        if session is not None:
+            session.close()
+
+    trace.elapsed_s = round(time.monotonic() - t0, 3)
+    verify["total_tokens"] = trace.total_tokens
+    verify["input_tokens"] = trace.input_tokens
+    verify["cache_input_tokens"] = trace.cache_input_tokens
+    verify["completion_tokens"] = trace.completion_tokens
+    verify["cost_events"] = trace.cost_events
+    verify["elapsed_s"] = trace.elapsed_s
+    verify["retrieved_skills"] = trace.retrieved_skills
+    verify["prompt_injected_skills"] = trace.prompt_injected_skills
+    verify["filtered_skills"] = trace.filtered_skills
+    verify["injector_events"] = trace.injector_events
+    verify["skill_injector_mode"] = injector_mode
+    verify["execution_mode"] = "notebook"
+    verify["notebook_turn_count"] = len(trace.notebook_turns)
+    verify["notebook_stopped_by_done"] = stopped_by_done
+    verify["model_name"] = response_model
+    verify["llm_api_style"] = response_api_style
+    return BenchmarkResult(
+        benchmark="spreadsheet",
+        task_id=task.task_id,
+        success=success,
+        score=float(verify["cell_accuracy"]),
+        metrics=verify,
+        trace=trace.as_dict(),
+    )
+
+
 def verify_spreadsheet_output(
     *,
     predicted_xlsx: Path,
@@ -570,6 +829,75 @@ def _build_spreadsheet_prompt(task: BenchmarkTask, input_copy: Path, output_path
         f"Workbook preview:\n{preview}\n\n"
         "Write robust openpyxl code. It may inspect workbook sheets/cells, then save to OUTPUT_XLSX."
     )
+
+
+def _build_spreadsheet_notebook_prompt(
+    task: BenchmarkTask,
+    input_copy: Path,
+    output_path: Path,
+    *,
+    max_turns: int,
+) -> str:
+    preview = _workbook_preview(input_copy)
+    return (
+        f"Instruction:\n{task.question}\n\n"
+        f"Input workbook path: {input_copy}\n"
+        f"Output workbook path: {output_path}\n"
+        f"Answer sheet: {task.expected.get('answer_sheet')}\n"
+        f"Answer range: {task.expected.get('answer_position')}\n"
+        f"Data position: {task.metadata.get('data_position')}\n\n"
+        f"Workbook preview:\n{preview}\n\n"
+        "Notebook protocol:\n"
+        f"- You have at most {max_turns} turns.\n"
+        "- Each fenced python block executes in the same process and can reuse previous variables.\n"
+        "- Use print(...) to inspect workbook state when needed.\n"
+        "- If execution fails, use the stderr in the next turn to repair the code.\n"
+        f"- Save the final answer workbook to OUTPUT_XLSX, then output {SPREADSHEET_DONE_PATTERN}.\n"
+    )
+
+
+def _build_spreadsheet_notebook_turn_prompt(
+    *,
+    base_prompt: str,
+    history: Sequence[Dict[str, Any]],
+    turn_index: int,
+    max_turns: int,
+) -> str:
+    if not history:
+        return (
+            base_prompt
+            + "\nThis is turn 1. Return a fenced python code block to inspect or solve the workbook. "
+            + f"When the workbook is saved and final, include {SPREADSHEET_DONE_PATTERN}."
+        )
+    chunks = [base_prompt, "\nPrevious notebook executions:"]
+    for row in history[-4:]:
+        chunks.append(
+            "\n".join(
+                [
+                    f"Turn {int(row.get('turn_index', 0)) + 1}:",
+                    "Code:",
+                    "```python",
+                    _clip_notebook_text(row.get("code") or "", 1800),
+                    "```",
+                    f"Return code: {row.get('returncode')}",
+                    f"stdout:\n{_clip_notebook_text(row.get('stdout') or '', 1200)}",
+                    f"stderr:\n{_clip_notebook_text(row.get('stderr') or '', 1600)}",
+                ]
+            )
+        )
+    chunks.append(
+        f"\nThis is turn {turn_index + 1} of {max_turns}. "
+        "Return the next fenced python code block. "
+        f"If the workbook is already correct and saved, include {SPREADSHEET_DONE_PATTERN}."
+    )
+    return "\n\n".join(chunks)
+
+
+def _clip_notebook_text(value: Any, limit: int) -> str:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
 
 
 def _workbook_preview(path: Path, max_rows: int = 8, max_cols: int = 8) -> str:
@@ -840,6 +1168,141 @@ def _run_code(code: str, input_xlsx: Path, output_xlsx: Path, work_dir: Path) ->
     return proc.stdout[-4000:], proc.stderr[-4000:], proc.returncode
 
 
+class _NotebookPythonSession:
+    def __init__(self, work_dir: Path) -> None:
+        self.work_dir = work_dir
+        self.driver_path = work_dir / "spreadsheet_notebook_driver.py"
+        self.driver_path.write_text(_NOTEBOOK_DRIVER_CODE)
+        self.proc = subprocess.Popen(
+            ["python", str(self.driver_path)],
+            cwd=str(work_dir),
+            text=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=1,
+        )
+        self._stderr_tail: List[str] = []
+        self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
+        self._stderr_thread.start()
+
+    def _drain_stderr(self) -> None:
+        if self.proc.stderr is None:
+            return
+        for line in self.proc.stderr:
+            self._stderr_tail.append(line)
+            if len(self._stderr_tail) > 40:
+                self._stderr_tail = self._stderr_tail[-40:]
+
+    def run_cell(self, code: str, *, timeout: float) -> Dict[str, Any]:
+        if self.proc.poll() is not None:
+            return {
+                "stdout": "",
+                "stderr": "Notebook Python session is not running.\n" + "".join(self._stderr_tail)[-2000:],
+                "returncode": self.proc.returncode,
+                "timed_out": False,
+            }
+        assert self.proc.stdin is not None
+        assert self.proc.stdout is not None
+        payload = json.dumps({"code": code}, ensure_ascii=False)
+        self.proc.stdin.write(payload + "\n")
+        self.proc.stdin.flush()
+        out_queue: queue.Queue[str] = queue.Queue(maxsize=1)
+
+        def read_one() -> None:
+            try:
+                out_queue.put(self.proc.stdout.readline())
+            except Exception as exc:
+                out_queue.put(json.dumps({"stdout": "", "stderr": str(exc), "returncode": 1}))
+
+        reader = threading.Thread(target=read_one, daemon=True)
+        reader.start()
+        try:
+            line = out_queue.get(timeout=max(1.0, float(timeout or CODE_EXEC_TIMEOUT)))
+        except queue.Empty:
+            self.close(kill=True)
+            return {"stdout": "", "stderr": "Notebook cell timed out.", "returncode": 124, "timed_out": True}
+        if not line:
+            return {
+                "stdout": "",
+                "stderr": "Notebook Python session exited.\n" + "".join(self._stderr_tail)[-2000:],
+                "returncode": self.proc.returncode,
+                "timed_out": False,
+            }
+        try:
+            result = json.loads(line)
+        except Exception:
+            result = {"stdout": "", "stderr": f"Malformed notebook driver response: {line[-1000:]}", "returncode": 1}
+        result["stdout"] = str(result.get("stdout") or "")[-4000:]
+        result["stderr"] = str(result.get("stderr") or "")[-4000:]
+        result["returncode"] = int(result.get("returncode") or 0)
+        result["timed_out"] = bool(result.get("timed_out", False))
+        return result
+
+    def close(self, *, kill: bool = False) -> None:
+        if self.proc.poll() is not None:
+            return
+        if kill:
+            self.proc.kill()
+            return
+        try:
+            if self.proc.stdin is not None:
+                self.proc.stdin.write(json.dumps({"shutdown": True}) + "\n")
+                self.proc.stdin.flush()
+            self.proc.wait(timeout=2)
+        except Exception:
+            self.proc.kill()
+
+
+_NOTEBOOK_DRIVER_CODE = r'''
+import contextlib
+import io
+import json
+import sys
+import traceback
+from pathlib import Path
+
+import openpyxl
+from openpyxl import load_workbook
+
+ns = {
+    "__name__": "__spreadsheet_notebook__",
+    "Path": Path,
+    "openpyxl": openpyxl,
+    "load_workbook": load_workbook,
+}
+
+for raw in sys.stdin:
+    try:
+        payload = json.loads(raw)
+    except Exception as exc:
+        print(json.dumps({"stdout": "", "stderr": f"bad json: {exc}", "returncode": 1}), flush=True)
+        continue
+    if payload.get("shutdown"):
+        break
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    rc = 0
+    try:
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            exec(str(payload.get("code") or ""), ns, ns)
+    except Exception:
+        rc = 1
+        stderr.write(traceback.format_exc())
+    print(
+        json.dumps(
+            {
+                "stdout": stdout.getvalue()[-4000:],
+                "stderr": stderr.getvalue()[-4000:],
+                "returncode": rc,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+'''
+
+
 def _cells_in_range(answer_range: Optional[str], ws: Any) -> List[str]:
     if not answer_range:
         return [
@@ -883,6 +1346,17 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
         run_idx: int,
     ) -> BenchmarkResult:
         del phase, task_index, run_idx
+        if str(config.extra.get("spreadsheet_execution_mode") or "single").strip().lower() == "notebook":
+            return await run_spreadsheet_task_notebook(
+                task,
+                llm_config=config.llm_config,
+                model_name=config.model_name,
+                artifact_store=store,
+                top_k_skills=config.top_k_skills,
+                skill_injector_mode=config.extra.get("skill_injector_mode"),
+                skill_context_budget_chars=config.extra.get("skill_context_budget_chars"),
+                max_turns=int(config.extra.get("spreadsheet_max_turns") or 5),
+            )
         return await run_spreadsheet_task(
             task,
             llm_config=config.llm_config,

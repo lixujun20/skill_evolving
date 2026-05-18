@@ -48,6 +48,7 @@ from academic.benchmarks.spreadsheet.adapter import (
     SpreadsheetMaintenanceAdapter,
     load_spreadsheet_tasks,
     run_spreadsheet_task,
+    run_spreadsheet_task_notebook,
 )
 from academic.benchmarks.core.types import (
     BenchmarkResult,
@@ -124,6 +125,18 @@ async def main_async() -> None:
         type=int,
         default=None,
         help="Optional prompt character budget for injected skill context.",
+    )
+    parser.add_argument(
+        "--spreadsheet-execution-mode",
+        choices=["single", "notebook"],
+        default="single",
+        help="Spreadsheet executor mode: single runs one code block; notebook allows persistent multi-turn Python cells.",
+    )
+    parser.add_argument(
+        "--spreadsheet-max-turns",
+        type=int,
+        default=5,
+        help="Maximum notebook turns for --spreadsheet-execution-mode notebook.",
     )
     parser.add_argument("--bfcl-explicit-skill-tool", action="store_true")
     parser.add_argument("--save-skills", type=Path, default=None)
@@ -334,6 +347,8 @@ async def main_async() -> None:
                     extra={
                         "skill_injector_mode": args.skill_injector_mode,
                         "skill_context_budget_chars": args.skill_context_budget_chars,
+                        "spreadsheet_execution_mode": args.spreadsheet_execution_mode,
+                        "spreadsheet_max_turns": args.spreadsheet_max_turns,
                     },
                 ),
             )
@@ -344,6 +359,8 @@ async def main_async() -> None:
                 rounds=1,
             )
             summary["elapsed_s"] = round(time.monotonic() - t0, 3)
+            summary["spreadsheet_execution_mode"] = args.spreadsheet_execution_mode
+            summary["spreadsheet_max_turns"] = args.spreadsheet_max_turns
             out = args.output or RESULTS_DIR / f"{args.benchmark}_{args.tag}_{args.mode}.json"
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(json.dumps(summary, ensure_ascii=False, indent=2))
@@ -366,6 +383,8 @@ async def main_async() -> None:
             top_k_skills=args.top_k_skills,
             skill_injector_mode=args.skill_injector_mode,
             skill_context_budget_chars=args.skill_context_budget_chars,
+            execution_mode=args.spreadsheet_execution_mode,
+            max_turns=args.spreadsheet_max_turns,
         )
     else:
         raise ValueError(f"Benchmark {args.benchmark} is registry-only for now")
@@ -389,6 +408,9 @@ async def main_async() -> None:
         summary["temperature"] = args.temperature
         summary["bfcl_synthetic_continue"] = args.bfcl_synthetic_continue
         summary["bfcl_explicit_skill_tool"] = args.bfcl_explicit_skill_tool
+    if args.benchmark == "spreadsheet":
+        summary["spreadsheet_execution_mode"] = args.spreadsheet_execution_mode
+        summary["spreadsheet_max_turns"] = args.spreadsheet_max_turns
     summary["elapsed_s"] = round(time.monotonic() - t0, 3)
     out = args.output or RESULTS_DIR / f"{args.benchmark}_{args.tag}_{args.mode}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -695,6 +717,8 @@ async def _run_spreadsheet_baseline(
     top_k_skills: int = 5,
     skill_injector_mode: str | None = None,
     skill_context_budget_chars: int | None = None,
+    execution_mode: str = "single",
+    max_turns: int = 5,
 ) -> List[Dict[str, Any]]:
     concurrency = max(1, int(concurrency or 1))
 
@@ -702,15 +726,27 @@ async def _run_spreadsheet_baseline(
         runs = []
         task_store = copy.deepcopy(store) if concurrency > 1 else store
         for run_idx in range(n_runs):
-            coro = run_spreadsheet_task(
-                task,
-                llm_config=llm_config,
-                model_name=model_name,
-                artifact_store=task_store,
-                top_k_skills=top_k_skills,
-                skill_injector_mode=skill_injector_mode,
-                skill_context_budget_chars=skill_context_budget_chars,
-            )
+            if execution_mode == "notebook":
+                coro = run_spreadsheet_task_notebook(
+                    task,
+                    llm_config=llm_config,
+                    model_name=model_name,
+                    artifact_store=task_store,
+                    top_k_skills=top_k_skills,
+                    skill_injector_mode=skill_injector_mode,
+                    skill_context_budget_chars=skill_context_budget_chars,
+                    max_turns=max_turns,
+                )
+            else:
+                coro = run_spreadsheet_task(
+                    task,
+                    llm_config=llm_config,
+                    model_name=model_name,
+                    artifact_store=task_store,
+                    top_k_skills=top_k_skills,
+                    skill_injector_mode=skill_injector_mode,
+                    skill_context_budget_chars=skill_context_budget_chars,
+                )
             result = await asyncio.wait_for(coro, timeout=max_task_seconds) if max_task_seconds else await coro
             item = result.as_dict()
             item["run_idx"] = run_idx

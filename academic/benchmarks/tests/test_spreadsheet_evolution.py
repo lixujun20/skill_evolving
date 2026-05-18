@@ -10,12 +10,14 @@ from academic.benchmarks.core.llm_text import TextLLMResponse
 from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig
 from academic.benchmarks.core.types import BenchmarkResult, BenchmarkTask, SkillArtifact, SkillInterface, SkillTestResult
 from academic.benchmarks.spreadsheet.adapter import (
+    SPREADSHEET_DONE_PATTERN,
     SpreadsheetMaintenanceAdapter,
     _execute_spreadsheet_bundle_tests,
     _answer_range_refs,
     _is_spreadsheet_callable_skill,
     _write_spreadsheet_skill_library,
     run_spreadsheet_task,
+    run_spreadsheet_task_notebook,
 )
 
 
@@ -246,6 +248,60 @@ wb.save(OUTPUT_XLSX)
     assert result.success is True
     assert result.trace["callable_skills"] == []
     assert not (tmp_path / "work" / "skill_library.py").exists()
+
+
+async def test_spreadsheet_notebook_mode_returns_errors_and_reuses_variables(monkeypatch, tmp_path: Path) -> None:
+    task = _task(tmp_path, "sheet_notebook", "Double A1 into B1.", source=9, answer=18)
+    prompts: List[str] = []
+
+    async def fake_ask_text_llm(**kwargs: Any) -> TextLLMResponse:
+        prompts.append(kwargs["prompt"])
+        if len(prompts) == 1:
+            return TextLLMResponse(
+                content="""```python
+import openpyxl
+wb = openpyxl.load_workbook(INPUT_XLSX)
+ws = wb["Sheet1"]
+print("source", ws["A1"].value)
+missing_name
+```""",
+                prompt_tokens=20,
+                completion_tokens=15,
+                model_name="mock-model",
+                api_style="mock",
+            )
+        return TextLLMResponse(
+            content=f"""```python
+ws["B1"] = ws["A1"].value * 2
+wb.save(OUTPUT_XLSX)
+```
+{SPREADSHEET_DONE_PATTERN}""",
+            prompt_tokens=25,
+            completion_tokens=12,
+            model_name="mock-model",
+            api_style="mock",
+        )
+
+    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter.ask_text_llm", fake_ask_text_llm)
+    result = await run_spreadsheet_task_notebook(
+        task,
+        llm_config="mock",
+        model_name="mock-model",
+        artifact_store=ArtifactStore(),
+        max_turns=5,
+        work_dir=tmp_path / "work",
+    )
+
+    assert result.success is True
+    assert result.metrics["execution_mode"] == "notebook"
+    assert result.metrics["notebook_turn_count"] == 2
+    assert result.metrics["notebook_stopped_by_done"] is True
+    assert "NameError" in prompts[1]
+    assert "source 9" in prompts[1]
+    assert result.trace["notebook_turns"][0]["returncode"] == 1
+    assert "NameError" in result.trace["notebook_turns"][0]["stderr"]
+    assert result.trace["notebook_turns"][1]["returncode"] == 0
+    assert result.metrics["total_tokens"] == 72
 
 
 def test_spreadsheet_callable_snippet_receives_kwargs_and_column_aliases(tmp_path: Path) -> None:

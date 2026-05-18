@@ -6,10 +6,347 @@ Working directory: `/home/lixujun/skill_evolving`
 
 Current branch: `spreadsheet-multiturn-notebook`
 
-Latest committed revision at handoff:
+Latest committed revision before this project-route expansion:
 
 ```text
-0358555 Add cross-benchmark refactor contract tests
+93fc66a Add benchmark agnostic refactor handoff
+```
+
+## 0. 项目整体路由：从零认识这个仓库
+
+这个仓库不是一个单一 benchmark runner，而是一个围绕“skill evolving / skill reuse / skill maintenance”的研究代码库。核心问题是：模型在任务执行中暴露失败、成功、工具调用和 token/cost 信号后，系统如何抽取、维护、压缩、重构、测试并复用 skills。
+
+可以把项目分成六层：
+
+```text
+配置/LLM层(app/, config/)
+        ↓
+通用 skill repository(academic/skill_repository/)
+        ↓
+benchmark-agnostic算法层(academic/benchmarks/core/)
+        ↓
+benchmark适配层(academic/benchmarks/{bfcl,spreadsheet,skillsbench}/)
+        ↓
+实验入口与论文实验(academic/benchmarks/bfcl/related/, academic/experiments/, academic/refactoring_lab/)
+        ↓
+结果、论文、分析文档(academic/results/, academic/paper/)
+```
+
+### 0.1 顶层目录含义
+
+| 路径 | 角色 |
+| --- | --- |
+| `app/` | 底层 agent/LLM/tool/sandbox 基础设施。这里是通用应用层，不是 paper benchmark 主逻辑。 |
+| `config/` | 本地配置，例如 `config.toml` / example。LLM provider、proxy、模型等通常从这里或 env 读取。 |
+| `academic/` | 研究代码主目录。benchmark、skill repository、实验脚本、论文、结果都在这里。 |
+| `academic/benchmarks/` | 当前 paper 实验主线。包含通用 benchmark core 和 BFCL/Spreadsheet/SkillsBench adapters。 |
+| `academic/skill_repository/` | benchmark-agnostic skill artifact/store/maintenance/refactor 数据结构与 LLM prompt 实现。 |
+| `academic/experiments/` | 早期 AIME/MATH/BFCL 等实验入口和 case list。部分是历史入口，当前 BFCL paper 主线不在这里。 |
+| `academic/refactoring_lab/` | 离线 replay/refactor lab，含 planning replay、SkillsBench fixture、历史验证实验。和当前 benchmark core 主线相关但不是同一入口。 |
+| `academic/method_validation/` | 方法验证目录，定义 STA/scenario/catalog/assertion 等更抽象的验证用例。 |
+| `academic/paper/` | 论文正文、survey、related work notes。`paper_new.md` 是当前方法写作重点之一。 |
+| `academic/results/` | 所有实验输出、日志、checkpoint、skills snapshot、分析文档。 |
+| `data/` | 数据集和 benchmark 原始/缓存数据。 |
+| `logs/` | 旧运行日志。大多是历史 provenance。 |
+| `cli.py` | 极简 demo CLI，不是当前 benchmark 主入口。 |
+
+### 0.2 “执行一个任务”的主路由
+
+以当前 benchmark architecture 为准，一个任务从输入到结果大致经过：
+
+```text
+BenchmarkTask
+  → benchmark adapter/executor
+  → optional skill retrieval/injection
+  → LLM call
+  → tool/code execution
+  → verifier/scorer
+  → BenchmarkResult(trace + metrics)
+  → credit assignment
+  → bundle case suggestion/application
+  → micro maintenance
+  → macro maintenance
+  → ArtifactStore updated
+```
+
+各 benchmark 的 native executor 不同：
+
+- BFCL：模型产生 tool calls，官方/本地 BFCL tool backend 执行并校验 expected calls。
+- Spreadsheet：模型写 Python/openpyxl 代码，系统执行代码并比较 output workbook 与 golden workbook。
+- SkillsBench：目前是较轻的 adapter/fixture 路径，用于测试 skill retrieval/official skill 对比。
+
+### 0.3 Skill 生命周期路由
+
+Skill 的核心类型在：
+
+```text
+academic/skill_repository/types.py
+```
+
+Store 在：
+
+```text
+academic/skill_repository/store.py
+```
+
+Benchmark 层通过：
+
+```text
+academic/benchmarks/core/types.py
+academic/benchmarks/core/artifacts.py
+```
+
+复用这些类型和 store。
+
+一个 skill 的生命周期：
+
+```text
+成功/失败 trace
+  → extractor 生成 pending skill 或更新候选
+  → retrieval/injector 决定是否给 executor 看
+  → task run 产生 success/failure/tool/token 信号
+  → credit assigner 判断 helpful/harmful/neutral/uncertain
+  → credit 生成 focused bundle case suggestion
+  → adapter 构造 benchmark-native replayable SkillBundleCase
+  → micro maintenance 先 refine，再 bundle test
+  → macro maintenance 做 window-level promotion/refactor/filter/TRL feedback
+  → skill active/pending/disabled/stale/version/bundle/evidence 更新
+```
+
+核心数据结构含义：
+
+| 类型 | 含义 |
+| --- | --- |
+| `SkillArtifact` | 一个可复用 skill。包含 name/kind/description/body/interface/metadata/bundle/evidence/dependencies/status/version。 |
+| `SkillBundle` | 绑定到 skill 的长期测试资产，分 positive/negative/integration cases。 |
+| `SkillBundleCase` | 一个 replayable 或 evidence-backed contract case。不同 benchmark 自己构造 native fragment。 |
+| `SkillEvidence` | helpful/harmful/repeated/integration evidence。用于 credit/refine/refactor/filter。 |
+| `SkillTestResult` | 一次 bundle/replay 测试结果，不是长期 bundle 本身。 |
+| `ArtifactStore` | skill repository，管理 active/pending/disabled/stale、版本、依赖、测试结果、检索。 |
+
+### 0.4 LLM 调用路由
+
+LLM 相关有两层：
+
+| 路径 | 含义 |
+| --- | --- |
+| `app/llm.py` | 较底层的 LLM/provider 调用实现，历史较长，支持多 provider/API style。 |
+| `academic/benchmarks/core/llm_text.py` | benchmark executor 使用的轻量文本 LLM wrapper，Spreadsheet executor 等通过它调用。 |
+| `academic/skill_repository/llm_maintenance.py` | skill maintenance 相关 LLM prompt 和 JSON 调用：credit assigner、bundle builder/patcher、refiner、TRL feedback 等主要在这里。 |
+| `academic/benchmarks/*/prompts.py` | benchmark-specific prompt，例如 Spreadsheet credit/extract prompt。 |
+
+重要注意：
+
+- 用户的接口可能是 Anthropic/Claude 风格，不一定是 OpenAI 风格。
+- 不要假设所有 LLM call 都走同一个 wrapper；历史代码里 `app/llm.py`、`academic/benchmarks/core/llm_text.py`、`skill_repository/llm_maintenance.py` 都可能参与。
+- 新 benchmark executor 应优先走 `academic/benchmarks/core/llm_text.py` 或现有 adapter 约定，不要随意新建 provider layer。
+
+### 0.5 Benchmark 路由
+
+当前最重要的是：
+
+```text
+academic/benchmarks/
+  core/                 benchmark-agnostic algorithm and runner
+  bfcl/                 BFCL executor/maintenance/related experiment
+  spreadsheet/          Spreadsheet executor/maintenance/runtime/verifier
+  skillsbench/          SkillsBench initial adapter
+  tests/                tests for all above
+```
+
+公共入口：
+
+```bash
+python -m academic.benchmarks.core.runner --list
+```
+
+Generic baseline/evolve scaffold 在：
+
+```text
+academic/benchmarks/core/runner.py
+academic/benchmarks/core/evolution.py
+```
+
+但 BFCL paper 主实验入口不是 generic runner，而是：
+
+```text
+academic/benchmarks/bfcl/related/experiment.py
+academic/benchmarks/bfcl/related/suites.py
+academic/benchmarks/bfcl/related/proxy_runner.py
+```
+
+Spreadsheet 当前没有同等复杂的 related experiment driver，更多是通过 generic evolution runner、tests、以及已有脚本/结果运行。
+
+### 0.6 BFCL 主实验路由
+
+BFCL 是当前最复杂、最重要的 benchmark。
+
+任务路由：
+
+```text
+bfcl/related/suites.py or bfcl/related/experiment.py CLI
+  → manifest.py 读取/构建 train/test split
+  → loader.py 加载 BFCL task/tool schema
+  → adapter.py / executor.py 执行 task
+  → tool_clients.py / environments.py 调 official/local backend
+  → scoring.py 计算 official_valid/call_f1 等
+  → related/experiment.py 收集 train/test details
+  → skill_repository/llm_maintenance.py 做 credit/refine/TRL LLM calls
+  → bfcl/maintenance/adapter.py 做 BFCL-specific bundle/refactor/replay
+  → results 写 json/log/checkpoint/skills
+```
+
+BFCL related experiment 的关键概念：
+
+| 概念 | 含义 |
+| --- | --- |
+| manifest | 固定 train/test task ids，避免随机 split 混淆结果。 |
+| train/evolve | 在线训练阶段，按 task 运行、抽取/维护 skill。 |
+| heldout/test | 冻结 store 后测试，原则上可并发。 |
+| micro maintenance | task-level credit/refine/bundle test。 |
+| macro maintenance | window-level overlap refactor、pending promotion/revocation、filter、TRL feedback。 |
+| pending skill | extractor 先验产生但还没被 posterior evidence 推成 active 的 skill。 |
+| relation/overlap graph | 用 trace segment + active/pending skill 节点构造候选 refactor group。 |
+| checkpoint/resume | 长实验中断后恢复，相关输出是 `*_checkpoint.json`。 |
+
+### 0.7 Spreadsheet 路由
+
+SpreadsheetBench 任务是“给 workbook + instruction，让模型写 openpyxl 代码，把答案写到 output workbook，再和 golden workbook 比较”。
+
+路由：
+
+```text
+spreadsheet/loader.py
+  → BenchmarkTask(input_xlsx, golden_xlsx, answer range, instruction)
+  → spreadsheet/executor.py
+  → optional skill retrieval/injection
+  → LLM writes Python code
+  → run generated code in local work dir
+  → spreadsheet/verifier.py compares answer range
+  → BenchmarkResult(trace code/stdout/stderr + metrics)
+  → spreadsheet/maintenance/adapter.py credit/extract/micro/macro
+```
+
+Spreadsheet 的两种执行模式：
+
+| 模式 | 含义 |
+| --- | --- |
+| single-turn | 模型一次写完整代码。 |
+| notebook/multi-turn | 类 Jupyter 多轮：模型可执行代码、看到报错/输出、复用前序变量，直到输出 done pattern 或达到 max turns。 |
+
+Spreadsheet 的 function skill 路由：
+
+```text
+SkillArtifact(kind executable/function, injection_type functional)
+  → skill_runtime.py render function
+  → executor writes skill_library.py
+  → model imports from skill_library
+  → called_spreadsheet_skill_functions recorded
+```
+
+知识类/workflow 类 skill 不直接执行，仍通过 prompt 注入。
+
+### 0.8 Refactoring Lab / Method Validation 路由
+
+这两个目录容易和当前 benchmark 主线混淆：
+
+| 路径 | 角色 |
+| --- | --- |
+| `academic/refactoring_lab/` | 离线 replay/refactor sandbox。用于 planning replay、SkillsBench fixture、merge replay cases 等。很多文件是实验性/历史验证。 |
+| `academic/method_validation/` | 方法验证 catalog/assertions/scenarios。用于验证论文方法的抽象性质，不是 BFCL/Spreadsheet 主实验入口。 |
+
+除非用户明确让你改这些目录，否则当前 benchmark-agnostic refactor 应优先改：
+
+```text
+academic/benchmarks/core/
+academic/benchmarks/spreadsheet/
+academic/benchmarks/bfcl/
+academic/benchmarks/tests/
+academic/skill_repository/
+academic/results/algorithm_docs/
+```
+
+### 0.9 论文和结果路由
+
+论文正文：
+
+```text
+academic/paper/paper_new.md
+```
+
+相关工作 notes：
+
+```text
+academic/paper/related_work_notes/
+```
+
+算法实现/实验追踪：
+
+```text
+academic/results/algorithm_docs/
+```
+
+真实实验输出：
+
+```text
+academic/results/
+```
+
+重要原则：
+
+- 写论文方法/伪代码时改 `academic/paper/paper_new.md`。
+- 写工程实现记录/计划时改 `academic/results/algorithm_docs/*.md`。
+- 新实验结果必须同步更新 `EXPERIMENT_CHANGELOG_AFTER_FULL_ALGO_20260518.md` 和 `EXPERIMENT_RESULTS_MASTER_TABLE_20260518.md`。
+- 不要把 `academic/results/*.json/log/checkpoint/skills` 当普通临时文件随便删；很多被文档/表格引用。
+
+### 0.10 入口命令速查
+
+列 benchmark registry：
+
+```bash
+python -m academic.benchmarks.core.runner --list
+```
+
+BFCL related config validation：
+
+```bash
+python -m academic.benchmarks.bfcl.related.experiment --mode validate-config
+```
+
+BFCL named suite dry-run：
+
+```bash
+python -m academic.benchmarks.bfcl.related.suites --suite claude_related_evolve_50_50 --dry-run
+```
+
+Local Claude proxy config validation：
+
+```bash
+python -m academic.benchmarks.bfcl.related.proxy_runner --mode validate-config
+```
+
+Generic BFCL baseline example：
+
+```bash
+python -m academic.benchmarks.core.runner \
+  --benchmark bfcl_v3 \
+  --mode baseline \
+  --llm-config local_claude_proxy \
+  --model-name claude-sonnet-4-5 \
+  --bfcl-data-source bfcl_eval_bundle \
+  --bfcl-adapter-mode official \
+  --bfcl-prompt-style native \
+  --bfcl-execution-backend official \
+  --n-test 5
+```
+
+最小相关测试：
+
+```bash
+pytest -q academic/benchmarks/tests/test_benchmark_refactor_contracts.py
+pytest -q academic/benchmarks/tests/test_common_maintenance_core.py
+pytest -q academic/benchmarks/tests/test_spreadsheet_evolution.py
+pytest -q academic/benchmarks/tests/bfcl_related/test_experiment.py
 ```
 
 ## 1. 当前状态摘要
@@ -440,4 +777,3 @@ D  academic/results/algorithm_docs/SPREADSHEET_NOTEBOOK_IMPROVEMENT_PLAN_2026051
 ```
 
 本 handoff 文档创建后应被单独提交。提交时不要包含上面两个无关状态。
-

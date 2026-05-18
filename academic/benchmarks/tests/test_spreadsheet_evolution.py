@@ -358,6 +358,23 @@ for idx, item in enumerate(values, start=value_start_row):
     assert out["Sheet1"]["A1"].value == 1
 
 
+def test_spreadsheet_notebook_session_accepts_relative_work_dir(tmp_path: Path, monkeypatch) -> None:
+    from academic.benchmarks.spreadsheet.adapter import _NotebookPythonSession
+
+    monkeypatch.chdir(tmp_path)
+    session = _NotebookPythonSession(Path("relative_nb_work"))
+    try:
+        first = session.run_cell("x = 41\nprint('x', x)", timeout=5)
+        second = session.run_cell("print('x_plus_one', x + 1)", timeout=5)
+    finally:
+        session.close()
+
+    assert first["returncode"] == 0
+    assert "x 41" in first["stdout"]
+    assert second["returncode"] == 0
+    assert "x_plus_one 42" in second["stdout"]
+
+
 async def test_spreadsheet_micro_extracts_actionable_pending_skill_from_success(monkeypatch, tmp_path: Path) -> None:
     task = _task(tmp_path, "sheet_train_1", "Double the value in A1 and write it to B1.")
     detail = _detail(

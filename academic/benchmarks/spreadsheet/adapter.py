@@ -1170,12 +1170,13 @@ def _run_code(code: str, input_xlsx: Path, output_xlsx: Path, work_dir: Path) ->
 
 class _NotebookPythonSession:
     def __init__(self, work_dir: Path) -> None:
-        self.work_dir = work_dir
-        self.driver_path = work_dir / "spreadsheet_notebook_driver.py"
+        self.work_dir = work_dir.resolve()
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.driver_path = self.work_dir / "spreadsheet_notebook_driver.py"
         self.driver_path.write_text(_NOTEBOOK_DRIVER_CODE)
         self.proc = subprocess.Popen(
-            ["python", str(self.driver_path)],
-            cwd=str(work_dir),
+            ["python", str(self.driver_path.resolve())],
+            cwd=str(self.work_dir),
             text=True,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,

@@ -848,6 +848,196 @@ from academic.benchmarks.spreadsheet.trace_projection import (
 - 不改变 skill extraction、credit、bundle replay、micro/macro 的行为。
 - 不重跑真实实验，只跑结构重构相关 regression tests。
 
+## Chapter 1.7: Spreadsheet 按 BFCL 粒度继续拆分
+
+提交：待提交。
+
+状态：已完成，测试通过。
+
+动机：Chapter 1.6 只拆出了 prompt 和 trace projection，`spreadsheet/adapter.py` 仍然包含 loader、executor、verifier、callable skill runtime、notebook runtime。用户指出“抽取不够充分”，本章继续把 Spreadsheet 拆到接近 BFCL 的粒度，同时保持 `academic.benchmarks.spreadsheet.adapter` 作为兼容门面，避免 core runner 和现有测试大范围改 import。
+
+拆分后文件体量：
+
+```text
+1318 academic/benchmarks/spreadsheet/adapter.py
+ 550 academic/benchmarks/spreadsheet/executor.py
+ 458 academic/benchmarks/spreadsheet/skill_runtime.py
+ 213 academic/benchmarks/spreadsheet/prompts.py
+ 165 academic/benchmarks/spreadsheet/verifier.py
+ 130 academic/benchmarks/spreadsheet/trace_projection.py
+  74 academic/benchmarks/spreadsheet/loader.py
+  51 academic/benchmarks/spreadsheet/models.py
+```
+
+验证命令：
+
+```bash
+python -m py_compile \
+  academic/benchmarks/spreadsheet/models.py \
+  academic/benchmarks/spreadsheet/loader.py \
+  academic/benchmarks/spreadsheet/verifier.py \
+  academic/benchmarks/spreadsheet/skill_runtime.py \
+  academic/benchmarks/spreadsheet/executor.py \
+  academic/benchmarks/spreadsheet/prompts.py \
+  academic/benchmarks/spreadsheet/trace_projection.py \
+  academic/benchmarks/spreadsheet/adapter.py
+
+pytest -q \
+  academic/benchmarks/tests/test_spreadsheet_evolution.py \
+  academic/benchmarks/tests/test_skill_injector_budget.py
+
+pytest -q \
+  academic/benchmarks/tests/test_generic_evolution.py::test_spreadsheet_adapter_uses_generic_run_task_contract \
+  academic/benchmarks/tests/bfcl/test_benchmark_adapters.py::test_spreadsheet_loader_and_verifier_contract \
+  academic/benchmarks/tests/bfcl/test_benchmark_adapters.py::test_spreadsheet_verifier_accepts_single_cell_range \
+  academic/benchmarks/tests/bfcl/test_benchmark_adapters.py::test_spreadsheet_runner_forwards_model_name \
+  academic/benchmarks/tests/bfcl/test_benchmark_adapters.py::test_spreadsheet_task_passes_model_override_to_llm \
+  academic/benchmarks/tests/bfcl/test_benchmark_adapters.py::test_spreadsheet_answer_range_parser_handles_official_multi_ranges
+```
+
+结果：第一组 `20 passed`，第二组 `6 passed`，`py_compile` 通过。pytest 只出现已有 warning。
+
+### 1. `models.py`: trace schema
+
+位置：`academic/benchmarks/spreadsheet/models.py:1-51`
+
+职责：只保存 Spreadsheet rollout trace dataclass，和 BFCL 的 `models.py` 对齐。
+
+代码片段：
+
+```python
+@dataclass
+class SpreadsheetTrace:
+    task_id: str
+    prompt: str = ""
+    code: str = ""
+    stdout: str = ""
+    stderr: str = ""
+    elapsed_s: float = 0.0
+    retrieved_skills: List[str] = field(default_factory=list)
+    prompt_injected_skills: List[str] = field(default_factory=list)
+    called_skill_functions: List[str] = field(default_factory=list)
+    callable_skills: List[Dict[str, Any]] = field(default_factory=list)
+```
+
+### 2. `loader.py`: dataset loading
+
+位置：`academic/benchmarks/spreadsheet/loader.py:1-74`
+
+职责：`ensure_spreadsheetbench()` 和 `load_spreadsheet_tasks()`。对应 BFCL 的 loader 层，不再放在 maintenance adapter 中。
+
+代码片段：
+
+```python
+def load_spreadsheet_tasks(
+    *,
+    cache_dir: Path,
+    n_train: int = 200,
+    n_test: int = 200,
+    split_seed: int = 42,
+    refresh: bool = False,
+) -> Tuple[List[BenchmarkTask], List[BenchmarkTask]]:
+    root = ensure_spreadsheetbench(cache_dir, refresh=refresh)
+    dataset_path = root / "dataset.json"
+    raw = json.loads(dataset_path.read_text())
+```
+
+### 3. `verifier.py`: workbook/range verifier
+
+位置：`academic/benchmarks/spreadsheet/verifier.py:1-165`
+
+职责：official workbook comparison、answer range parsing、cell value normalization。对应 BFCL 的 scoring/verifier 类边界。
+
+代码片段：
+
+```python
+def verify_spreadsheet_output(
+    *,
+    predicted_xlsx: Path,
+    golden_xlsx: Path,
+    sheet_name: Optional[str],
+    answer_range: Optional[str],
+) -> Dict[str, Any]:
+    pred_wb = openpyxl.load_workbook(predicted_xlsx, data_only=False)
+    gold_wb = openpyxl.load_workbook(golden_xlsx, data_only=False)
+    requested_sheet = first_sheet_name(sheet_name)
+    refs = answer_range_refs(answer_range, default_sheet=requested_sheet)
+```
+
+兼容导出：`adapter.py` 仍 re-export `verify_spreadsheet_output`、`_answer_range_refs`、`_cells_in_range` 等旧测试/调用路径。
+
+### 4. `skill_runtime.py`: callable skill and Python runtime
+
+位置：`academic/benchmarks/spreadsheet/skill_runtime.py:1-458`
+
+职责：function skill 写入 `skill_library.py`、AST 检测实际调用、snippet wrapping、single code subprocess、notebook persistent Python session。
+
+代码片段：
+
+```python
+def write_spreadsheet_skill_library(skills: Sequence[SkillArtifact], work_dir: Path) -> Dict[str, Any]:
+    callable_rows: List[Dict[str, Any]] = []
+    chunks = [
+        "from pathlib import Path\n",
+        "import openpyxl\n",
+        "from openpyxl import load_workbook\n",
+        ...
+    ]
+```
+
+注意：本章修复了搬迁过程中的 helper 名称兼容，生成的 wrapped function 继续调用 `skill_library.py` 内的 `_spreadsheet_callable_kwargs(...)`，保证旧测试通过。
+
+### 5. `executor.py`: single/notebook rollout
+
+位置：`academic/benchmarks/spreadsheet/executor.py:1-550`
+
+职责：`run_spreadsheet_task()` 和 `run_spreadsheet_task_notebook()`。它引用 prompt、runtime、verifier、models，但不包含 maintenance 逻辑。
+
+代码片段：
+
+```python
+async def run_spreadsheet_task(
+    task: BenchmarkTask,
+    *,
+    llm_config: str,
+    model_name: Optional[str] = None,
+    artifact_store: Optional[ArtifactStore] = None,
+    top_k_skills: int = 5,
+    skill_injector_mode: str | None = None,
+    skill_context_budget_chars: int | None = None,
+    work_dir: Optional[Path] = None,
+) -> BenchmarkResult:
+    t0 = time.monotonic()
+    trace = SpreadsheetTrace(task_id=task.task_id)
+```
+
+### 6. `adapter.py`: maintenance adapter and compatibility facade
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:1-1318`
+
+职责：现在主要保留 `SpreadsheetMaintenanceAdapter`、credit/extraction/bundle/refine/macro helpers，以及旧路径兼容导出。
+
+兼容 wrapper：
+
+```python
+async def run_spreadsheet_task(*args: Any, **kwargs: Any) -> BenchmarkResult:
+    _spreadsheet_executor.ask_text_llm = ask_text_llm
+    return await _run_spreadsheet_task_impl(*args, **kwargs)
+
+
+async def run_spreadsheet_task_notebook(*args: Any, **kwargs: Any) -> BenchmarkResult:
+    _spreadsheet_executor.ask_text_llm = ask_text_llm
+    return await _run_spreadsheet_task_notebook_impl(*args, **kwargs)
+```
+
+这段是为了保持旧测试和外部代码对 `academic.benchmarks.spreadsheet.adapter.ask_text_llm` 的 monkeypatch 仍然生效。长期可以把 monkeypatch 路径迁到 `spreadsheet.executor.ask_text_llm` 后删除。
+
+### 7. 本章刻意不做的事
+
+- 不拆 maintenance adapter 内的 credit/extraction/bundle/refine/macro helpers；这可以作为下一轮结构重构。
+- 不改 BFCL 路径。
+- 不改算法行为、prompt 内容、runner 参数或实验配置。
+
 ## Chapter 2: Micro target 收窄
 
 目标：helpful credit 默认只记录 evidence，不触发 immediate refine/test。

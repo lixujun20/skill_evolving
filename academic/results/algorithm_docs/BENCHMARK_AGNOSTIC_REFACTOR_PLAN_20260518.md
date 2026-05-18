@@ -1107,11 +1107,522 @@ $ python -m py_compile academic/benchmarks/core/credit_events.py academic/benchm
 
 ### Implementation Log
 
-Not started.
+Completed.
+
+#### Added `academic/benchmarks/spreadsheet/maintenance/__init__.py`
+
+Lines 1-5 define the new Spreadsheet maintenance package entrypoint.
+
+```python
+     1	"""SpreadsheetBench maintenance implementation modules."""
+     2	
+     3	from academic.benchmarks.spreadsheet.maintenance.adapter import SpreadsheetMaintenanceAdapter
+     4	
+     5	__all__ = ["SpreadsheetMaintenanceAdapter"]
+```
+
+#### Replaced `academic/benchmarks/spreadsheet/adapter.py` with a compatibility facade
+
+Lines 1-110 now keep the old public/test-facing import surface while moving maintenance implementation into `spreadsheet/maintenance/adapter.py`.
+
+```python
+     1	"""SpreadsheetBench compatibility facade.
+     2	
+     3	Execution, loading, verification, skill runtime, trace projection, and
+     4	maintenance helpers live in focused modules.  This facade preserves the public
+     5	and test-facing imports that previously came from this file.
+     6	"""
+     7	from __future__ import annotations
+     9	from typing import Any
+    11	import academic.benchmarks.spreadsheet.executor as _spreadsheet_executor
+    12	from academic.benchmarks.core.llm_text import ask_text_llm
+    13	from academic.benchmarks.core.types import BenchmarkResult
+    14	from academic.benchmarks.spreadsheet.executor import (
+    15	    build_spreadsheet_notebook_prompt as _build_spreadsheet_notebook_prompt,
+    16	    build_spreadsheet_notebook_turn_prompt as _build_spreadsheet_notebook_turn_prompt,
+    17	    build_spreadsheet_prompt as _build_spreadsheet_prompt,
+    18	    clip_notebook_text as _clip_notebook_text,
+    19	    run_spreadsheet_task as _run_spreadsheet_task_impl,
+    20	    run_spreadsheet_task_notebook as _run_spreadsheet_task_notebook_impl,
+    21	    workbook_preview as _workbook_preview,
+    22	)
+    23	from academic.benchmarks.spreadsheet.loader import ensure_spreadsheetbench, load_spreadsheet_tasks
+    24	from academic.benchmarks.spreadsheet.maintenance.adapter import *  # noqa: F401,F403
+    25	from academic.benchmarks.spreadsheet.maintenance.adapter import (
+    26	    SpreadsheetMaintenanceAdapter,
+    27	    _artifact_semantic_signature,
+    28	    _coerce_spreadsheet_artifact,
+    29	    _dedupe_spreadsheet_skills,
+    30	    _execute_spreadsheet_bundle_tests,
+    31	    _extract_spreadsheet_skills_from_detail,
+    32	    _filter_spreadsheet_harmful_skills,
+    33	    _heuristic_spreadsheet_artifact_payload,
+    34	    _heuristic_spreadsheet_credit_events,
+    35	    _heuristic_spreadsheet_repair_artifact_payload,
+    36	    _normalize_spreadsheet_bundle_suggestion,
+    37	    _normalize_spreadsheet_credit_events,
+    38	    _promote_spreadsheet_pending_from_window,
+    39	    _refine_spreadsheet_skill_from_bundle,
+    40	    _refine_spreadsheet_skill_from_credit,
+    41	    _run_spreadsheet_refiner,
+    42	    _spreadsheet_case_from_credit_suggestion,
+    43	    _spreadsheet_case_from_task,
+    44	    _spreadsheet_dedupe_key,
+    45	    _spreadsheet_formula_tokens,
+    46	    _spreadsheet_has_repair_evidence,
+    47	    _spreadsheet_keywords,
+    48	    _spreadsheet_micro_targets,
+    49	    _spreadsheet_scope_overlap,
+    50	    _spreadsheet_test_result_from_dict,
+    51	    _trim_spreadsheet_bundle_cases,
+    52	)
+```
+
+```python
+   103	async def run_spreadsheet_task(*args: Any, **kwargs: Any) -> BenchmarkResult:
+   104	    _spreadsheet_executor.ask_text_llm = ask_text_llm
+   105	    return await _run_spreadsheet_task_impl(*args, **kwargs)
+   108	async def run_spreadsheet_task_notebook(*args: Any, **kwargs: Any) -> BenchmarkResult:
+   109	    _spreadsheet_executor.ask_text_llm = ask_text_llm
+   110	    return await _run_spreadsheet_task_notebook_impl(*args, **kwargs)
+```
+
+#### Added `academic/benchmarks/spreadsheet/maintenance/adapter.py`
+
+This module now owns Spreadsheet maintenance. It currently keeps the legacy helper functions in one maintenance module while the top-level adapter becomes a facade. The module also starts using Chapter 1 common helpers.
+
+Lines 9-20 import the common maintenance primitives.
+
+```python
+     9	from academic.benchmarks.core.artifacts import ArtifactStore
+    10	from academic.benchmarks.core.bundle_cases import apply_credit_bundle_suggestions
+    11	from academic.benchmarks.core.bundle_policy import default_bundle_case_priority, trim_bundle_cases_to_budget
+    12	from academic.benchmarks.core.credit_events import apply_credit_evidence, normalize_credit_events
+    13	from academic.benchmarks.core.credit_scope import (
+    14	    credit_candidate_skill_names,
+    15	    skill_exposure_flags,
+    16	)
+    17	from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig, NoOpMaintenanceAdapter
+    18	from academic.benchmarks.core.maintenance_utils import json_block, now_iso, stable_id
+    19	from academic.benchmarks.core.micro_maintenance import MicroMaintenanceHooks, micro_target_names, run_generic_micro_maintenance
+```
+
+Lines 93-104 route LLM/refiner calls through the facade so old tests and scripts that monkeypatch `academic.benchmarks.spreadsheet.adapter._ask_json` or `refine_skill_artifact_llm` still affect maintenance execution.
+
+```python
+    93	def _compat_module() -> Any:
+    94	    import academic.benchmarks.spreadsheet.adapter as facade
+    96	    return facade
+    99	async def _compat_ask_json(**kwargs: Any) -> Dict[str, Any]:
+   100	    return await _compat_module()._ask_json(**kwargs)
+   103	async def _compat_refine_skill_artifact_llm(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+   104	    return await _compat_module().refine_skill_artifact_llm(*args, **kwargs)
+```
+
+Lines 129-159 preserve the generic runner contract while routing task execution through the facade, so monkeypatching `spreadsheet.adapter.run_spreadsheet_task` continues to work.
+
+```python
+   129	    async def run_task(
+   130	        self,
+   131	        task: BenchmarkTask,
+   132	        *,
+   133	        store: ArtifactStore,
+   134	        config: MaintenanceRunConfig,
+   135	        phase: str,
+   136	        task_index: int,
+   137	        run_idx: int,
+   138	    ) -> BenchmarkResult:
+   139	        del phase, task_index, run_idx
+   140	        if str(config.extra.get("spreadsheet_execution_mode") or "single").strip().lower() == "notebook":
+   141	            return await _compat_module().run_spreadsheet_task_notebook(
+   142	                task,
+   143	                llm_config=config.llm_config,
+   144	                model_name=config.model_name,
+   145	                artifact_store=store,
+   146	                top_k_skills=config.top_k_skills,
+   147	                skill_injector_mode=config.extra.get("skill_injector_mode"),
+   148	                skill_context_budget_chars=config.extra.get("skill_context_budget_chars"),
+   149	                max_turns=int(config.extra.get("spreadsheet_max_turns") or 5),
+   150	            )
+   151	        return await _compat_module().run_spreadsheet_task(
+   152	            task,
+   153	            llm_config=config.llm_config,
+   154	            model_name=config.model_name,
+   155	            artifact_store=store,
+   156	            top_k_skills=config.top_k_skills,
+   157	            skill_injector_mode=config.extra.get("skill_injector_mode"),
+   158	            skill_context_budget_chars=config.extra.get("skill_context_budget_chars"),
+   159	        )
+```
+
+Lines 161-221 use `apply_credit_evidence` from the common core after Spreadsheet-specific credit assignment.
+
+```python
+   161	    async def assign_credit(
+   162	        self,
+   163	        *,
+   164	        detail: Dict[str, Any],
+   165	        store: ArtifactStore,
+   166	        config: MaintenanceRunConfig,
+   167	        round_index: int,
+   168	        task_index: int,
+   169	    ) -> List[Dict[str, Any]]:
+   170	        del round_index
+   171	        projection = _spreadsheet_trace_projection(detail)
+   172	        candidate_names = credit_candidate_skill_names(projection)
+   173	        candidate_artifacts = [
+   174	            artifact for name in candidate_names for artifact in [store.get(str(name))] if artifact
+   175	        ]
+   176	        if not candidate_artifacts:
+   177	            return []
+   178	        try:
+   179	            payload = await _compat_ask_json(
+   180	                system=SPREADSHEET_CREDIT_SYSTEM,
+   181	                user=json_block(
+   182	                    {
+   183	                        "task": _spreadsheet_task_fragment(detail),
+   184	                        "trace_projection": projection,
+   185	                        "retrieval_audit": {
+   186	                            "retrieved_only_skills": projection.get("retrieved_only_skills") or [],
+   187	                            "candidate_policy": "prompt_injected_or_called_only",
+   188	                        },
+   189	                        "candidate_skills": [
+   190	                            _spreadsheet_skill_projection(artifact, projection=projection)
+   191	                            for artifact in candidate_artifacts
+   192	                        ],
+   193	                    }
+   194	                ),
+   195	                llm_config=config.llm_config,
+   196	                model_name=config.model_name,
+   197	                role="spreadsheet_credit_assigner",
+   198	                metadata={"task_id": detail.get("task_id"), "task_index": task_index},
+   199	            )
+   200	            events = _normalize_spreadsheet_credit_events(
+   201	                payload,
+   202	                detail=detail,
+   203	                candidate_artifacts=candidate_artifacts,
+   204	                projection=projection,
+   205	            )
+   206	        except Exception as exc:
+   207	            events = _heuristic_spreadsheet_credit_events(
+   208	                detail=detail,
+   209	                candidate_artifacts=candidate_artifacts,
+   210	                projection=projection,
+   211	                reason=f"credit_llm_failed:{type(exc).__name__}",
+   212	            )
+   213	        apply_credit_evidence(store=store, credit_events=events)
+   214	        for event in events:
+   215	            artifact = store.get(event["skill_name"])
+   216	            if artifact is None:
+   217	                continue
+   218	            if event.get("judgment") == "helpful":
+   219	                artifact.success_count += 1
+   220	            artifact.usage_count += 1
+   221	        return events
+```
+
+Lines 223-269 replace Spreadsheet's local bundle append loop with `apply_credit_bundle_suggestions`, while preserving bundle version bump behavior for created cases.
+
+```python
+   223	    async def apply_credit_bundle_cases(
+   224	        self,
+   225	        *,
+   226	        detail: Dict[str, Any],
+   227	        credit_events: Sequence[Dict[str, Any]],
+   228	        store: ArtifactStore,
+   229	        config: MaintenanceRunConfig,
+   230	        round_index: int,
+   231	        task_index: int,
+   232	    ) -> List[Dict[str, Any]]:
+   233	        del config, round_index, task_index
+   235	        def build_case(case_detail: Dict[str, Any], event: Dict[str, Any], suggestion: Dict[str, Any]) -> SkillBundleCase | None:
+   236	            artifact = store.get(str(suggestion.get("skill_name") or event.get("skill_name") or ""))
+   237	            if artifact is None:
+   238	                return None
+   239	            return _spreadsheet_case_from_credit_suggestion(
+   240	                detail=case_detail,
+   241	                artifact=artifact,
+   242	                event=event,
+   243	                suggestion=dict(suggestion or {}),
+   244	            )
+   246	        rows = apply_credit_bundle_suggestions(
+   247	            store=store,
+   248	            detail=detail,
+   249	            credit_events=credit_events,
+   250	            build_case=build_case,
+   251	            trim_cases=True,
+   252	        )
+   253	        created = []
+   254	        for row in rows:
+   255	            if not row.get("created"):
+   256	                continue
+   257	            artifact = store.get(str(row.get("skill_name") or ""))
+   258	            if artifact is not None:
+   259	                artifact.bundle.bundle_version += 1
+   260	            created.append(
+   261	                {
+   262	                    "skill_name": row.get("skill_name"),
+   263	                    "case_id": row.get("case_id"),
+   264	                    "polarity": row.get("polarity"),
+   265	                    "source_task_id": detail.get("task_id"),
+   266	                    "reason": row.get("reason"),
+   267	                }
+   268	            )
+   269	        return created
+```
+
+Lines 271-352 replace Spreadsheet's local micro loop with `run_generic_micro_maintenance`, while keeping extraction reports and Spreadsheet-specific refine/test hooks.
+
+```python
+   271	    async def run_micro_maintenance(self, **kwargs: Any) -> Dict[str, Any]:
+   272	        detail = kwargs.get("detail") or {}
+   273	        credit_events = list(kwargs.get("credit_events") or [])
+   274	        credit_bundle_cases = list(kwargs.get("credit_bundle_cases") or [])
+   275	        store: ArtifactStore = kwargs["store"]
+   276	        config: MaintenanceRunConfig = kwargs["config"]
+   277	        task_index = int(kwargs.get("task_index") or 0)
+   278	        extracted = await _extract_spreadsheet_skills_from_detail(
+   279	            detail,
+   280	            store=store,
+   281	            config=config,
+   282	            task_index=task_index,
+   283	        )
+   284	        extraction_reports: List[Dict[str, Any]] = []
+   285	        for artifact in extracted:
+   286	            store.add_pending(artifact)
+   287	            extraction_reports.append(
+   288	                {
+   289	                    "skill_name": artifact.name,
+   290	                    "status": artifact.status,
+   291	                    "description": artifact.description,
+   292	                    "source_task_ids": artifact.metadata.get("source_task_ids") or [],
+   293	                }
+   294	            )
+   295	        async def refine_skill(**hook_kwargs: Any) -> Dict[str, Any]:
+   296	            artifact = hook_kwargs["artifact"]
+   297	            stage = str(hook_kwargs.get("stage") or "")
+   298	            if stage == "post_bundle_failure" and hook_kwargs.get("failed_bundle_result") is not None:
+   299	                raw_result = hook_kwargs["failed_bundle_result"]
+   300	                test_result = raw_result if isinstance(raw_result, SkillTestResult) else _spreadsheet_test_result_from_dict(raw_result)
+   301	                decision = await _refine_spreadsheet_skill_from_bundle(
+   302	                    artifact=artifact,
+   303	                    test_result=test_result,
+   304	                    credit_context=hook_kwargs.get("credit_events") or [],
+   305	                    store=store,
+   306	                    config=config,
+   307	                )
+   308	            else:
+   309	                decision = await _refine_spreadsheet_skill_from_credit(
+   310	                    artifact=artifact,
+   311	                    credit_context=hook_kwargs.get("credit_events") or [],
+   312	                    detail=detail,
+   313	                    store=store,
+   314	                    config=config,
+   315	                )
+   316	            if decision.get("updated_artifact"):
+   317	                store.add(decision["updated_artifact"])
+   318	            return decision
+   320	        async def run_bundle_test(**hook_kwargs: Any) -> Dict[str, Any]:
+   321	            artifact = hook_kwargs["artifact"]
+   322	            if not artifact.bundle.all_cases():
+   323	                return {
+   324	                    "skill_name": artifact.name,
+   325	                    "passed": True,
+   326	                    "aggregate": {"passed": True, "n_cases": 0, "reason": "no_bundle_cases"},
+   327	                }
+   328	            result = await _compat_module()._execute_spreadsheet_bundle_tests(
+   329	                artifact=artifact,
+   330	                config=config,
+   331	            )
+   332	            store.add_test_result(result)
+   333	            return result.as_dict()
+   335	        report = await run_generic_micro_maintenance(
+   336	            detail=detail,
+   337	            credit_events=credit_events,
+   338	            credit_bundle_cases=credit_bundle_cases,
+   339	            store=store,
+   340	            config=config,
+   341	            hooks=MicroMaintenanceHooks(refine_skill=refine_skill, run_bundle_test=run_bundle_test),
+   342	            round_index=int(kwargs.get("round_index") or 0),
+   343	            task_index=task_index,
+   344	        )
+   345	        report["refine_decisions"] = [
+   346	            {k: v for k, v in item.items() if k != "updated_artifact"}
+   347	            for item in report.get("refine_decisions", [])
+   348	        ]
+   349	        report["extraction_reports"] = extraction_reports
+   350	        report["reason"] = "spreadsheet_micro_maintenance"
+   351	        report["trace_projection"] = _spreadsheet_trace_projection(detail)
+   352	        return report
+```
+
+Lines 693-736 normalize Spreadsheet credit payload through the common `normalize_credit_events`.
+
+```python
+   693	def _normalize_spreadsheet_credit_events(
+   694	    payload: Dict[str, Any],
+   695	    *,
+   696	    detail: Dict[str, Any],
+   697	    candidate_artifacts: Sequence[SkillArtifact],
+   698	    projection: Dict[str, Any],
+   699	) -> List[Dict[str, Any]]:
+   700	    known = {artifact.name for artifact in candidate_artifacts}
+   701	    raw_events: List[Dict[str, Any]] = []
+   702	    for raw in payload.get("skill_judgments") or []:
+   703	        row = dict(raw or {})
+   704	        skill_name = str(row.get("skill_name") or "").strip()
+   705	        if skill_name not in known:
+   706	            continue
+   707	        judgment = str(row.get("judgment") or "uncertain").strip().lower()
+   708	        if judgment not in {"helpful", "harmful", "neutral", "uncertain"}:
+   709	            judgment = "uncertain"
+   710	        suggestions = []
+   711	        for item in row.get("bundle_case_suggestions") or []:
+   712	            suggestion = dict(item or {})
+   713	            suggestion.setdefault("skill_name", skill_name)
+   714	            suggestions.append(_normalize_spreadsheet_bundle_suggestion(suggestion, detail=detail))
+   715	        raw_events.append(
+   716	            {
+   717	                "benchmark": "spreadsheet",
+   718	                "task_id": detail.get("task_id"),
+   719	                "skill_name": skill_name,
+   720	                "judgment": judgment,
+   721	                "effect_type": str(row.get("effect_type") or "unknown").strip().lower() or "unknown",
+   722	                "confidence": max(0.0, min(1.0, float(row.get("confidence") or 0.0))),
+   723	                "reason": str(row.get("reason") or ""),
+   724	                "maintenance_actions": [
+   725	                    dict(item or {}) for item in (row.get("maintenance_actions") or []) if isinstance(item, dict)
+   726	                ],
+   727	                "refine_required": bool(row.get("refine_required")),
+   728	                "filter_candidate": bool(row.get("filter_candidate")),
+   729	                "evidence_strength": str(row.get("evidence_strength") or "weak").strip().lower() or "weak",
+   730	                "attribution_scope": str(row.get("attribution_scope") or "none").strip().lower() or "none",
+   731	                "bundle_case_suggestions": suggestions,
+   732	                "evidence": copy.deepcopy(dict(row.get("evidence") or {})),
+   733	                "projection": copy.deepcopy(projection),
+   734	            }
+   735	        )
+   736	    return normalize_credit_events(raw_events, task_id=str(detail.get("task_id") or ""), benchmark="spreadsheet")
+```
+
+Lines 924-939 preserve the old `_spreadsheet_micro_targets` helper as a wrapper around common `micro_target_names`.
+
+```python
+   924	def _spreadsheet_micro_targets(
+   925	    *,
+   926	    credit_events: Sequence[Dict[str, Any]],
+   927	    credit_bundle_cases: Sequence[Dict[str, Any]],
+   928	    extracted: Sequence[SkillArtifact],
+   929	) -> List[str]:
+   930	    explicit = [
+   931	        str(event.get("skill_name") or "")
+   932	        for event in credit_events
+   933	        if event.get("refine_required") or event.get("filter_candidate")
+   934	    ]
+   935	    return micro_target_names(
+   936	        relevant_skill_names=[artifact.name for artifact in extracted] + explicit,
+   937	        credit_events=credit_events,
+   938	        credit_bundle_cases=credit_bundle_cases,
+   939	    )
+```
+
+Lines 991-1107 keep refiner and bundle replay behavior compatible with facade monkeypatching.
+
+```python
+   991	async def _run_spreadsheet_refiner(
+   992	    *,
+   993	    artifact: SkillArtifact,
+   994	    test_result: Dict[str, Any],
+   995	    credit_context: Sequence[Dict[str, Any]],
+   996	    store: ArtifactStore,
+   997	    config: MaintenanceRunConfig,
+   998	    phase: str,
+   999	) -> Dict[str, Any]:
+  1000	    try:
+  1001	        payload = await _compat_refine_skill_artifact_llm(
+  1002	            artifact,
+  1003	            test_result=test_result,
+  1004	            credit_context=list(credit_context),
+  1005	            refinement_history=artifact.history[-3:],
+  1006	            dependency_summaries=summarize_dependency_context(store.all()),
+  1007	            llm_config=config.llm_config,
+  1008	            model_name=config.model_name,
+  1009	            audit_context={"phase": phase, "benchmark": "spreadsheet"},
+  1010	        )
+```
+
+```python
+  1071	async def _execute_spreadsheet_bundle_tests(
+  1072	    *,
+  1073	    artifact: SkillArtifact,
+  1074	    config: MaintenanceRunConfig,
+  1075	) -> SkillTestResult:
+  1076	    case_runs: List[SkillTestCaseRun] = []
+  1077	    for case in artifact.bundle.all_cases():
+  1078	        task_fragment = dict((case.context or {}).get("task_fragment") or {})
+  1079	        task = BenchmarkTask(
+  1080	            benchmark="spreadsheet",
+  1081	            task_id=str(task_fragment.get("task_id") or case.case_id),
+  1082	            question=task_fragment.get("question") or case.prompt,
+  1083	            expected=copy.deepcopy(dict(task_fragment.get("expected") or {})),
+  1084	            input_artifacts=copy.deepcopy(dict(task_fragment.get("input_artifacts") or {})),
+  1085	            metadata=copy.deepcopy(dict(task_fragment.get("metadata") or {})),
+  1086	        )
+  1101	        result = await _compat_module().run_spreadsheet_task(
+  1102	            task,
+  1103	            llm_config=config.llm_config,
+  1104	            model_name=config.model_name,
+  1105	            artifact_store=ArtifactStore([copy.deepcopy(artifact)]),
+  1106	            top_k_skills=1,
+  1107	        )
+```
+
+#### Updated `academic/benchmarks/tests/test_spreadsheet_evolution.py`
+
+Lines 25-30 add a facade compatibility test.
+
+```python
+    25	def test_spreadsheet_adapter_facade_points_to_maintenance_adapter() -> None:
+    26	    from academic.benchmarks.spreadsheet.maintenance.adapter import SpreadsheetMaintenanceAdapter as MaintenanceAdapter
+    28	    assert SpreadsheetMaintenanceAdapter is MaintenanceAdapter
+    29	    assert callable(_execute_spreadsheet_bundle_tests)
+    30	    assert callable(run_spreadsheet_task)
+```
 
 ### Tests
 
-Not started.
+Passed target tests.
+
+```text
+$ pytest -q academic/benchmarks/tests/test_spreadsheet_evolution.py
+................                                                         [100%]
+16 passed, 10 warnings in 1.80s
+```
+
+```text
+$ pytest -q academic/benchmarks/tests/test_spreadsheet_evolution.py academic/benchmarks/tests/test_generic_evolution.py academic/benchmarks/tests/test_skill_injector_budget.py academic/benchmarks/tests/test_common_maintenance_core.py
+......................................                                   [100%]
+38 passed, 10 warnings in 2.01s
+```
+
+```text
+$ python -m py_compile academic/benchmarks/spreadsheet/adapter.py academic/benchmarks/spreadsheet/maintenance/adapter.py academic/benchmarks/spreadsheet/maintenance/__init__.py academic/benchmarks/tests/test_spreadsheet_evolution.py
+```
+
+One broader compatibility command was also run:
+
+```text
+$ pytest -q academic/benchmarks/tests/test_spreadsheet_evolution.py academic/benchmarks/tests/test_generic_evolution.py academic/benchmarks/tests/test_skill_injector_budget.py academic/benchmarks/tests/bfcl/test_benchmark_adapters.py
+76 passed, 1 failed
+```
+
+The single failure was unrelated to this refactor:
+
+```text
+FAILED academic/benchmarks/tests/bfcl/test_benchmark_adapters.py::test_historical_bfcl_train_details_produce_nonempty_maintenance_assets
+AssertionError: Missing historical BFCL fixture:
+/home/lixujun/skill_evolving/academic/results/bfcl_v3_glm47_official_tracecheck_evolve_3x3_partial_train.json
+```
 
 ## Chapter 3: BFCL 低风险接入公共层
 

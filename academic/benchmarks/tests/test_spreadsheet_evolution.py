@@ -22,6 +22,14 @@ from academic.benchmarks.spreadsheet.adapter import (
 )
 
 
+def test_spreadsheet_adapter_facade_points_to_maintenance_adapter() -> None:
+    from academic.benchmarks.spreadsheet.maintenance.adapter import SpreadsheetMaintenanceAdapter as MaintenanceAdapter
+
+    assert SpreadsheetMaintenanceAdapter is MaintenanceAdapter
+    assert callable(_execute_spreadsheet_bundle_tests)
+    assert callable(run_spreadsheet_task)
+
+
 def _xlsx(path: Path, *, source: int = 7, answer: int | None = None) -> None:
     wb = openpyxl.Workbook()
     ws = wb.active

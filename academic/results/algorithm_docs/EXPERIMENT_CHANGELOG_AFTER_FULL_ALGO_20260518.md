@@ -290,3 +290,225 @@ Heldout test：
 - 形成 benchmark-agnostic 方法包：同一套 skill artifact、credit、bundle、micro/macro、injector、cost accounting 可落到 BFCL/Spreadsheet/SkillsBench。
 - 建立论文级稳定评测协议：固定 manifest、固定 cost 价格表、固定 cache 计费规则、固定 token 统计口径、固定 skill prompt 是否计入的报告方式。
 - 从“prompt 中复用文字”推进到“软件工程资产复用”：function skill 可直接调用，workflow/knowledge skill 用压缩 contract 注入，维护测试保护 skill API。
+
+## 2026-05-18 20:13 `3e162c1 Add spreadsheet notebook execution mode`
+
+**动机。** SpreadsheetBench 原始 setting 基本是 single-turn code generation。用户提出需要一个更像 notebook/Jupyter 的多轮执行环境：模型可以写代码、看到执行结果或报错、保留前序变量，最多多轮修复，直到输出结束 pattern。这能更好暴露运行时反馈、workflow skill 和 error-repair skill 的价值。
+
+**具体改进。**
+- 增加 Spreadsheet notebook execution mode。
+- 每个 task 保留一个 Python execution state，后续代码可以复用前序变量。
+- 支持最多 5 轮代码执行，模型通过特殊结束 pattern 主动结束。
+- 结果 trace 记录每轮代码、stdout/stderr、异常和最终 answer。
+
+**验证/结果。**
+- `academic/results/spreadsheet_notebook_smoke_1_20260518.json`：1 task，success 0/1，avg_score 0.0，avg_total_tokens 3879.0。
+- `academic/results/spreadsheet_notebook_hard_55427_20260518.json`：hard case，success 0/1，avg_score 0.0，avg_total_tokens 6950.0。
+- smoke 证明多轮状态和执行回传链路可以跑通；效果还不稳定，主要问题是模型没有稳定复用前序变量与 intermediate dataframe。
+
+## 2026-05-18 20:17 `b3b44fc Fix spreadsheet notebook relative workdir`
+
+**动机。** notebook executor 初版在相对路径和 workbook 文件定位上容易失败，导致不是算法能力问题而是运行环境问题。
+
+**具体改进。**
+- 修复 Spreadsheet notebook 相对工作目录。
+- 确保 workbook、临时脚本和执行 state 位于同一可解析上下文。
+- hard direct case 增加回归结果。
+
+**验证/结果。**
+- `academic/results/spreadsheet_notebook_hard_55427_direct_20260518.json`：1 task，仍未严格通过，但相对路径问题消失。
+- `academic/results/spreadsheet_notebook_hard_55427_direct_v2_20260518.json`：继续验证 direct execution wrapper。
+
+## 2026-05-18 20:31 `a923943 Add macro skill snapshots for evolution runs`
+
+**动机。** 用户要求每次 macro maintenance 后把 skill store 记下来，并在之后可以拿某个 macro checkpoint 去做 heldout probe。这样能追踪 skill 是何时出现、何时被 refine/revoke、何时开始影响 test。
+
+**具体改进。**
+- evolution run 增加 macro skill snapshot 元数据。
+- snapshot 记录 window index、task range、active/pending/disabled/archived skill 数量、changed skills 和 snapshot path。
+- 设计上只保存 store JSON，不在每个 macro 后自动跑完整 50-test，避免把开销乘以 macro 数。
+
+**验证/结果。**
+- 该改动是追踪能力增强，不改变 BFCL 训练决策本身。
+- 预期磁盘开销可接受：当前 50-train BFCL final skill store 约 2.5MB；150-train、macro step 10 保存 15 个 snapshot 也只是几十 MB 量级。
+
+## 2026-05-18 20:40 `c4cd7d2 Add resumable macro snapshots for training runs`
+
+**动机。** 150/50 和 50/50 长实验容易被网络或手动停止打断；仅 final result 不够，需要能从最近 macro 后恢复，并保留当时 skill 状态。
+
+**具体改进。**
+- training run 增加 resumable macro checkpoint/snapshot。
+- checkpoint 包含训练进度、store snapshot、maintenance window 信息和 resume 所需配置。
+- 与前面的 macro skill snapshot 区分：一个面向分析，一个面向恢复。
+
+**验证/结果。**
+- 当前最新 BFCL 50/50 run 生成了：
+  - `academic/results/bfcl_train50_20260518_202840_checkpoint.json`
+  - `academic/results/bfcl_train50_20260518_202840_skills.json`
+  - `academic/results/bfcl_train50_20260518_202840.json`
+
+## 2026-05-18 21:05 `46367fe Add SkillsBench diagnostic baseline adapter`
+
+**动机。** 用户希望引入更贴近 skill-use 的 benchmark。SkillsBench 本质上给定 skill 后测试模型能否应用 skill，适合做“官方 skill vs evolved skill”的诊断，但它不是在线抽取-维护 benchmark，因此先接入 baseline/fixture 路径。
+
+**具体改进。**
+- 增加 SkillsBench diagnostic adapter。
+- 支持 mock smoke、fixture baseline、curated mock diagnostic。
+- 文档中明确 SkillsBench 的定位：更适合测 skill package 使用能力和 prompt overhead，不直接等同于在线 skill evolving。
+
+**验证/结果。**
+- `academic/results/skillsbench_mock_smoke_20260518.json`：4 tasks，success_rate 1.0，avg_score 1.0，avg_total_tokens 338.8。
+- `academic/results/skillsbench_baseline_fixture3_20260518.json`：3 tasks，success_rate 1.0，avg_score 1.0，avg_total_tokens 702.3。
+- `academic/results/skillsbench_curated_mock_diag_20260518.json`：5 tasks，success_rate 0.2，avg_score 0.3，avg_total_tokens 346.4。
+
+## 2026-05-18 21:07 BFCL 50/50 最新完整 run：`bfcl_train50_20260518_202840`
+
+**动机。** 在 cost accounting、injector、function callable、macro snapshot、resume checkpoint 等改动之后，用户要求重跑 50/50，观察是否还存在之前 pending/refiner/injector 不工作的现象，并比较这次与上次有记录实验的差异。
+
+**运行设置。**
+- 文件：`academic/results/bfcl_train50_20260518_202840.json`
+- skill store：`academic/results/bfcl_train50_20260518_202840_skills.json`
+- checkpoint：`academic/results/bfcl_train50_20260518_202840_checkpoint.json`
+- manifest：`academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`
+- mode：`related_task_evolve`
+- model：`claude-sonnet-4-5`
+- llm_config：`local_claude_proxy`
+- epochs：1
+- micro_maintenance_step：1
+- macro_maintenance_step：10
+- train_window_concurrency：4
+- micro_concurrency：4
+- test_concurrency：4
+- top_k_skills：2
+- skill_injection_mode：`prompt_only`
+- candidate_trial_retrieval：true
+- candidate_competition_enabled：false
+- max_steps_per_turn：20
+- max_task_seconds：180
+
+**Train 50 结果。**
+
+| metric | value |
+|---|---:|
+| success/pass_at_k | 0.20 |
+| official_valid_rate | 0.58 |
+| avg_score | 0.8090 |
+| avg_call_recall | 0.8789 |
+| avg_call_precision | 0.7697 |
+| avg_turn_success_rate | 0.5687 |
+| avg_relaxed_turn_success_rate | 0.7917 |
+| avg_total_tokens | 62339.2 |
+| avg_input_tokens | 61247.4 |
+| avg_output_tokens | 1091.8 |
+| avg_model_steps | 9.30 |
+| timeout_rate | 0.0 |
+
+**Heldout Test 50 结果。**
+
+| metric | value |
+|---|---:|
+| success/pass_at_k | 0.08 |
+| official_valid_rate | 0.70 |
+| avg_score | 0.7892 |
+| avg_call_recall | 0.8955 |
+| avg_call_precision | 0.7193 |
+| avg_turn_success_rate | 0.5421 |
+| avg_relaxed_turn_success_rate | 0.8367 |
+| avg_total_tokens | 83043.9 |
+| avg_input_tokens | 81956.2 |
+| avg_output_tokens | 1087.8 |
+| avg_model_steps | 10.18 |
+| timeout_rate | 0.0 |
+
+**Skill 状态。**
+- final skills：46 个。
+- active：4 个。
+- disabled：1 个。
+- archived：41 个。
+- kind 分布：workflow_guardrail_card 21，interface_contract_card 20，atomic_tool_rule_card 5。
+- 顶层 `pending_skill_summary.n_pending=41` 是 stale summary：它记录 macro revoke/filter 前的 pending 名单；final skill store 中这些已经是 `archived`，不是仍在 active promotion queue。
+
+**Credit 与维护。**
+- skill_credit_events：22 条，harmful 11，helpful 6，neutral 5。
+- micro_maintenance_reports：50 条，每个 train task 一个 micro 报告。
+- maintenance_windows：5 个，macro step=10。
+- extraction_events：46。
+- credit_events：22。
+- maintenance_test_results：17。
+- refine_decisions：23。
+- pending_skill_revocations：41。
+- pending_skill_promotions：0。
+- skill_credit_filter_decisions：3：
+  - `engine_start_brake_pedal_prerequisite`：harmful_count 8，negative_margin 8，disabled。
+  - `buy_stock_at_current_market_price`：negative_margin 1，kept。
+  - `tradingbot_direct_ticker_binding`：helpful_count 6，harmful_count 2，negative_margin -4，kept。
+
+**Test skill 注入统计。**
+- `vehicle_brake_pedal_full_press_for_engine_start`：14 次。
+- `buy_stock_at_current_market_price`：13 次。
+- `tradingbot_direct_ticker_binding`：13 次。
+- `contact_customer_support_message_brevity_rule`：12 次。
+- 当前 test 是 prompt-only skill 注入；`used_counts` 和 `called_skill_tool_counts` 为空，因为这些不是 callable function skill。
+
+**与上次有记录 BFCL evolve 的最重要差异。**
+- 上次文件：`academic/results/claude_proxy_related50_50_guardfix_20260517_232531_evolve.json`。
+- 上次 heldout test 有 timeout_rate 0.60，导致 avg_score/call recall 异常低；这次 timeout_rate 0.0，所以 test 指标更可信。
+- 这次 strict success 从 0.02 提到 0.08，avg_score 从 0.3314 提到 0.7892，avg_call_recall 从 0.3718 提到 0.8955。
+- official_valid_rate 从 0.80 降到 0.70，但上次 official_valid_rate 与 avg_score/call recall 严重不一致，因此不能单独解释为更好。
+- 训练侧略低：train success 从 0.24 降到 0.20，avg_score 从 0.8262 降到 0.8090，属于小幅波动和 skill set 变化。
+- token 变高：test avg_total_tokens 从 41788.7 到 83043.9；主要原因是上次 heldout 60% timeout/异常短路，且当时没有完整 input/output 细分。这次完整执行后 token 更接近真实开销。
+
+**代表 case 对比。**
+- `multi_turn_base_191`：上次 test score 0.0，这次 1.0 且 strict success。注入 `contact_customer_support_message_brevity_rule`。
+- `multi_turn_base_192`：上次 0.0，这次 0.9231。注入 `contact_customer_support_message_brevity_rule`。
+- `multi_turn_base_141`：上次 0.0，这次 0.9231。注入 `tradingbot_direct_ticker_binding` 与 `buy_stock_at_current_market_price`。
+- `multi_turn_base_77`：上次 0.0，这次 0.9091。注入 `vehicle_brake_pedal_full_press_for_engine_start`。
+- 小幅 regression：`multi_turn_base_65` 从 0.90 降到 0.75，`multi_turn_base_152` 从 0.8333 降到 0.7273，均没有 strict success 变化。
+
+更完整分析见 `academic/results/algorithm_docs/BFCL_LATEST_VS_PREVIOUS_COMPARISON_20260518.md`。
+
+## 2026-05-18 21:09 Spreadsheet notebook train50 中止诊断
+
+**动机。** 用户要求在 BFCL 期间尝试 Spreadsheet notebook 训练，但观察到非常慢，需要判断慢在哪里，并停止后讨论省开销方案。
+
+**运行状态。**
+- 训练 run：`sheet_nb_train50_20260518_202840`。
+- 已停止；tmux/process 不再存在。
+- 日志：`academic/results/spreadsheet_notebook_train50_20260518_202840.log`。
+
+**耗时诊断。**
+- `spreadsheet_extractor`：19 calls，累计约 625.9s，平均 32.94s，平均 user chars 10352，最大 15943，累计 tokens 116918。
+- `spreadsheet_credit_assigner`：9 calls，累计约 346.2s，平均 38.47s，平均 user chars 24725，最大 31159，累计 tokens 100292。
+- `refiner`：41 calls，累计约 340.9s，平均 8.31s，user chars 固定约 14015，累计 tokens 241470。
+
+**结论。**
+- notebook executor 本身不是最大瓶颈；维护链路才是主要瓶颈。
+- Spreadsheet generic runner 当前仍是串行 train：task -> credit -> bundle -> micro -> macro。
+- BFCL 的细粒度锁/并发还没有完整下沉到 generic runner。
+- credit prompt 当前包含过多 retrieved skill/candidate projection，不是只看 injected/called skill。
+- helpful credit 也可能触发 bundle test/refine，导致维护次数偏高。
+
+详细改进计划见本文档后续“Spreadsheet notebook 近期改进计划”，以及 `academic/results/algorithm_docs/SPREADSHEET_NOTEBOOK_IMPROVEMENT_PLAN_20260518.md`。
+
+## Spreadsheet notebook 近期改进计划
+
+目标不是立刻追求 full 50/50 分数，而是先把 notebook setting 的维护开销降下来，并确保它真正测到“运行时反馈与可复用 skill”。
+
+1. **Credit 输入收窄。** Spreadsheet credit assigner 只看 injected/called skills。workflow/knowledge skill 只要被注入即可视为 exposed；function skill 需要出现 import/call 才视为 direct_use。不要把每步 retrieved skill 全量塞进 credit prompt。
+2. **Micro target 收窄。** strong harmful、filter_candidate 或明确 `refine_required` 才触发 pre-refine。helpful credit 默认只记录 evidence 和 positive case，不立即 test/refine。
+3. **Bundle replay 分级。** 先做 strict/static gate：fragment 是否 replayable、xlsx/range/golden 是否齐全、callable 代码是否可 parse/import、prompt budget 是否超限。strict gate 过了以后先跑 with-skill；只有 with-skill 通过，才跑 without-skill 做 utility 对比。
+4. **减少 without 开销。** with-skill failed 时直接 refine 或 keep evidence，不再跑 without，因为 without 不能解释 skill 是否可用。
+5. **训练期 case cap 更紧。** Spreadsheet 训练阶段每个 skill 最多保留 1-2 个 active bundle cases；更多 case 只进入 evidence ledger，由 macro 再决定是否升格。
+6. **Skill 投影压缩。** credit/refiner 使用 `compact_skill_prompt_block` 一类结构化 card，不再拼 `body[:1800] + metadata + evidence`。
+7. **Function skill 生成约束。** extractor/refiner prompt 要要求 body <= 500 chars、applicability <= 120 chars、code <= 40 lines、明确参数表、返回值、调用示例、非适用条件。
+8. **Notebook executor 信号更结构化。** 每轮记录 code cell、stdout、stderr、exception type、changed variables、answer candidate；credit/refiner 只消费这份 projection。
+9. **Generic runner 并发。** 将 BFCL 的细粒度锁、micro_concurrency、window 内并发下沉到 benchmark-agnostic runner，使 Spreadsheet 不再 task-by-task 全串行。
+10. **Probe 协议。** 每个 macro 后只跑 5-10 个固定 sentinel tasks，不跑完整 heldout；完整 50-test 仅在 final 或关键 ablation 跑。
+
+## Spreadsheet notebook 中期计划
+
+- 把单 turn SpreadsheetBench 改造成 inspect -> code -> observe -> repair -> final 的多轮协议。
+- 强制 notebook function skill 可 import/call，workflow/knowledge skill 只以短 contract 注入。
+- 从训练阶段开始生成真正可调用的 function skill，而不是事后把自由文本 snippet 包装成函数。
+- 设计对照：single-turn baseline、notebook baseline、notebook with full skill、notebook compact callable、notebook evolved callable。
+- 与 BFCL 共用同一套 cost accounting：input/cache-input/output、executor/injector/maintenance、correct-only cost、score per million tokens。

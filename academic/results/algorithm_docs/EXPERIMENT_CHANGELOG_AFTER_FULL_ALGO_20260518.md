@@ -2,6 +2,60 @@
 
 本文档从 `83b6aaf full algo` 之后开始记录。目的不是替代论文结果表，而是给每次工程/算法改动留下可追溯链路：为什么改、改了什么、验证了什么、实验结果如何、对应 git commit 是哪一个。
 
+## 固定实验协议
+
+从 2026-05-18 起，所有主实验必须遵守以下固定设置。除非某次实验明确标为 ablation/diagnostic，否则这些参数不应变化；如果变化，必须在对应结果行和时序记录中显式说明。
+
+### BFCL 主实验固定项
+
+| 项 | 固定值 |
+|---|---|
+| benchmark | BFCL v3 related-task setting |
+| data_source | `bfcl_eval_bundle` |
+| manifest | `academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`，或显式标注的 `curated_related_manifest_150_50.json` |
+| 50/50 train ids hash | `5d8d5179e3536f32` |
+| 50/50 test ids hash | `0ab3f3f8d6572175` |
+| train/test overlap | 0 |
+| split method | deterministic relatedness ranking，manifest 文件落盘后冻结 |
+| train order | manifest 中 `train_task_ids` 顺序；不 shuffle |
+| test order | manifest 中 `test_task_ids` 顺序；并发执行后结果必须按 manifest order 汇总 |
+| model | `claude-sonnet-4-5` |
+| llm_config | `local_claude_proxy` |
+| epochs | 1 |
+| micro_maintenance_step | 1 |
+| macro_maintenance_step | 10 |
+| candidate_competition_enabled | false，除非做 TRL competition ablation |
+| candidate_trial_retrieval | true |
+| skill_injection_mode | `prompt_only`，除非做 callable/tool ablation |
+| top_k_skills | 2 |
+| min_skill_score | 0.0 |
+| max_steps_per_turn | 主实验固定为 20；旧 cost retest 中 12 只作为 diagnostic |
+| max_task_seconds | 180 |
+| train_window_concurrency | 4 |
+| micro_concurrency | 4 |
+| test_concurrency | 4 |
+| cache_input pricing | 统计 input/cache-input/output，但当前 cache input 为 0 |
+
+重要澄清：BFCL 已经有固定 train/test set。`curated_related_manifest_50_50.json` 的 `train_task_ids` 和 `test_task_ids` 是固定列表，主 evolve 路径通过 `_tasks_from_manifest()` 按 manifest 顺序加载，没有随机 shuffle。此前总表中 `cost_retest_bfcl_*` 的 0.22 exact success 是 test-only cost diagnostic，未绑定 curated heldout 50；该 50-task set 混入了 17 个 curated train task、10 个 curated test task、23 个 manifest 外 task，因此不能作为主 heldout exact success 与最新 0.08 横比。
+
+### Spreadsheet 主实验固定项
+
+| 项 | 固定值 |
+|---|---|
+| benchmark | SpreadsheetBench verified/local fixture setting |
+| split | 使用落盘 manifest 或明确 task id list；不得临时随机抽样后写成主结果 |
+| model | `claude-sonnet-4-5` |
+| llm_config | `local_claude_proxy` |
+| skill modes | baseline / full skill / compact callable 必须分开标注 |
+| cost fields | success、avg_score、avg_total_tokens、avg_input_tokens、avg_output_tokens、executor/maintenance split |
+
+### 结果分类规则
+
+- **Main result**：固定 manifest、固定参数、完整 train/test protocol。
+- **Frozen-store retest**：同一 manifest test set，使用已有 skill store 重测；可与 main result 比较 test，但不能替代 train 指标。
+- **Cost ablation**：用于比较 prompt/injector/cost；只有 task set 与主 manifest 完全一致时，才能进入主结果对比。
+- **Diagnostic/mixed-set**：任何混合 train/test/manifest 外任务的结果只能用于 debug，不得用于论文主表的 exact success 横比。
+
 ## 2026-05-17 16:33 `f440594 paper method update`
 
 **动机。** 完整算法实现后，论文方法部分仍混合了旧 Python 伪代码、中文/英文叙述和实现细节，难以对应到算法主线。

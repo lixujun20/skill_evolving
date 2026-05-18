@@ -6,6 +6,21 @@
 - 上次有记录 evolve run：`academic/results/claude_proxy_related50_50_guardfix_20260517_232531_evolve.json`
 - 中间 frozen-store rerun：`academic/results/bfcl_guardfix_trainedstore_test50_rerun2_20260518_012134.json`
 
+## 0. 固定 split 与 shuffle 澄清
+
+BFCL 主实验有固定 train/test set，不是每次随机选。
+
+- 固定 50/50 manifest：`academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`
+- train_task_ids：50，hash `5d8d5179e3536f32`
+- test_task_ids：50，hash `0ab3f3f8d6572175`
+- train/test overlap：0
+- manifest 构建方法：deterministic relatedness ranking；文件落盘后冻结。
+- 训练顺序：`tasks_from_manifest()` 按 `manifest["train_task_ids"]` 顺序加载；evolve 主循环 `for task_index in range(...)` 顺序提交训练记录，不 shuffle。
+- 并发说明：`train_window_concurrency=4` 会在 macro window 内并发 rollout/precompute，但结果按 `task_index` 顺序提交，macro barrier 后再维护窗口。
+- test 顺序：按 `manifest["test_task_ids"]` 加载；即使 `test_concurrency=4`，汇总应保持 manifest order。
+
+此前 `cost_retest_bfcl_fullskill_20260518.json` 和 `cost_retest_bfcl_compact_20260518.json` 的 exact success 0.22 不是固定 heldout 50 的主结果。它们的 50 task 中只有 10 个属于 curated heldout test，另有 17 个 curated train task 和 23 个 manifest 外 task。因此它们只能作为 cost/injector diagnostic，不能解释为“同一个 heldout test 曾经 0.22，后来掉到 0.08”。
+
 ## 1. 共同点
 
 两次完整 evolve 都使用同一个 50/50 manifest：

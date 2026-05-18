@@ -19,6 +19,412 @@
 - callable function skill 被 import/call 后进入 credit prompt，且 evidence 标记 `used=true`。
 - heuristic credit fallback 同样只处理 exposed/called skills。
 
+### Chapter 1 维护记录
+
+提交：`fa6aec2 Narrow spreadsheet credit candidates`
+
+状态：已完成，测试通过。
+
+验证命令：
+
+```bash
+pytest -q academic/benchmarks/tests/test_spreadsheet_evolution.py academic/benchmarks/tests/test_skill_injector_budget.py
+python -m py_compile academic/benchmarks/spreadsheet/adapter.py academic/benchmarks/tests/test_spreadsheet_evolution.py
+```
+
+结果：`20 passed`。pytest 只出现已有的 pytest config / pydantic deprecation warnings。
+
+#### 1. Credit prompt 语义改为 exposed/called candidate skills
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:173-177`
+
+改动目的：避免 prompt 继续暗示 credit assigner 可以对 retrieved-only skills 做归因。
+
+代码片段：
+
+```python
+SPREADSHEET_CREDIT_SYSTEM = """\
+You are the SpreadsheetBench credit assigner and maintenance-attribution judge.
+
+You receive one compact task trace and only the exposed/called candidate skills.
+Judge whether each skill was helpful, harmful, neutral, or uncertain for this
+specific task.
+```
+
+#### 2. Trace schema 增加 `called_skill_functions`
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:270-313`
+
+改动目的：把“function skill 是否真的被模型 import/call”变成显式 trace 字段，而不是只看 prompt 中是否出现。
+
+代码片段：
+
+```python
+@dataclass
+class SpreadsheetTrace:
+    task_id: str
+    prompt: str = ""
+    code: str = ""
+    stdout: str = ""
+    stderr: str = ""
+    elapsed_s: float = 0.0
+    retrieved_skills: List[str] = field(default_factory=list)
+    prompt_injected_skills: List[str] = field(default_factory=list)
+    called_skill_functions: List[str] = field(default_factory=list)
+    callable_skills: List[Dict[str, Any]] = field(default_factory=list)
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "retrieved_skills": self.retrieved_skills,
+            "prompt_injected_skills": self.prompt_injected_skills,
+            "called_skill_functions": self.called_skill_functions,
+            "callable_skills": self.callable_skills,
+        }
+```
+
+#### 3. Single-run executor 记录实际 callable 调用
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:492-542`
+
+改动目的：模型返回代码后、执行代码前，用 AST 解析 `skill_library` 调用，并写入 trace/metrics。
+
+代码片段：
+
+```python
+if not trace.code:
+    trace.elapsed_s = round(time.monotonic() - t0, 3)
+    return BenchmarkResult(...)
+
+trace.called_skill_functions = _called_spreadsheet_skill_functions(
+    trace.code,
+    callable_prompt["skills"],
+)
+stdout, stderr, returncode = await asyncio.to_thread(
+    _run_code, trace.code, input_copy, output_path, base_work_dir
+)
+
+verify["retrieved_skills"] = trace.retrieved_skills
+verify["prompt_injected_skills"] = trace.prompt_injected_skills
+verify["called_skill_functions"] = trace.called_skill_functions
+```
+
+#### 4. Notebook executor 逐 turn 记录 callable 调用
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:680-700` 与 `768-778`
+
+改动目的：notebook 多轮中每个 code cell 都可能调用 skill；需要按 turn 记录，并在 trace 里累积去重。
+
+代码片段：
+
+```python
+if code:
+    called_this_turn = _called_spreadsheet_skill_functions(
+        code,
+        callable_prompt["skills"],
+    )
+    exec_result = session.run_cell(code, timeout=CODE_EXEC_TIMEOUT)
+    turn.update(exec_result)
+    history.append(
+        {
+            "turn_index": turn_index,
+            "code": code,
+            "stdout": exec_result.get("stdout", ""),
+            "stderr": exec_result.get("stderr", ""),
+            "returncode": exec_result.get("returncode"),
+            "called_skill_functions": called_this_turn,
+        }
+    )
+    trace.called_skill_functions = list(
+        dict.fromkeys([*trace.called_skill_functions, *called_this_turn])
+    )
+
+verify["called_skill_functions"] = trace.called_skill_functions
+```
+
+#### 5. 新增 callable 调用解析器
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:1054-1106`
+
+改动目的：用 AST 稳定识别模型是否真的调用 `skill_library` 中的 function skill，支持 direct import、alias import、module import；语法错误时用文本 fallback。
+
+代码片段：
+
+```python
+def _called_spreadsheet_skill_functions(
+    code: str,
+    callable_rows: Sequence[Dict[str, Any]],
+) -> List[str]:
+    function_to_skill = {
+        str(row.get("function_name") or ""): str(row.get("skill_name") or "")
+        for row in callable_rows
+        if str(row.get("function_name") or "") and str(row.get("skill_name") or "")
+    }
+    if not function_to_skill or not str(code or "").strip():
+        return []
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return _called_spreadsheet_skill_functions_from_text(code, function_to_skill)
+    imported_aliases: Dict[str, str] = {}
+    module_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "skill_library":
+            for alias in node.names:
+                imported = str(alias.name)
+                if imported in function_to_skill:
+                    imported_aliases[str(alias.asname or alias.name)] = imported
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "skill_library":
+                    module_aliases.add(str(alias.asname or alias.name))
+    called: List[str] = []
+    for node in ast.walk(tree):
+        func = getattr(node, "func", None)
+        function_name = ""
+        if isinstance(func, ast.Name):
+            function_name = imported_aliases.get(func.id, func.id if func.id in function_to_skill else "")
+        elif isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            if func.value.id in module_aliases and func.attr in function_to_skill:
+                function_name = func.attr
+        if function_name:
+            skill_name = function_to_skill.get(function_name)
+            if skill_name and skill_name not in called:
+                called.append(skill_name)
+    return called
+```
+
+Fallback：
+
+```python
+def _called_spreadsheet_skill_functions_from_text(
+    code: str,
+    function_to_skill: Dict[str, str],
+) -> List[str]:
+    called: List[str] = []
+    for function_name, skill_name in function_to_skill.items():
+        if re.search(rf"\b{re.escape(function_name)}\s*\(", str(code or "")):
+            if skill_name not in called:
+                called.append(skill_name)
+    return called
+```
+
+#### 6. `assign_credit()` 不再使用 retrieved skills 作为候选
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:1442-1485`
+
+改动目的：这是本章核心行为变化。credit candidate 从 `retrieved_skills` 改为 `prompt_injected_skills + called_skill_functions`，并把 retrieved-only 放进 audit。
+
+代码片段：
+
+```python
+async def assign_credit(...):
+    del round_index
+    projection = _spreadsheet_trace_projection(detail)
+    candidate_names = _spreadsheet_credit_candidate_names(projection)
+    candidate_artifacts = [
+        artifact for name in candidate_names for artifact in [store.get(str(name))] if artifact
+    ]
+    if not candidate_artifacts:
+        return []
+    try:
+        payload = await _ask_json(
+            system=SPREADSHEET_CREDIT_SYSTEM,
+            user=_json_block(
+                {
+                    "task": _spreadsheet_task_fragment(detail),
+                    "trace_projection": projection,
+                    "retrieval_audit": {
+                        "retrieved_only_skills": projection.get("retrieved_only_skills") or [],
+                        "candidate_policy": "prompt_injected_or_called_only",
+                    },
+                    "candidate_skills": [
+                        _spreadsheet_skill_projection(artifact, projection=projection)
+                        for artifact in candidate_artifacts
+                    ],
+                }
+            ),
+            role="spreadsheet_credit_assigner",
+        )
+```
+
+#### 7. Trace projection 显式产出 retrieved-only 与 candidate list
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:1696-1743`
+
+改动目的：把 candidate selection 所需字段统一放在 projection 中，LLM prompt 和 heuristic fallback 使用同一份事实。
+
+代码片段：
+
+```python
+def _spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
+    runs = detail.get("runs") or []
+    first = runs[0] if runs else {}
+    metrics = first.get("metrics") or {}
+    trace = first.get("trace") or {}
+    retrieved_skills = metrics.get("retrieved_skills") or trace.get("retrieved_skills") or []
+    prompt_injected_skills = metrics.get("prompt_injected_skills") or trace.get("prompt_injected_skills") or []
+    called_skill_functions = metrics.get("called_skill_functions") or trace.get("called_skill_functions") or []
+    return {
+        "retrieved_skills": retrieved_skills,
+        "prompt_injected_skills": prompt_injected_skills,
+        "callable_skills": metrics.get("callable_skills") or trace.get("callable_skills") or [],
+        "called_skill_functions": called_skill_functions,
+        "retrieved_only_skills": _list_difference_preserve_order(
+            retrieved_skills,
+            [*prompt_injected_skills, *called_skill_functions],
+        ),
+    }
+```
+
+Candidate helper：
+
+```python
+def _spreadsheet_credit_candidate_names(projection: Dict[str, Any]) -> List[str]:
+    names: List[str] = []
+    for key in ("prompt_injected_skills", "called_skill_functions"):
+        for item in projection.get(key) or []:
+            name = str(item).strip()
+            if name and name not in names:
+                names.append(name)
+    return names
+```
+
+#### 8. Skill projection 增加 retrieved/injected/used 三态
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:1834-1853`
+
+改动目的：credit assigner 需要知道 skill 是“检索到”“注入到 prompt”“被 function 调用”中的哪一种。
+
+代码片段：
+
+```python
+return {
+    "skill_name": artifact.name,
+    "version": artifact.version,
+    "kind": artifact.kind,
+    "status": artifact.status,
+    "description": artifact.description,
+    "body": artifact.body[:1800],
+    "interface": artifact.interface.as_dict(),
+    "retrieved": artifact.name in set(projection.get("retrieved_skills") or []),
+    "injected": artifact.name in set(projection.get("prompt_injected_skills") or []),
+    "used": artifact.name in set(projection.get("called_skill_functions") or []),
+}
+```
+
+#### 9. Heuristic fallback 同样使用 injected/used evidence
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:2250-2272`
+
+改动目的：当 LLM credit assigner 失败时，fallback 不能退回到 retrieved-only 归因。因为 `candidate_artifacts` 已经来自 `_spreadsheet_credit_candidate_names()`，fallback 只会处理 exposed/called skills；同时 evidence 记录三态。
+
+代码片段：
+
+```python
+events.append(
+    {
+        "benchmark": "spreadsheet",
+        "task_id": detail.get("task_id"),
+        "skill_name": artifact.name,
+        "judgment": judgment,
+        "effect_type": effect,
+        "confidence": confidence,
+        "evidence": {
+            "retrieved": artifact.name in set(projection.get("retrieved_skills") or []),
+            "injected": artifact.name in set(projection.get("prompt_injected_skills") or []),
+            "used": artifact.name in set(projection.get("called_skill_functions") or []),
+            "trace_signals": [reason],
+        },
+        "projection": copy.deepcopy(projection),
+    }
+)
+```
+
+#### 10. 测试改动
+
+位置：`academic/benchmarks/tests/test_spreadsheet_evolution.py`
+
+关键新增/修改：
+
+- `_detail()` helper 增加 `prompt_injected` 与 `called` 参数，默认保持旧测试兼容。
+- `test_spreadsheet_function_skill_can_be_imported_and_called` 断言 `called_skill_functions == ["spreadsheet_double_a1_to_b1"]`。
+- `test_spreadsheet_executable_tool_marked_informational_still_callable` 断言 legacy callable 也记录调用。
+- 新增 `test_spreadsheet_called_skill_function_parser_handles_alias_and_module_import`，覆盖 alias import 与 module import。
+- 新增 `test_spreadsheet_credit_ignores_retrieved_only_skill`，解析 credit prompt JSON，断言 candidate list 只包含 injected/called skill。
+- 新增 `test_spreadsheet_credit_fallback_ignores_retrieved_only_skill`，覆盖 LLM credit 失败时 heuristic fallback 不处理 retrieved-only skill。
+
+关键测试片段：
+
+```python
+def test_spreadsheet_called_skill_function_parser_handles_alias_and_module_import() -> None:
+    rows = [
+        {"skill_name": "spreadsheet_double_a1_to_b1", "function_name": "spreadsheet_double_a1_to_b1"},
+        {"skill_name": "spreadsheet_sum_column", "function_name": "spreadsheet_sum_column"},
+    ]
+
+    direct = _called_spreadsheet_skill_functions(
+        "from skill_library import spreadsheet_double_a1_to_b1 as dbl\n"
+        "dbl(INPUT_XLSX, OUTPUT_XLSX)\n",
+        rows,
+    )
+    module = _called_spreadsheet_skill_functions(
+        "import skill_library as skills\n"
+        "skills.spreadsheet_sum_column(INPUT_XLSX, OUTPUT_XLSX)\n",
+        rows,
+    )
+
+    assert direct == ["spreadsheet_double_a1_to_b1"]
+    assert module == ["spreadsheet_sum_column"]
+```
+
+```python
+async def test_spreadsheet_credit_ignores_retrieved_only_skill(...):
+    detail = _detail(
+        task,
+        success=True,
+        score=1.0,
+        retrieved=[retrieved_only.name, injected.name, called.name],
+        prompt_injected=[injected.name],
+        called=[called.name],
+        code="from skill_library import spreadsheet_called_function\n"
+             "spreadsheet_called_function(INPUT_XLSX, OUTPUT_XLSX)",
+    )
+
+    async def fake_ask_json(**kwargs):
+        payload = json.loads(kwargs["user"])
+        candidate_names = [item["skill_name"] for item in payload["candidate_skills"]]
+        assert candidate_names == [injected.name, called.name]
+        assert payload["retrieval_audit"]["retrieved_only_skills"] == [retrieved_only.name]
+        ...
+
+    events = await SpreadsheetMaintenanceAdapter().assign_credit(...)
+
+    assert [event["skill_name"] for event in events] == [injected.name, called.name]
+    assert store.get(retrieved_only.name).usage_count == 0
+```
+
+```python
+async def test_spreadsheet_credit_fallback_ignores_retrieved_only_skill(...):
+    async def failing_ask_json(**kwargs):
+        raise RuntimeError("mock credit failure")
+
+    events = await SpreadsheetMaintenanceAdapter().assign_credit(...)
+
+    assert [event["skill_name"] for event in events] == [injected.name]
+    assert events[0]["evidence"]["retrieved"] is True
+    assert events[0]["evidence"]["injected"] is True
+    assert events[0]["evidence"]["used"] is False
+    assert store.get(retrieved_only.name).usage_count == 0
+```
+
+#### 11. 本章未改内容
+
+- 没有改 micro target 规则；helpful 是否触发 refine/test 留到 Chapter 2。
+- 没有改 bundle replay 执行顺序；strict gate / with-before-without 留到 Chapter 3。
+- 没有改 bundle case cap；训练期固定预算留到 Chapter 4。
+- 没有改 compact skill projection，`body[:1800]` 仍保留；留到 Chapter 5。
+- 没有把 generic runner 并发下沉；留到 Chapter 7。
+
 ## Chapter 2: Micro target 收窄
 
 目标：helpful credit 默认只记录 evidence，不触发 immediate refine/test。

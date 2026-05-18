@@ -50,6 +50,12 @@ from academic.benchmarks.spreadsheet.adapter import (
     run_spreadsheet_task,
     run_spreadsheet_task_notebook,
 )
+from academic.benchmarks.skillsbench.adapter import (
+    DEFAULT_SKILLSBENCH_ROOT,
+    default_skillsbench_skill_store,
+    load_skillsbench_tasks,
+    run_skillsbench_task,
+)
 from academic.benchmarks.core.types import (
     BenchmarkResult,
     SkillArtifact,
@@ -156,6 +162,20 @@ async def main_async() -> None:
     parser.add_argument("--partial-output", type=Path, default=None, help="Write completed BFCL task results incrementally")
     parser.add_argument("--max-task-seconds", type=float, default=None, help="Optional wall-clock timeout per BFCL task run")
     parser.add_argument("--cache-dir", type=Path, default=ACADEMIC_ROOT.parent / "data" / "benchmarks")
+    parser.add_argument("--skillsbench-root", type=Path, default=DEFAULT_SKILLSBENCH_ROOT)
+    parser.add_argument(
+        "--skillsbench-task-source",
+        choices=["fixture", "tasks", "tasks-no-skills"],
+        default="fixture",
+        help="SkillsBench task source for the diagnostic adapter.",
+    )
+    parser.add_argument(
+        "--skillsbench-skill-pool",
+        choices=["curated", "official", "fixture", "none"],
+        default="curated",
+        help="Skill pool loaded when --benchmark skillsbench and --skills is not provided.",
+    )
+    parser.add_argument("--skillsbench-skill-limit", type=int, default=None)
     parser.add_argument(
         "--bfcl-adapter-mode",
         choices=["official", "path_filtered", "debug_hints", "full_tools"],
@@ -398,6 +418,36 @@ async def main_async() -> None:
             execution_mode=args.spreadsheet_execution_mode,
             max_turns=args.spreadsheet_max_turns,
         )
+    elif args.benchmark == "skillsbench":
+        if args.mode != "baseline":
+            raise ValueError("SkillsBench generic runner currently supports --mode baseline only")
+        n_test = args.n_test if args.n_test is not None else 5
+        train: List[Any] = []
+        test = load_skillsbench_tasks(
+            skillsbench_root=args.skillsbench_root,
+            source=args.skillsbench_task_source,
+            limit=n_test,
+            offset=args.test_offset,
+        )
+        if args.skills is None:
+            store = default_skillsbench_skill_store(
+                skillsbench_root=args.skillsbench_root,
+                pool=args.skillsbench_skill_pool,
+                limit=args.skillsbench_skill_limit,
+            )
+        details = await _run_skillsbench_baseline(
+            test,
+            args.n_runs,
+            args.llm_config,
+            store,
+            model_name=args.model_name,
+            concurrency=args.test_concurrency,
+            max_task_seconds=args.max_task_seconds,
+            top_k_skills=args.top_k_skills,
+            min_skill_score=args.min_skill_score,
+            skill_injector_mode=args.skill_injector_mode,
+            skill_context_budget_chars=args.skill_context_budget_chars,
+        )
     else:
         raise ValueError(f"Benchmark {args.benchmark} is registry-only for now")
 
@@ -423,6 +473,14 @@ async def main_async() -> None:
     if args.benchmark == "spreadsheet":
         summary["spreadsheet_execution_mode"] = args.spreadsheet_execution_mode
         summary["spreadsheet_max_turns"] = args.spreadsheet_max_turns
+    if args.benchmark == "skillsbench":
+        summary["diagnostic_only"] = True
+        summary["official_pass_rate"] = None
+        summary["skillsbench_task_source"] = args.skillsbench_task_source
+        summary["skillsbench_skill_pool"] = args.skillsbench_skill_pool if args.skills is None else "custom"
+        summary["skillsbench_skill_limit"] = args.skillsbench_skill_limit
+        summary["top_k_skills"] = args.top_k_skills
+        summary["min_skill_score"] = args.min_skill_score
     summary["elapsed_s"] = round(time.monotonic() - t0, 3)
     out = args.output or RESULTS_DIR / f"{args.benchmark}_{args.tag}_{args.mode}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -776,6 +834,79 @@ async def _run_spreadsheet_baseline(
                         "success": item.get("success"),
                         "elapsed_s": metrics.get("elapsed_s"),
                         "retrieved_skills": metrics.get("retrieved_skills"),
+                        "error": item.get("error"),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        return task_index, _task_runs(task, runs)
+
+    if concurrency <= 1 or len(tasks) <= 1:
+        return [(await run_one(task, task_index))[1] for task_index, task in enumerate(tasks)]
+
+    sem = asyncio.Semaphore(concurrency)
+
+    async def guarded(task: Any, task_index: int) -> Tuple[int, Dict[str, Any]]:
+        async with sem:
+            return await run_one(task, task_index)
+
+    completed = await asyncio.gather(
+        *[guarded(task, task_index) for task_index, task in enumerate(tasks)]
+    )
+    return [detail for _idx, detail in sorted(completed, key=lambda item: item[0])]
+
+
+async def _run_skillsbench_baseline(
+    tasks: List[Any],
+    n_runs: int,
+    llm_config: str,
+    store: ArtifactStore,
+    model_name: str | None = None,
+    concurrency: int = 1,
+    max_task_seconds: float | None = None,
+    top_k_skills: int = 5,
+    min_skill_score: float = 0.0,
+    skill_injector_mode: str | None = None,
+    skill_context_budget_chars: int | None = None,
+) -> List[Dict[str, Any]]:
+    concurrency = max(1, int(concurrency or 1))
+
+    async def run_one(task: Any, task_index: int) -> Tuple[int, Dict[str, Any]]:
+        runs = []
+        task_store = copy.deepcopy(store) if concurrency > 1 else store
+        for run_idx in range(n_runs):
+            coro = run_skillsbench_task(
+                task,
+                llm_config=llm_config,
+                model_name=model_name,
+                artifact_store=task_store,
+                top_k_skills=top_k_skills,
+                min_skill_score=min_skill_score,
+                skill_injector_mode=skill_injector_mode,
+                skill_context_budget_chars=skill_context_budget_chars,
+                max_request_wall_s=max_task_seconds,
+            )
+            result = await asyncio.wait_for(coro, timeout=max_task_seconds) if max_task_seconds else await coro
+            item = result.as_dict()
+            item["run_idx"] = run_idx
+            runs.append(item)
+            metrics = item.get("metrics") or {}
+            print(
+                json.dumps(
+                    {
+                        "progress": "skillsbench_task_run",
+                        "task_index": task_index,
+                        "n_tasks": len(tasks),
+                        "task_id": getattr(task, "task_id", ""),
+                        "run_idx": run_idx,
+                        "score": item.get("score"),
+                        "success": item.get("success"),
+                        "retrieval_hit_at_k": metrics.get("retrieval_hit_at_k"),
+                        "selection_hit": metrics.get("selection_hit"),
+                        "retrieved_skills": metrics.get("retrieved_skills"),
+                        "selected_skill_names": metrics.get("selected_skill_names"),
+                        "elapsed_s": metrics.get("elapsed_s"),
                         "error": item.get("error"),
                     },
                     ensure_ascii=False,

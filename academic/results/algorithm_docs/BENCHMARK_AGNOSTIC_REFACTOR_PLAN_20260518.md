@@ -1911,6 +1911,307 @@ $ pytest -q academic/benchmarks/tests/test_common_maintenance_core.py academic/b
 34 passed, 10 warnings in 1.98s
 ```
 
+## Chapter 3.1: 两个 Bench 的重构契约测例
+
+### Plan
+
+- 新增一个跨 benchmark 的重构契约测试文件，专门测试 BFCL 和 Spreadsheet 是否真的接入公共层，而不是只靠已有端到端测试间接覆盖。
+- Spreadsheet 侧重点：
+  - facade import 和 monkeypatch 兼容路径仍然可用；
+  - `SpreadsheetMaintenanceAdapter` 内部调用 facade 上的 `run_spreadsheet_task` / `_ask_json` / `refine_skill_artifact_llm` / `_execute_spreadsheet_bundle_tests`；
+  - credit 生成 benchmark-native bundle case 后，micro maintenance 按公共层顺序先 credit refine，再 bundle test；
+  - weak/uncertain credit 不触发 micro refine/test。
+- BFCL 侧重点：
+  - `_credit_event_records` 使用公共 `normalize_credit_events`，但保留 BFCL task metrics；
+  - `_apply_credit_case_evidence` 保持累计 snapshot 语义，不重复追加同一批 evidence；
+  - `_micro_write_target_names` 使用公共 target ordering，同时保留 BFCL 的 strong credit 阈值；
+  - `trim_bundle_cases` 调用公共预算 helper，同时继续 bump BFCL bundle version。
+
+### Implementation Log
+
+新增文件：`academic/benchmarks/tests/test_benchmark_refactor_contracts.py`。
+
+Lines 17-98 定义跨测试共用的 mock skill、Spreadsheet task 和 detail。这里不调用真实 LLM、不读真实 xlsx，只构造完整的 `BenchmarkTask` / `BenchmarkResult` 形状，保证测试针对重构契约本身。
+
+```python
+    17	def _skill(name: str, *, benchmark: str = "generic", status: str = "active") -> SkillArtifact:
+    18	    return SkillArtifact(
+    19	        name=name,
+    20	        kind="workflow_guardrail_card",
+    21	        description=f"{name} description",
+    22	        body=f"{name} body",
+    23	        interface=SkillInterface(
+    24	            summary=f"{name} summary",
+    25	            invocation_contract={"injection_type": "workflow"},
+    26	        ),
+    27	        metadata={"benchmark": benchmark, "domains": [benchmark]},
+    28	        status=status,
+    29	    )
+```
+
+```python
+    54	def _spreadsheet_detail(
+    55	    *,
+    56	    task: BenchmarkTask | None = None,
+    57	    retrieved: List[str] | None = None,
+    58	    injected: List[str] | None = None,
+    59	    called: List[str] | None = None,
+    60	    success: bool = False,
+    61	) -> Dict[str, Any]:
+    62	    task = task or _spreadsheet_task()
+    66	    result = BenchmarkResult(
+    67	        benchmark="spreadsheet",
+    68	        task_id=task.task_id,
+    69	        success=success,
+    70	        score=1.0 if success else 0.0,
+    71	        metrics={
+    77	            "retrieved_skills": retrieved,
+    78	            "prompt_injected_skills": injected,
+    79	            "called_skill_functions": called,
+    80	            "total_tokens": 100,
+    81	        },
+    82	        trace={
+    83	            "retrieved_skills": retrieved,
+    84	            "prompt_injected_skills": injected,
+    85	            "called_skill_functions": called,
+    86	            "code": "import openpyxl\n# mocked trace",
+    87	            "stderr": "",
+    88	            "stdout": "",
+    89	        },
+    90	    )
+```
+
+Lines 101-169 测 Spreadsheet facade 兼容性。这个测例把 facade 上的 `run_spreadsheet_task` 和 `_ask_json` monkeypatch 掉，然后从 `SpreadsheetMaintenanceAdapter` 调用，证明 maintenance 子模块没有绕开 facade，旧测试和旧外部入口仍可接管行为。
+
+```python
+   101	async def test_spreadsheet_facade_monkeypatches_still_route_into_maintenance_adapter(monkeypatch) -> None:
+   107	    async def fake_run_spreadsheet_task(*args: Any, **kwargs: Any) -> BenchmarkResult:
+   108	        calls.append({"hook": "run_task", "task_id": args[0].task_id, "top_k": kwargs.get("top_k_skills")})
+   109	        return BenchmarkResult(
+   110	            benchmark="spreadsheet",
+   111	            task_id=args[0].task_id,
+   112	            success=True,
+   113	            score=1.0,
+   114	            metrics={"hooked": True},
+   115	        )
+```
+
+```python
+   143	    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter.run_spreadsheet_task", fake_run_spreadsheet_task)
+   144	    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter._ask_json", fake_ask_json)
+   146	    adapter = SpreadsheetMaintenanceAdapter()
+   147	    run_result = await adapter.run_task(
+   155	    credit = await adapter.assign_credit(
+   163	    assert run_result.metrics["hooked"] is True
+   164	    assert [call["hook"] for call in calls] == ["run_task", "ask_json"]
+   166	    assert calls[1]["role"] == "spreadsheet_credit_assigner"
+   167	    assert credit[0]["benchmark"] == "spreadsheet"
+   168	    assert credit[0]["judgment"] == "harmful"
+   169	    assert store.get("sheet_double").evidence.harmful_cases[0]["task_id"] == task.task_id
+```
+
+Lines 172-268 测 Spreadsheet 的公共 bundle/micro 路径。这个测例直接喂 strong harmful credit，断言：
+
+- `apply_credit_bundle_cases` 生成的是 Spreadsheet-native replay case；
+- case 复用官方 task snapshot 中的 question/expected/input_artifacts；
+- bundle version 被 bump；
+- `run_generic_micro_maintenance` 的顺序是先 credit refine，再 bundle test。
+
+```python
+   172	async def test_spreadsheet_credit_bundle_and_micro_use_common_flow_with_benchmark_cases(monkeypatch) -> None:
+   178	    credit_events = [
+   179	        {
+   180	            "benchmark": "spreadsheet",
+   181	            "task_id": detail["task_id"],
+   182	            "skill_name": "sheet_double",
+   183	            "judgment": "harmful",
+   184	            "effect_type": "correctness_loss",
+   185	            "confidence": 0.88,
+   189	            "bundle_case_suggestions": [
+   190	                {
+   191	                    "skill_name": "sheet_double",
+   192	                    "polarity": "negative",
+   193	                    "reason": "Keep the official SpreadsheetBench answer range as a regression case.",
+   194	                    "source_task_id": detail["task_id"],
+   195	                    "task_fragment_policy": "reuse_official_fragment",
+   196	                }
+   197	            ],
+   198	        }
+   199	    ]
+```
+
+```python
+   201	    async def fake_refine_skill_artifact_llm(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+   202	        order.append("refine")
+   203	        return {
+   204	            "decision": {
+   205	                "action": "keep",
+   206	                "reason": "Mock credit refine inspected the focused SpreadsheetBench case.",
+   207	            },
+   208	            "artifact": {},
+   209	            "bundle": {},
+   210	        }
+   212	    async def fake_bundle_tests(**kwargs: Any) -> SkillTestResult:
+   213	        order.append("bundle_test")
+```
+
+```python
+   257	    assert case.prompt == "Double the value in Sheet1!A1 into Sheet1!B1."
+   258	    assert case.expected == {
+   259	        "answer_sheet": "Sheet1",
+   260	        "answer_position": "B1",
+   261	        "verifier": "spreadsheet_golden_range",
+   262	    }
+   263	    assert case.context["task_fragment"]["input_artifacts"]["input_xlsx"] == "/tmp/input.xlsx"
+   264	    assert case.context["focus_turns"] == [0]
+   265	    assert artifact.bundle.bundle_version == 2
+   266	    assert order == ["refine", "bundle_test"]
+   267	    assert report["maintenance_targets"] == ["sheet_double"]
+```
+
+Lines 271-314 测 weak credit 不触发 micro。这个测例避免未来把所有 retrieved skill 都粗暴 replay/refine，保护“只维护强信号或新增 bundle case 目标”的算法约束。
+
+```python
+   271	async def test_spreadsheet_micro_skips_when_credit_is_not_actionable(monkeypatch) -> None:
+   295	    report = await SpreadsheetMaintenanceAdapter().run_micro_maintenance(
+   297	        credit_events=[
+   298	            {
+   299	                "skill_name": "sheet_double",
+   300	                "judgment": "uncertain",
+   301	                "confidence": 0.2,
+   302	                "reason": "Weak evidence only.",
+   303	            }
+   304	        ],
+   305	        credit_bundle_cases=[],
+   312	    assert report["maintenance_targets"] == []
+   313	    assert report["reason"] == "spreadsheet_micro_maintenance"
+   314	    assert calls == []
+```
+
+Lines 317-386 测 BFCL credit event normalization。关键点是 `positive -> helpful`、`benchmark=bfcl_v3`、`source=credit_assigner`、metric 字段保留、非本 skill 的 maintenance action / bundle suggestion 被过滤。
+
+```python
+   317	def test_bfcl_credit_records_normalize_and_preserve_task_metrics() -> None:
+   320	    detail = {
+   321	        "task_id": "bfcl_contract_1",
+   324	                "score": 0.0,
+   325	                "metrics": {
+   326	                    "official_valid": False,
+   327	                    "n_model_steps": 2,
+   328	                    "total_tokens": 321,
+   329	                    "retrieved_skills": ["travel_schema_guard"],
+   330	                    "prompt_injected_skills": ["travel_schema_guard"],
+   331	                    "used_skills": [],
+```
+
+```python
+   371	    assert len(events) == 1
+   373	    assert event["benchmark"] == "bfcl_v3"
+   374	    assert event["source"] == "credit_assigner"
+   375	    assert event["judgment"] == "helpful"
+   376	    assert event["confidence"] == 0.83
+   379	    assert event["official_valid"] is False
+   380	    assert event["n_model_steps"] == 2
+   381	    assert event["total_tokens"] == 321
+   382	    assert event["retrieved"] is True
+   383	    assert event["injected"] is True
+   384	    assert event["used"] is False
+   385	    assert event["maintenance_actions"] == [{"skill_name": "travel_schema_guard", "action": "keep"}]
+```
+
+Lines 389-410 测 BFCL evidence snapshot 语义。`_apply_credit_case_evidence` 会先清空 touched skill 当前 evidence bucket，再用累计 events 重放，因此重复调用同一批累计 events 不会重复追加，且只保留最近 12 条。
+
+```python
+   389	def test_bfcl_credit_evidence_is_cumulative_snapshot_without_duplicate_replay() -> None:
+   392	    store = ArtifactStore([_skill("bfcl_skill", benchmark="bfcl_v3")])
+   393	    cumulative_events = [
+   394	        {
+   395	            "benchmark": "bfcl_v3",
+   396	            "task_id": f"task_{idx}",
+   397	            "skill_name": "bfcl_skill",
+   398	            "judgment": "harmful",
+   399	            "confidence": 0.9,
+   400	            "reason": f"bad schema {idx}",
+   401	        }
+   402	        for idx in range(14)
+   403	    ]
+   405	    _apply_credit_case_evidence(store=store, credit_events=cumulative_events)
+   406	    _apply_credit_case_evidence(store=store, credit_events=cumulative_events)
+   408	    harmful = store.get("bfcl_skill").evidence.harmful_cases
+   409	    assert len(harmful) == 12
+   410	    assert [row["task_id"] for row in harmful] == [f"task_{idx}" for idx in range(2, 14)]
+```
+
+Lines 413-437 测 BFCL micro target ordering。强 harmful 阈值仍按 BFCL wrapper 的 `0.75`，但最终 target 合并顺序来自公共 `micro_target_names`：credit targets first, then bundle-case-only targets。
+
+```python
+   413	def test_bfcl_micro_targets_use_common_ordering_and_relevance_filter() -> None:
+   416	    events = [
+   417	        {"skill_name": "weak_harmful", "judgment": "harmful", "confidence": 0.7},
+   418	        {"skill_name": "strong_harmful", "judgment": "harmful", "confidence": 0.9},
+   419	        {
+   420	            "skill_name": "helpful_schema",
+   421	            "judgment": "helpful",
+   422	            "confidence": 0.8,
+   423	            "reason_codes": ["schema_help"],
+   424	        },
+   425	        {"skill_name": "uncertain", "judgment": "uncertain", "confidence": 1.0},
+   426	    ]
+   432	    assert _strong_credit_targets(events) == ["strong_harmful", "helpful_schema"]
+   433	    assert _micro_write_target_names(
+   437	    ) == ["strong_harmful", "helpful_schema", "case_only"]
+```
+
+Lines 440-473 测 BFCL bundle trim 仍维持 benchmark-specific version bump。公共 helper 负责预算和 metadata，BFCL wrapper 负责 bundle version 从 4 bump 到 5。
+
+```python
+   440	def test_bfcl_trim_bundle_cases_delegates_budget_and_bumps_version(monkeypatch) -> None:
+   443	    artifact = _skill("bfcl_budget", benchmark="bfcl_v3")
+   444	    artifact.bundle.bundle_version = 4
+   445	    for idx in range(4):
+   446	        artifact.bundle.positive_cases.append(
+   447	            SkillBundleCase(
+   448	                case_id=f"pos_{idx}",
+   449	                source="credit_assigner_positive" if idx == 3 else "manual",
+   450	                prompt=f"positive {idx}",
+   451	                context={"confidence": 0.9 if idx == 3 else 0.1},
+   452	                polarity="positive",
+   453	            )
+   454	        )
+```
+
+```python
+   465	    monkeypatch.setenv("BFCL_BUNDLE_MAX_TOTAL_CASES", "3")
+   466	    changed = trim_bundle_cases(artifact, per_polarity_limit=2)
+   468	    assert changed is True
+   469	    assert artifact.bundle.bundle_version == 5
+   470	    assert len(artifact.bundle.all_cases()) == 3
+   471	    assert "pos_3" in {case.case_id for case in artifact.bundle.all_cases()}
+   472	    assert artifact.bundle.fixtures["bundle_trimmed"] is True
+   473	    assert artifact.bundle.fixtures["bundle_case_budget"] == {"per_polarity_limit": 2, "total_limit": 3}
+```
+
+### Tests
+
+Passed.
+
+```text
+$ pytest -q academic/benchmarks/tests/test_benchmark_refactor_contracts.py
+.......                                                                  [100%]
+7 passed, 10 warnings in 1.82s
+```
+
+```text
+$ pytest -q academic/benchmarks/tests/test_spreadsheet_evolution.py academic/benchmarks/tests/bfcl_related/test_experiment.py academic/benchmarks/tests/maintenance/test_runtime_optimization_scenarios.py academic/benchmarks/tests/test_common_maintenance_core.py academic/benchmarks/tests/test_benchmark_refactor_contracts.py
+........................................................................ [ 80%]
+..................                                                       [100%]
+90 passed, 10 warnings in 27.34s
+```
+
+```text
+$ python -m py_compile academic/benchmarks/tests/test_benchmark_refactor_contracts.py academic/benchmarks/spreadsheet/adapter.py academic/benchmarks/spreadsheet/maintenance/adapter.py academic/benchmarks/bfcl/related/experiment.py academic/benchmarks/bfcl/maintenance/adapter.py academic/benchmarks/core/credit_events.py academic/benchmarks/core/bundle_cases.py academic/benchmarks/core/micro_maintenance.py
+```
+
 ## Chapter 4: BFCL 结构拆分
 
 ### Plan

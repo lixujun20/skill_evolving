@@ -15,6 +15,8 @@ def _load(path: Path) -> Dict[str, Any]:
 
 def _extract(payload: Dict[str, Any]) -> Dict[str, Any]:
     token_breakdown = dict(payload.get("token_breakdown") or {})
+    test_summary = dict(payload.get("test_summary") or {})
+    train_summary = dict(payload.get("train_summary") or {})
     summary = dict(token_breakdown.get("summary") or {})
     by_role = dict(token_breakdown.get("by_role") or {})
     by_phase = dict(token_breakdown.get("by_phase") or {})
@@ -22,8 +24,13 @@ def _extract(payload: Dict[str, Any]) -> Dict[str, Any]:
         "summary": summary,
         "by_role": by_role,
         "by_phase": by_phase,
-        "test_summary": dict(payload.get("test_summary") or {}),
-        "train_summary": dict(payload.get("train_summary") or {}),
+        "executor_cost_breakdown": dict(
+            payload.get("cost_breakdown")
+            or test_summary.get("cost_breakdown")
+            or {}
+        ),
+        "test_summary": test_summary,
+        "train_summary": train_summary,
     }
 
 

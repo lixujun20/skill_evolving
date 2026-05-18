@@ -12,6 +12,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     _run_related_evolve_experiment,
 )
 from academic.benchmarks.bfcl.maintenance.adapter import (
+    _domains_from_segment_dicts,
     refine_bfcl_skill_store_llm,
     run_bfcl_overlap_refactor_llm,
     update_skill_relation_graph,
@@ -524,8 +525,95 @@ def test_paper_new_refine_prompt_explains_keep_and_dependency_fields() -> None:
     assert "current artifact" in REFINE_SYSTEM
     assert "A post-bundle strict failure is not a reason to" in REFINE_SYSTEM
     assert "keep by default" in REFINE_SYSTEM
+    assert "Strong harmful credit must not be ignored" in REFINE_SYSTEM
+    assert "artifact.metadata.retrieval_guard.excluded_domains" in REFINE_SYSTEM
     assert "`artifact`: when action is `keep`, return {}" in REFINE_SYSTEM
     assert "`artifact.dependencies`: list only named skills" in REFINE_SYSTEM
+
+
+def test_paper_new_refactor_domains_are_inferred_from_clique_segments() -> None:
+    segments = [
+        {
+            "segment_id": "multi_turn_base_178:turn:1",
+            "raw": {"task": {"metadata": {"involved_classes": ["TravelAPI", "TicketAPI"]}}},
+            "metadata": {"node_type": "trace_segment"},
+        },
+        {
+            "segment_id": "multi_turn_base_190:turn:2",
+            "raw": {"task": {"metadata": {"involved_classes": ["TravelAPI", "TicketAPI"]}}},
+            "metadata": {"node_type": "trace_segment"},
+        },
+    ]
+
+    assert _domains_from_segment_dicts(segments) == ["TravelAPI", "TicketAPI"]
+
+
+async def test_paper_new_refiner_keep_is_overridden_for_strong_harmful_credit(monkeypatch) -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(
+                name="tradingbot_direct_ticker_binding",
+                kind="interface_contract_card",
+                description="Bind company names directly to tickers.",
+                body="Use AAPL or ZETA directly for TradingBot calls.",
+                metadata={"domains": ["TradingBot"], "allowed_tools": ["get_stock_info", "place_order"]},
+            )
+        ]
+    )
+    test_result = SkillTestResult(
+        result_id="tradingbot_direct_ticker_binding:bundle:vehicle_negative",
+        skill_name="tradingbot_direct_ticker_binding",
+        skill_version=1,
+        bundle_id="tradingbot_direct_ticker_binding.bundle",
+        bundle_version=1,
+        run_label="credit_pre_refine",
+        aggregate={"pass_all_tests": False, "n_regressed": 1, "n_improved": 0, "credit_pre_refine": True},
+        integration_failures=[{"source": "credit_assignment"}],
+    )
+
+    async def fake_refine(_artifact, **_kwargs):
+        return {
+            "decision": {
+                "action": "keep",
+                "reason": "Current artifact remains valid.",
+                "version_kind": "minor",
+                "migration_reason": "",
+                "pinned_dependencies": [],
+            },
+            "artifact": {},
+            "bundle": {"positive_cases": [], "negative_cases": [], "integration_cases": []},
+        }
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.maintenance.adapter.refine_skill_artifact_llm", fake_refine)
+
+    decisions = await refine_bfcl_skill_store_llm(
+        store,
+        maintenance_test_results=[test_result],
+        artifact_names=["tradingbot_direct_ticker_binding"],
+        llm_config="mock",
+        credit_context_by_skill={
+            "tradingbot_direct_ticker_binding": [
+                {
+                    "task_id": "multi_turn_base_93",
+                    "judgment": "harmful",
+                    "effect_type": "domain_mismatch",
+                    "confidence": 0.85,
+                    "reason": "TradingBot skill was injected into a VehicleControlAPI task.",
+                    "maintenance_actions": [{"action": "narrow_scope", "reason": "exclude vehicle domain"}],
+                    "evidence": {"trace_signals": ["domain mismatch: VehicleControlAPI fuel and engine task"]},
+                }
+            ]
+        },
+    )
+    refined = store.get("tradingbot_direct_ticker_binding")
+
+    assert decisions[0]["action"] == "refine_minor"
+    assert decisions[0]["original_action"] == "keep"
+    assert decisions[0]["fallback"] == "strong_harm_scope_guard"
+    assert refined is not None
+    assert refined.version == 2
+    assert refined.metadata["last_refiner_keep_overridden"] is True
+    assert "VehicleControlAPI" in refined.metadata["retrieval_guard"]["excluded_domains"]
 
 
 def test_paper_new_static_dependency_validator_records_code_like_calls() -> None:

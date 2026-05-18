@@ -89,9 +89,18 @@ def bfcl_retrieval_context(
 
 
 def bfcl_skill_matches_task(skill: SkillArtifact, task: BenchmarkTask) -> bool:
+    return bfcl_skill_task_filter_reason(skill, task) == ""
+
+
+def bfcl_skill_task_filter_reason(skill: SkillArtifact, task: BenchmarkTask) -> str:
     task_domains = {
         str(item).strip()
         for item in (task.metadata.get("involved_classes", []) if task.metadata else [])
+        if str(item).strip()
+    }
+    skill_domains_raw = {
+        str(item).strip()
+        for item in (skill.metadata.get("domains") or [])
         if str(item).strip()
     }
     skill_domains = {
@@ -99,8 +108,16 @@ def bfcl_skill_matches_task(skill: SkillArtifact, task: BenchmarkTask) -> bool:
         for item in (skill.metadata.get("domains") or [])
         if str(item).strip() and str(item).strip().lower() != "all"
     }
+    retrieval_guard = dict(skill.metadata.get("retrieval_guard") or {})
+    excluded_domains = {
+        str(item).strip()
+        for item in (retrieval_guard.get("excluded_domains") or [])
+        if str(item).strip()
+    }
+    if task_domains and excluded_domains and (task_domains & excluded_domains):
+        return "excluded_by_refined_scope"
     if task_domains and skill_domains and not (task_domains & skill_domains):
-        return False
+        return "domain_mismatch"
 
     query = task_query_text(task).lower()
     forbid_keywords = [
@@ -109,9 +126,23 @@ def bfcl_skill_matches_task(skill: SkillArtifact, task: BenchmarkTask) -> bool:
         if str(item).strip()
     ]
     if forbid_keywords and any(keyword in query for keyword in forbid_keywords):
-        return False
+        return "forbid_keyword"
 
-    return True
+    if task_domains and not skill_domains and "all" not in {item.lower() for item in skill_domains_raw}:
+        # Refactor-created skills occasionally arrive without domain metadata.
+        # Do not let pure vector similarity inject those skills across domains;
+        # require concrete tool/intent evidence from the user text.
+        intent_keywords = [
+            str(item).strip().lower()
+            for item in (skill.metadata.get("intent_keywords") or [])
+            if str(item).strip()
+        ]
+        intent_overlap = sum(1 for keyword in intent_keywords if keyword in query)
+        tool_overlap = query_tool_overlap_score(skill, query)
+        if tool_overlap <= 0 or intent_overlap <= 0:
+            return "missing_domain_requires_strong_tool_and_intent_match"
+
+    return ""
 
 
 def bfcl_skill_rerank_key(
@@ -170,6 +201,7 @@ __all__ = [
     "error_aware_skill_query",
     "bfcl_retrieval_context",
     "bfcl_skill_matches_task",
+    "bfcl_skill_task_filter_reason",
     "bfcl_skill_rerank_key",
     "bfcl_skill_matches_turn",
 ]

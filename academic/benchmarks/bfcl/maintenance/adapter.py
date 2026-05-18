@@ -279,6 +279,21 @@ def _domains_from_results(results: List[Dict[str, Any]]) -> List[str]:
     return domains
 
 
+def _domains_from_segment_dicts(segments: Sequence[Dict[str, Any]]) -> List[str]:
+    domains: List[str] = []
+    for segment in segments:
+        candidates = [
+            dict(((segment.get("raw") or {}).get("task") or {}).get("metadata") or {}),
+            dict(segment.get("metadata") or {}),
+        ]
+        for metadata in candidates:
+            for item in (metadata.get("involved_classes") or metadata.get("domains") or []):
+                value = str(item).strip()
+                if value and value not in domains:
+                    domains.append(value)
+    return domains
+
+
 def _intent_keywords_from_results(results: List[Dict[str, Any]]) -> List[str]:
     keywords: List[str] = []
     for result in results:
@@ -942,6 +957,122 @@ def _tool_schemas_for_source_task(source_task: Dict[str, Any]) -> Dict[str, Dict
         }
     except Exception:
         return {}
+
+
+_BFCL_DOMAIN_NAMES = {
+    "TradingBot",
+    "VehicleControlAPI",
+    "TravelAPI",
+    "TicketAPI",
+    "TwitterAPI",
+    "GorillaFileSystem",
+}
+
+
+def _domains_mentioned_in_text(text: str) -> List[str]:
+    lower = str(text or "").lower()
+    out: List[str] = []
+    for name in sorted(_BFCL_DOMAIN_NAMES):
+        if name.lower() in lower:
+            out.append(name)
+    return out
+
+
+def _strong_harmful_credit_context(credit_context: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    strong: List[Dict[str, Any]] = []
+    for event in credit_context:
+        if str(event.get("judgment") or "").strip().lower() != "harmful":
+            continue
+        confidence = float(event.get("confidence") or 0.0)
+        effect_type = str(event.get("effect_type") or "").strip().lower()
+        evidence_strength = str(event.get("evidence_strength") or "").strip().lower()
+        actions = [
+            str(item.get("action") or "").strip().lower()
+            for item in (event.get("maintenance_actions") or [])
+            if isinstance(item, dict)
+        ]
+        if (
+            confidence >= 0.65
+            and (
+                effect_type in {"domain_mismatch", "workflow_pollution", "schema_harm", "correctness_harm"}
+                or evidence_strength in {"strong", "medium"}
+                or any(action in {"narrow_scope", "fix_schema_contract", "refine_workflow", "disable_candidate"} for action in actions)
+            )
+        ):
+            strong.append(dict(event))
+    return strong
+
+
+def _fallback_scope_refine_payload_for_strong_harm(
+    artifact: SkillArtifact,
+    *,
+    credit_context: Sequence[Dict[str, Any]],
+    decision_reason: str,
+) -> Dict[str, Any] | None:
+    strong_harm = _strong_harmful_credit_context(credit_context)
+    if not strong_harm:
+        return None
+    excluded_domains: List[str] = []
+    harmful_task_ids: List[str] = []
+    reasons: List[str] = []
+    for event in strong_harm:
+        task_id = str(event.get("task_id") or "").strip()
+        if task_id and task_id not in harmful_task_ids:
+            harmful_task_ids.append(task_id)
+        text = " ".join(
+            [
+                str(event.get("effect_type") or ""),
+                str(event.get("reason") or ""),
+                " ".join(str(item) for item in ((event.get("evidence") or {}).get("trace_signals") or [])),
+            ]
+        )
+        for domain in _domains_mentioned_in_text(text):
+            if domain not in excluded_domains and domain not in set(artifact.metadata.get("domains") or []):
+                excluded_domains.append(domain)
+        if event.get("reason"):
+            reasons.append(str(event["reason"]))
+
+    current_guard = dict(artifact.metadata.get("retrieval_guard") or {})
+    merged_excluded = sorted(set(list(current_guard.get("excluded_domains") or []) + excluded_domains))
+    metadata_patch = {
+        "retrieval_scope_refine_required": False,
+        "retrieval_guard": {
+            **current_guard,
+            "excluded_domains": merged_excluded,
+            "harmful_task_ids": sorted(set(list(current_guard.get("harmful_task_ids") or []) + harmful_task_ids)),
+            "source": "strong_harmful_credit_fallback",
+        },
+        "last_refiner_keep_overridden": True,
+        "last_refiner_keep_reason": decision_reason,
+    }
+    notes = " ".join(reasons[:2])
+    return {
+        "decision": {
+            "action": "refine_minor",
+            "reason": (
+                "LLM returned keep despite strong harmful credit; applying minimal retrieval scope guard. "
+                + notes[:500]
+            ).strip(),
+            "version_kind": "minor",
+            "migration_reason": "strong_harmful_credit_scope_guard",
+            "pinned_dependencies": [],
+        },
+        "artifact": {
+            "metadata": metadata_patch,
+            "interface": {
+                "summary": artifact.interface.summary or artifact.description,
+                "usage": artifact.interface.usage,
+                "input_contract": artifact.interface.input_contract,
+                "output_contract": artifact.interface.output_contract,
+                "invocation_contract": artifact.interface.invocation_contract,
+                "compatibility_notes": (
+                    (artifact.interface.compatibility_notes or "")
+                    + " Retrieval is narrowed away from domains that produced strong harmful credit."
+                ).strip(),
+            },
+        },
+        "bundle": {"positive_cases": [], "negative_cases": [], "integration_cases": []},
+    }
 
 
 def _parse_expected_call_source(call: str) -> Tuple[str, Dict[str, Any]]:
@@ -2278,6 +2409,45 @@ async def refine_bfcl_skill_store_llm(
         action = str((payload.get("decision") or {}).get("action") or "keep")
         decision_reason = str((payload.get("decision") or {}).get("reason") or "")
         if action == "keep":
+            fallback_payload = _fallback_scope_refine_payload_for_strong_harm(
+                artifact,
+                credit_context=credit_context,
+                decision_reason=decision_reason,
+            )
+            if fallback_payload is not None:
+                updated = await apply_refine_payload_via_editor(artifact, fallback_payload)
+                updated.metadata["refinement_history"] = refinement_history + [
+                    {
+                        "test_result_id": test_result.result_id,
+                        "decision": copy.deepcopy(fallback_payload.get("decision") or {}),
+                        "llm_original_decision": copy.deepcopy(payload.get("decision") or {}),
+                    }
+                ]
+                updated.lineage = SkillLineage(
+                    parent_version=artifact.version,
+                    parent_version_id=artifact.version_id(),
+                    version_kind="minor",
+                    migration_reason=str((fallback_payload.get("decision") or {}).get("migration_reason") or ""),
+                    refined_from_result_ids=list(artifact.lineage.refined_from_result_ids or []) + [test_result.result_id],
+                    refactor_group_id=artifact.lineage.refactor_group_id,
+                )
+                store.add(updated)
+                update_skill_relation_graph(
+                    store,
+                    refines={updated.name: [artifact.name]},
+                )
+                decisions.append(
+                    {
+                        "skill_name": artifact.name,
+                        "action": "refine_minor",
+                        "reason": str((fallback_payload.get("decision") or {}).get("reason") or ""),
+                        "version_before": artifact.version,
+                        "version_after": store.get(artifact.name).version if store.get(artifact.name) else artifact.version,
+                        "original_action": "keep",
+                        "fallback": "strong_harm_scope_guard",
+                    }
+                )
+                continue
             artifact.metadata["last_refine_reason"] = decision_reason or artifact.metadata.get("last_refine_reason", "")
             artifact.metadata["refinement_history"] = refinement_history + [
                 {
@@ -2529,6 +2699,15 @@ async def run_bfcl_overlap_refactor_llm(
             shared.metadata["source_task_ids"] = source_task_ids
             shared.metadata["source_segments"] = list(clique.segment_ids)
             shared.metadata["overlap_edges"] = [edge.as_dict() for edge in clique.edges]
+            inferred_domains = _domains_from_segment_dicts(selected_segments)
+            existing_domains = [
+                str(item).strip()
+                for item in (shared.metadata.get("domains") or [])
+                if str(item).strip() and str(item).strip().lower() != "all"
+            ]
+            if inferred_domains:
+                shared.metadata["domains"] = sorted(set(existing_domains + inferred_domains))
+                shared.metadata["domains_inferred_from_refactor_segments"] = True
 
             existing_by_name = {skill.name: skill for skill in store.all()}
             updates = apply_affected_skill_updates(

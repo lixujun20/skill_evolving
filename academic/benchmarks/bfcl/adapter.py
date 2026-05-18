@@ -51,6 +51,7 @@ from academic.benchmarks.bfcl.models import BFCLToolCall, BFCLTrace
 from academic.benchmarks.bfcl.retrieval import (
     bfcl_retrieval_context as _bfcl_retrieval_context,
     bfcl_skill_matches_task as _bfcl_skill_matches_task,
+    bfcl_skill_task_filter_reason as _bfcl_skill_task_filter_reason,
     bfcl_skill_matches_turn as _bfcl_skill_matches_turn,
     bfcl_skill_rerank_key as _bfcl_skill_rerank_key,
     error_aware_skill_query as _error_aware_skill_query,
@@ -66,6 +67,8 @@ from academic.benchmarks.bfcl.tool_clients import (
     resolve_tool_api_style as _resolve_tool_api_style,
 )
 from academic.benchmarks.core.artifacts import ArtifactStore
+from academic.benchmarks.core.cost_accounting import make_cost_event
+from academic.benchmarks.core.skill_injector import BudgetSkillInjector, compact_skill_prompt_block
 from academic.benchmarks.core.types import BenchmarkResult, BenchmarkTask, SkillArtifact
 from academic.skill_repository.debug_events import DebugEventSink, skill_store_snapshot
 
@@ -164,26 +167,49 @@ def _skill_tool_name(skill: SkillArtifact) -> str:
 def _skill_tool_schemas(skills: List[SkillArtifact]) -> List[Dict[str, Any]]:
     schemas: List[Dict[str, Any]] = []
     for skill in skills:
+        params = _skill_invocation_parameters(skill)
         schemas.append(
             {
                 "type": "function",
                 "function": {
                     "name": _skill_tool_name(skill),
-                    "description": skill.description[:900],
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "question": {
-                                "type": "string",
-                                "description": "Optional reason for consulting this skill.",
-                            }
-                        },
-                        "required": [],
-                    },
+                    "description": _skill_tool_description(skill),
+                    "parameters": params,
                 },
             }
         )
     return schemas
+
+
+def _skill_tool_description(skill: SkillArtifact) -> str:
+    steps = _bfcl_function_steps(skill)
+    if steps:
+        return (
+            f"{skill.description[:650]} This is an executable composite skill: "
+            "calling it expands into raw BFCL domain tool calls. Use only when "
+            "the current user turn exactly matches the skill contract."
+        )[:900]
+    return skill.description[:900]
+
+
+def _skill_invocation_parameters(skill: SkillArtifact) -> Dict[str, Any]:
+    contract = dict(skill.interface.invocation_contract or {})
+    params = contract.get("parameters") or contract.get("input_schema")
+    if isinstance(params, dict) and params.get("type") == "object":
+        return params
+    input_contract = skill.interface.input_contract
+    if isinstance(input_contract, dict) and input_contract.get("type") == "object":
+        return input_contract
+    return {
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "Optional reason for consulting this skill.",
+            }
+        },
+        "required": [],
+    }
 
 
 def _split_skills_for_injection(
@@ -341,6 +367,7 @@ class _RetrievalPolicy:
         phase = "turn_start"
         query = _turn_query_text(user_messages)
         tool_name: str | None = None
+        predicate_reasons: Dict[str, str] = {}
         if observation is not None and observation.is_actionable_error():
             phase = "previous_observation"
             tool_name = observation.tool_name or None
@@ -352,13 +379,21 @@ class _RetrievalPolicy:
                 args=observation.arguments,
                 error=observation.error,
             )
+        def _predicate(artifact: SkillArtifact) -> bool:
+            reason = _bfcl_skill_task_filter_reason(artifact, self.task)
+            if reason:
+                predicate_reasons[artifact.name] = reason
+                return False
+            passed = _bfcl_skill_matches_turn(artifact, self.task, turn_index, user_messages)
+            if not passed:
+                predicate_reasons[artifact.name] = "turn_scope_mismatch"
+            return passed
+
         audit = self.store.retrieve_audit(
             query,
             top_k=self.top_k_skills,
             min_score=self.min_skill_score,
-            predicate=lambda artifact: _bfcl_skill_matches_turn(
-                artifact, self.task, turn_index, user_messages
-            ),
+            predicate=_predicate,
             rerank_key=lambda artifact: _bfcl_skill_rerank_key(
                 artifact,
                 self.task,
@@ -372,6 +407,11 @@ class _RetrievalPolicy:
                 tool_name=tool_name,
             ),
         )
+        if predicate_reasons:
+            for row in audit.get("candidates") or []:
+                reason = predicate_reasons.get(str(row.get("name") or ""))
+                if reason and row.get("filter_reason") == "predicate_false":
+                    row["filter_reason"] = reason
         return _retrieved_from_audit(self.store, audit), audit, query
 
     def retrieve_for_turn(
@@ -385,29 +425,53 @@ class _RetrievalPolicy:
 
 
 class _SkillInjectionPolicy:
-    def __init__(self, *, mode: str) -> None:
+    def __init__(self, *, mode: str, budget_injector: BudgetSkillInjector | None = None) -> None:
         self.mode = mode
+        self.budget_injector = budget_injector
 
-    def initial_selection(self, retrieved_by_turn: List[List[SkillArtifact]]) -> Tuple[List[List[SkillArtifact]], List[SkillArtifact]]:
+    def initial_selection(
+        self,
+        retrieved_by_turn: List[List[SkillArtifact]],
+        *,
+        turn_queries: List[str] | None = None,
+    ) -> Tuple[List[List[SkillArtifact]], List[SkillArtifact], List[Dict[str, Any]]]:
         prompt_skills_by_turn: List[List[SkillArtifact]] = []
         tool_skills: List[SkillArtifact] = []
         seen_tool_skills: set[str] = set()
-        for turn_skills in retrieved_by_turn:
+        injector_events: List[Dict[str, Any]] = []
+        for idx, turn_skills in enumerate(retrieved_by_turn):
             prompt_turn, tool_turn = _split_skills_for_injection(turn_skills, self.mode)
+            if self.budget_injector is not None:
+                injection = self.budget_injector.select(
+                    prompt_turn,
+                    query=(turn_queries or [""])[idx] if idx < len(turn_queries or []) else "",
+                    allowed_injection_types={"informational", "workflow"},
+                )
+                prompt_turn = injection.artifacts
+                event = injection.as_event()
+                event["turn_index"] = idx
+                injector_events.append(event)
             prompt_skills_by_turn.append(prompt_turn)
             for skill in tool_turn:
                 if skill.name not in seen_tool_skills:
                     seen_tool_skills.add(skill.name)
                     tool_skills.append(skill)
-        return prompt_skills_by_turn, tool_skills
+        return prompt_skills_by_turn, tool_skills, injector_events
 
     def merge_prompt_skills(
         self,
         *,
         current: List[SkillArtifact],
         retrieved: List[SkillArtifact],
+        query: str = "",
     ) -> Tuple[List[SkillArtifact], List[SkillArtifact]]:
         prompt_skills, _tool_skills = _split_skills_for_injection(retrieved, self.mode)
+        if self.budget_injector is not None:
+            prompt_skills = self.budget_injector.select(
+                prompt_skills,
+                query=query,
+                allowed_injection_types={"informational", "workflow"},
+            ).artifacts
         existing = {skill.name for skill in current}
         added: List[SkillArtifact] = []
         merged = list(current)
@@ -447,6 +511,156 @@ class _ToolCallOutcome:
         self.observation = observation
 
 
+def _bfcl_function_steps(skill: SkillArtifact) -> List[Dict[str, Any]]:
+    metadata = skill.metadata or {}
+    raw = (
+        metadata.get("bfcl_function_steps")
+        or metadata.get("function_steps")
+        or (skill.interface.invocation_contract or {}).get("bfcl_function_steps")
+        or (skill.interface.invocation_contract or {}).get("function_steps")
+    )
+    if not isinstance(raw, list):
+        return []
+    return [dict(item) for item in raw if isinstance(item, dict)]
+
+
+def _execute_bfcl_function_skill(
+    *,
+    skill: SkillArtifact,
+    invocation_args: Dict[str, Any],
+    turn_index: int,
+    step_index: int,
+    trace: BFCLTrace,
+    local_sink: DebugEventSink,
+    skill_tools_by_name: Dict[str, SkillArtifact],
+    available_tools: List[Dict[str, Any]],
+    env: Any,
+    depth: int = 0,
+    call_stack: List[str] | None = None,
+) -> Dict[str, Any]:
+    steps = _bfcl_function_steps(skill)
+    if not steps:
+        return {"executed": False, "reason": "no_bfcl_function_steps"}
+    call_stack = list(call_stack or [])
+    if depth >= 8 or skill.name in call_stack:
+        return {
+            "executed": False,
+            "reason": "recursive_function_skill_limit",
+            "skill_name": skill.name,
+            "call_stack": call_stack,
+        }
+    executed_steps: List[Dict[str, Any]] = []
+    for idx, step in enumerate(steps):
+        target = str(step.get("tool") or step.get("raw_tool") or step.get("skill") or step.get("name") or "").strip()
+        if not target:
+            executed_steps.append({"step_index": idx, "executed": False, "reason": "missing_target"})
+            continue
+        step_args = _resolve_bfcl_step_args(step.get("arguments", step.get("args", {})), invocation_args)
+        nested_skill = _resolve_bfcl_step_skill(target, skill_tools_by_name)
+        if nested_skill is not None:
+            nested = _execute_bfcl_function_skill(
+                skill=nested_skill,
+                invocation_args=step_args,
+                turn_index=turn_index,
+                step_index=step_index,
+                trace=trace,
+                local_sink=local_sink,
+                skill_tools_by_name=skill_tools_by_name,
+                available_tools=available_tools,
+                env=env,
+                depth=depth + 1,
+                call_stack=[*call_stack, skill.name],
+            )
+            trace.called_skill_tools.append(nested_skill.name)
+            executed_steps.append(
+                {
+                    "step_index": idx,
+                    "target_type": "function_skill",
+                    "target": nested_skill.name,
+                    "arguments": step_args,
+                    "result": nested,
+                }
+            )
+            continue
+        canonical = _canonical_tool_name(target, available_tools)
+        result, error = env.call(canonical, step_args)
+        call = BFCLToolCall(
+            name=canonical,
+            arguments=step_args,
+            turn_index=turn_index,
+            tool_call_id=f"skill::{skill.name}::{idx}",
+            result=result,
+            error=error,
+        )
+        trace.tool_calls.append(call)
+        local_sink.emit(
+            "function_skill_raw_tool_call",
+            turn_index=turn_index,
+            step_index=step_index,
+            input={
+                "skill_name": skill.name,
+                "step_index": idx,
+                "raw_target": target,
+                "canonical_tool_name": canonical,
+                "arguments": step_args,
+            },
+            output=call.as_dict(),
+        )
+        executed_steps.append(
+            {
+                "step_index": idx,
+                "target_type": "raw_bfcl_tool",
+                "target": canonical,
+                "arguments": step_args,
+                "error": error,
+                "result": result,
+            }
+        )
+    return {
+        "executed": True,
+        "skill_name": skill.name,
+        "raw_tool_calls": [
+            step for step in executed_steps if step.get("target_type") == "raw_bfcl_tool"
+        ],
+        "steps": executed_steps,
+    }
+
+
+def _resolve_bfcl_step_skill(
+    target: str,
+    skill_tools_by_name: Dict[str, SkillArtifact],
+) -> SkillArtifact | None:
+    if target in skill_tools_by_name:
+        return skill_tools_by_name[target]
+    key = f"skill__{target}"
+    if key in skill_tools_by_name:
+        return skill_tools_by_name[key]
+    for skill in skill_tools_by_name.values():
+        if skill.name == target:
+            return skill
+    return None
+
+
+def _resolve_bfcl_step_args(value: Any, invocation_args: Dict[str, Any]) -> Any:
+    if isinstance(value, dict):
+        return {str(k): _resolve_bfcl_step_args(v, invocation_args) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_bfcl_step_args(item, invocation_args) for item in value]
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("$") and len(text) > 1:
+            return copy.deepcopy(invocation_args.get(text[1:], value))
+        if re.fullmatch(r"\{\{[A-Za-z_][A-Za-z0-9_]*\}\}", text):
+            return copy.deepcopy(invocation_args.get(text[2:-2], value))
+        if re.fullmatch(r"\{[A-Za-z_][A-Za-z0-9_]*\}", text):
+            return copy.deepcopy(invocation_args.get(text[1:-1], value))
+        def repl(match: re.Match[str]) -> str:
+            key = match.group(1) or match.group(2)
+            return str(invocation_args.get(key, match.group(0)))
+        return re.sub(r"\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}|\{([A-Za-z_][A-Za-z0-9_]*)\}", repl, value)
+    return copy.deepcopy(value)
+
+
 class _ToolCallHandler:
     def can_handle(self, *, tool_name: str, skill_tools_by_name: Dict[str, SkillArtifact]) -> bool:
         raise NotImplementedError
@@ -465,6 +679,7 @@ class _ToolCallHandler:
         tool_client: _ToolApiClient,
         local_sink: DebugEventSink,
         skill_tools_by_name: Dict[str, SkillArtifact],
+        available_tools: List[Dict[str, Any]],
         env: Any,
     ) -> _ToolCallOutcome:
         raise NotImplementedError
@@ -488,6 +703,7 @@ class _SkillToolCallHandler(_ToolCallHandler):
         tool_client: _ToolApiClient,
         local_sink: DebugEventSink,
         skill_tools_by_name: Dict[str, SkillArtifact],
+        available_tools: List[Dict[str, Any]],
         env: Any,
     ) -> _ToolCallOutcome:
         skill = skill_tools_by_name[tool_name]
@@ -501,23 +717,37 @@ class _SkillToolCallHandler(_ToolCallHandler):
         }
         trace.skill_events.append(event)
         trace.called_skill_tools.append(skill.name)
+        executed = _execute_bfcl_function_skill(
+            skill=skill,
+            invocation_args=args,
+            turn_index=turn_index,
+            step_index=step_index,
+            trace=trace,
+            local_sink=local_sink,
+            skill_tools_by_name=skill_tools_by_name,
+            available_tools=available_tools,
+            env=env,
+        )
         local_sink.emit(
             "skill_tool_call",
             turn_index=turn_index,
             step_index=step_index,
             input=event,
-            output={"skill": _skill_brief(skill), "body": skill.body},
+            output={"skill": _skill_brief(skill), "body": skill.body, "executed": executed},
         )
-        skill_content = json.dumps(
-            {
-                "skill_name": skill.name,
-                "kind": skill.kind,
-                "injection_type": skill.injection_type(),
-                "description": skill.description,
-                "body": skill.body,
-            },
-            ensure_ascii=False,
-        )
+        if executed.get("executed"):
+            skill_content = json.dumps(executed, ensure_ascii=False)
+        else:
+            skill_content = json.dumps(
+                {
+                    "skill_name": skill.name,
+                    "kind": skill.kind,
+                    "injection_type": skill.injection_type(),
+                    "description": skill.description,
+                    "body": skill.body,
+                },
+                ensure_ascii=False,
+            )
         messages.append(tool_client.tool_result_message(tc["id"], skill_content))
         trace.messages.append(messages[-1])
         return _ToolCallOutcome()
@@ -541,6 +771,7 @@ class _UseSkillCallHandler(_ToolCallHandler):
         tool_client: _ToolApiClient,
         local_sink: DebugEventSink,
         skill_tools_by_name: Dict[str, SkillArtifact],
+        available_tools: List[Dict[str, Any]],
         env: Any,
     ) -> _ToolCallOutcome:
         event = {
@@ -581,6 +812,7 @@ class _DomainToolCallHandler(_ToolCallHandler):
         tool_client: _ToolApiClient,
         local_sink: DebugEventSink,
         skill_tools_by_name: Dict[str, SkillArtifact],
+        available_tools: List[Dict[str, Any]],
         env: Any,
     ) -> _ToolCallOutcome:
         result, error = env.call(tool_name, args)
@@ -642,6 +874,8 @@ async def run_bfcl_task(
     synthetic_continue: bool = False,
     tool_api_style: str = "auto",
     skill_injection_mode: str = "prompt_only",
+    skill_injector_mode: str | None = None,
+    skill_context_budget_chars: int | None = None,
     debug_sink: DebugEventSink | None = None,
     max_task_seconds: float | None = None,
 ) -> BenchmarkResult:
@@ -662,6 +896,7 @@ async def run_bfcl_task(
         tools, task, adapter_mode=adapter_mode, enable_skill_tool=enable_skill_tool
     )
     trace = BFCLTrace(task_id=task.task_id)
+    cost_events: List[Dict[str, Any]] = []
     local_sink = debug_sink or DebugEventSink.from_env(
         base_context={"task_id": task.task_id, "component": "bfcl_executor"}
     )
@@ -687,20 +922,38 @@ async def run_bfcl_task(
         top_k_skills=top_k_skills,
         min_skill_score=min_skill_score,
     )
-    injection_policy = _SkillInjectionPolicy(mode=skill_injection_mode)
+    injector_mode = (
+        skill_injector_mode
+        or os.environ.get("BFCL_SKILL_INJECTOR_MODE")
+        or os.environ.get("SKILL_INJECTOR_MODE")
+        or "full"
+    ).strip().lower()
+    budget_injector = None
+    if injector_mode not in {"", "full"}:
+        budget_injector = BudgetSkillInjector(
+            mode=injector_mode,
+            max_full_skills=int(os.environ.get("BFCL_SKILL_INJECTOR_MAX_FULL_SKILLS", os.environ.get("SKILL_INJECTOR_MAX_FULL_SKILLS", "0")) or "0"),
+            max_summary_skills=int(os.environ.get("BFCL_SKILL_INJECTOR_MAX_SUMMARY_SKILLS", os.environ.get("SKILL_INJECTOR_MAX_SUMMARY_SKILLS", "1")) or "1"),
+            budget_chars=int(skill_context_budget_chars or os.environ.get("BFCL_SKILL_CONTEXT_BUDGET_CHARS", os.environ.get("SKILL_INJECTOR_BUDGET_CHARS", "1800")) or "1800"),
+            compact_chars_per_skill=int(os.environ.get("BFCL_SKILL_COMPACT_CHARS_PER_SKILL", os.environ.get("SKILL_INJECTOR_COMPACT_CHARS_PER_SKILL", "900")) or "900"),
+        )
+    injection_policy = _SkillInjectionPolicy(mode=skill_injection_mode, budget_injector=budget_injector)
     retrieved_by_turn: List[List[SkillArtifact]] = []
+    turn_queries: List[str] = []
     for turn_index, user_messages in enumerate(task.question):
+        query_text = _turn_query_text(user_messages)
         turn_skills, audit = retrieval_policy.retrieve_for_turn(
             turn_index=turn_index,
             user_messages=user_messages,
         )
         retrieved_by_turn.append(turn_skills)
+        turn_queries.append(query_text)
         if audit:
             local_sink.emit(
                 "retrieval",
                 turn_index=turn_index,
                 trigger="turn_start",
-                input={"query": _turn_query_text(user_messages), "user_messages": user_messages},
+                input={"query": query_text, "user_messages": user_messages},
                 output=audit,
             )
     retrieved_unique: List[SkillArtifact] = []
@@ -710,7 +963,10 @@ async def run_bfcl_task(
             if skill.name not in seen_retrieved:
                 seen_retrieved.add(skill.name)
                 retrieved_unique.append(skill)
-    prompt_skills_by_turn, tool_skills = injection_policy.initial_selection(retrieved_by_turn)
+    prompt_skills_by_turn, tool_skills, injector_events = injection_policy.initial_selection(
+        retrieved_by_turn,
+        turn_queries=turn_queries,
+    )
     dynamic_prompt_skills_by_turn: List[List[SkillArtifact]] = [list(items) for items in prompt_skills_by_turn]
     trace.retrieved_skills = [skill.name for skill in retrieved_unique]
     trace.tool_injected_skills = [skill.name for skill in tool_skills]
@@ -720,8 +976,29 @@ async def run_bfcl_task(
             "retrieved_unique": [_skill_brief(skill) for skill in retrieved_unique],
             "prompt_skills_by_turn": [[_skill_brief(skill) for skill in items] for items in prompt_skills_by_turn],
             "tool_skills": [_skill_brief(skill) for skill in tool_skills],
+            "injector_mode": injector_mode,
+            "injector_events": injector_events,
         },
     )
+    for event in injector_events:
+        local_sink.emit("skill_injector", output=event)
+        cost_events.append(
+            make_cost_event(
+                role="injector",
+                phase="executor",
+                benchmark="bfcl_v3",
+                task_id=task.task_id,
+                model=model_name or "",
+                llm_config=llm_config,
+                skill_prompt_chars=int(event.get("prompt_chars") or 0),
+                metadata={
+                    "mode": event.get("mode"),
+                    "injected_count": event.get("injected_count"),
+                    "filtered_count": event.get("filtered_count"),
+                    "deterministic": True,
+                },
+            )
+        )
     skill_tools_by_name = {_skill_tool_name(skill): skill for skill in tool_skills}
     if tool_skills:
         tools = tools + _skill_tool_schemas(tool_skills)
@@ -751,7 +1028,14 @@ async def run_bfcl_task(
             for skill in turn_prompt_skills:
                 if skill.name not in trace.prompt_injected_skills:
                     trace.prompt_injected_skills.append(skill.name)
-            skill_prompt = artifact_store.build_prompt(turn_prompt_skills) if artifact_store else "(none)"
+            if budget_injector is not None:
+                skill_prompt = budget_injector.select(
+                    turn_prompt_skills,
+                    query=turn_queries[turn_index] if turn_index < len(turn_queries) else "",
+                    allowed_injection_types={"informational", "workflow"},
+                ).prompt()
+            else:
+                skill_prompt = artifact_store.build_prompt(turn_prompt_skills) if artifact_store else "(none)"
             prompt_frame = prompt_policy.build(
                 skill_prompt=skill_prompt,
                 state_summary=state_summary,
@@ -823,6 +1107,7 @@ async def run_bfcl_task(
                     merged_prompt, added_prompt = injection_policy.merge_prompt_skills(
                         current=dynamic_prompt_skills_by_turn[turn_index],
                         retrieved=observed_skills,
+                        query=observed_query,
                     )
                     dynamic_prompt_skills_by_turn[turn_index] = merged_prompt
                     for skill in observed_skills:
@@ -832,7 +1117,20 @@ async def run_bfcl_task(
                         if skill.name not in trace.prompt_injected_skills:
                             trace.prompt_injected_skills.append(skill.name)
                     if added_prompt:
-                        refreshed_prompt = artifact_store.build_prompt(dynamic_prompt_skills_by_turn[turn_index])
+                        if budget_injector is not None:
+                            refreshed_prompt = budget_injector.select(
+                                dynamic_prompt_skills_by_turn[turn_index],
+                                query=observed_query,
+                                allowed_injection_types={"informational", "workflow"},
+                            ).prompt()
+                            added_skill_prompt = budget_injector.select(
+                                added_prompt,
+                                query=observed_query,
+                                allowed_injection_types={"informational", "workflow"},
+                            ).prompt()
+                        else:
+                            refreshed_prompt = artifact_store.build_prompt(dynamic_prompt_skills_by_turn[turn_index])
+                            added_skill_prompt = artifact_store.build_prompt(added_prompt)
                         prompt_frame = prompt_policy.build(
                             skill_prompt=refreshed_prompt,
                             state_summary=state_summary,
@@ -840,7 +1138,7 @@ async def run_bfcl_task(
                         )
                         system = prompt_frame.system
                         step_context_msg = _step_skill_context_message(
-                            skill_prompt=artifact_store.build_prompt(added_prompt),
+                            skill_prompt=added_skill_prompt,
                             added_skills=added_prompt,
                         )
                         messages.append(step_context_msg)
@@ -855,6 +1153,25 @@ async def run_bfcl_task(
                                 "step_context_message": step_context_msg,
                                 "system": system,
                             },
+                        )
+                        cost_events.append(
+                            make_cost_event(
+                                role="injector",
+                                phase="executor_step_update",
+                                benchmark="bfcl_v3",
+                                task_id=task.task_id,
+                                turn_index=turn_index,
+                                step_index=step,
+                                model=model_name or "",
+                                llm_config=llm_config,
+                                skill_prompt_chars=len(added_skill_prompt),
+                                prompt_chars=len(str(step_context_msg.get("content", ""))),
+                                metadata={
+                                    "mode": injector_mode,
+                                    "added_skills": [skill.name for skill in added_prompt],
+                                    "deterministic": True,
+                                },
+                            )
                         )
                 model_response = await tool_client.ask(
                     messages=messages,
@@ -890,6 +1207,32 @@ async def run_bfcl_task(
                         "completion_tokens_used": tool_client.completion_tokens,
                     },
                 )
+                cost_events.append(
+                    make_cost_event(
+                        role="executor",
+                        phase="task_rollout",
+                        benchmark="bfcl_v3",
+                        task_id=task.task_id,
+                        turn_index=turn_index,
+                        step_index=step,
+                        model=model_name or "",
+                        llm_config=llm_config,
+                        input_tokens=int(getattr(model_response, "prompt_tokens", 0) or 0),
+                        cache_input_tokens=int(getattr(model_response, "cache_input_tokens", 0) or 0),
+                        output_tokens=int(getattr(model_response, "completion_tokens", 0) or 0),
+                        prompt_chars=sum(len(str(msg.get("content", ""))) for msg in messages[:-1]),
+                        skill_prompt_chars=len(skill_prompt),
+                        system_prompt_chars=len(system),
+                        tool_schema_chars=len(json.dumps(tools, ensure_ascii=False)),
+                        final_conversation_chars=sum(len(str(msg.get("content", ""))) for msg in messages),
+                        metadata={
+                            "prompt_style": prompt_style,
+                            "tool_api_style": resolved_api_style,
+                            "available_tool_count": len(tools),
+                            "skill_injector_mode": injector_mode,
+                        },
+                    )
+                )
                 if not tool_calls:
                     break
                 for tc in tool_calls:
@@ -919,6 +1262,7 @@ async def run_bfcl_task(
                         tool_client=tool_client,
                         local_sink=local_sink,
                         skill_tools_by_name=skill_tools_by_name,
+                        available_tools=tools,
                         env=env,
                     )
                     if outcome.observation is not None:
@@ -980,22 +1324,28 @@ async def run_bfcl_task(
         )
         trace.debug_events = local_sink.events[debug_start:]
         _compact_trace_for_level(trace, _bfcl_trace_detail_level())
+        trace_dict = trace.as_dict()
+        trace_dict["cost_events"] = list(cost_events)
         return BenchmarkResult(
             benchmark="bfcl_v3",
             task_id=task.task_id,
             success=False,
             score=0.0,
-            metrics={"exception": type(exc).__name__},
-            trace=trace.as_dict(),
+            metrics={"exception": type(exc).__name__, "cost_events": list(cost_events)},
+            trace=trace_dict,
             error=str(exc),
         )
 
     trace.elapsed_s = round(time.monotonic() - t0, 3)
     trace.total_tokens = tool_client.total_tokens()
     trace.completion_tokens = tool_client.completion_tokens
+    trace_dict_cost_events = list(cost_events)
     score = score_bfcl_calls(trace.tool_calls, task.expected)
     score["total_tokens"] = trace.total_tokens
+    score["input_tokens"] = int(getattr(tool_client, "prompt_tokens", 0) or 0)
+    score["cache_input_tokens"] = int(getattr(tool_client, "cache_input_tokens", 0) or 0)
     score["completion_tokens"] = trace.completion_tokens
+    score["cost_events"] = trace_dict_cost_events
     score["elapsed_s"] = trace.elapsed_s
     score["retrieved_skills"] = trace.retrieved_skills
     score["prompt_injected_skills"] = trace.prompt_injected_skills
@@ -1017,6 +1367,16 @@ async def run_bfcl_task(
     score["synthetic_continue"] = synthetic_continue
     score["tool_api_style"] = resolved_api_style
     score["skill_injection_mode"] = skill_injection_mode
+    score["skill_injector_mode"] = injector_mode
+    score["skill_context_budget_chars"] = (
+        int(skill_context_budget_chars)
+        if skill_context_budget_chars is not None
+        else (
+            int(os.environ.get("BFCL_SKILL_CONTEXT_BUDGET_CHARS"))
+            if os.environ.get("BFCL_SKILL_CONTEXT_BUDGET_CHARS")
+            else None
+        )
+    )
     if model_name:
         score["model_name"] = model_name
     official_check = score_bfcl_official(trace.tool_calls, task)
@@ -1042,13 +1402,15 @@ async def run_bfcl_task(
     )
     trace.debug_events = local_sink.events[debug_start:]
     _compact_trace_for_level(trace, _bfcl_trace_detail_level())
+    trace_dict = trace.as_dict()
+    trace_dict["cost_events"] = trace_dict_cost_events
     return BenchmarkResult(
         benchmark="bfcl_v3",
         task_id=task.task_id,
         success=bool(score["task_success"]),
         score=float(score["call_f1"]),
         metrics=score,
-        trace=trace.as_dict(),
+        trace=trace_dict,
     )
 
 
@@ -1108,7 +1470,15 @@ def _turn_skill_constraints(
         "Retrieved constraints for this turn. Treat them as local execution rules when applicable:"
     ]
     for skill in skills[:4]:
-        lines.append(f"- {skill.name}: {skill.body}")
+        if os.environ.get("BFCL_TURN_CONSTRAINT_FULL_BODY", "").strip().lower() in {"1", "true", "yes"}:
+            lines.append(f"- {skill.name}: {skill.body}")
+        else:
+            compact = compact_skill_prompt_block(skill, max_chars=360)
+            compact_lines = [
+                line for line in (compact.splitlines()[2:] if len(compact.splitlines()) > 2 else [skill.description])
+                if not line.strip().lower().startswith("tools:")
+            ]
+            lines.append(f"- {skill.name}: {'; '.join(line.strip() for line in compact_lines if line.strip())}")
     lines.append(
         "If one of these rules clearly applies, satisfy it during the next tool calls instead of exploring with extra calls."
     )

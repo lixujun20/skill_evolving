@@ -356,6 +356,12 @@ def _credit_context_by_skill(events: Sequence[Dict[str, Any]]) -> Dict[str, List
                 "used": event.get("used"),
                 "official_valid": event.get("official_valid"),
                 "evidence": copy.deepcopy(event.get("evidence") or {}),
+                "maintenance_actions": copy.deepcopy(event.get("maintenance_actions") or []),
+                "bundle_case_suggestions": copy.deepcopy(event.get("bundle_case_suggestions") or []),
+                "refine_required": event.get("refine_required"),
+                "filter_candidate": event.get("filter_candidate"),
+                "evidence_strength": event.get("evidence_strength"),
+                "attribution_scope": event.get("attribution_scope"),
             }
         )
     return {name: rows[-_CREDIT_EVIDENCE_CASE_LIMIT:] for name, rows in grouped.items()}
@@ -825,6 +831,7 @@ def _apply_skill_credit_filter(
 ) -> List[Dict[str, Any]]:
     decisions: List[Dict[str, Any]] = []
     by_name = {artifact.name: artifact for artifact in store.all()}
+    positive_protect_threshold = _env_int("BFCL_CREDIT_POSITIVE_PROTECT_THRESHOLD", 2)
     for row in credit_summary:
         name = str(row.get("skill_name") or "").strip()
         artifact = by_name.get(name)
@@ -832,7 +839,19 @@ def _apply_skill_credit_filter(
             continue
         negative_margin = int(row.get("negative_margin") or 0)
         harmful_count = int(row.get("harmful_count") or 0)
-        should_disable = negative_margin >= threshold and harmful_count >= threshold
+        helpful_count = int(row.get("helpful_count") or 0)
+        cross_domain_harmful_count = int(row.get("cross_domain_harmful_count") or 0)
+        protected_by_positive_credit = helpful_count >= positive_protect_threshold
+        should_refine_scope = (
+            protected_by_positive_credit
+            and harmful_count >= threshold
+            and (negative_margin >= threshold or cross_domain_harmful_count > 0)
+        )
+        should_disable = (
+            negative_margin >= threshold
+            and harmful_count >= threshold
+            and not protected_by_positive_credit
+        )
         if should_disable:
             artifact.status = "disabled"
             artifact.metadata["disabled"] = True
@@ -840,16 +859,30 @@ def _apply_skill_credit_filter(
             artifact.metadata["credit_filter_threshold"] = threshold
             artifact.metadata["credit_harmful_task_ids"] = list(row.get("harmful_task_ids") or [])
             artifact.metadata["credit_negative_margin"] = negative_margin
+        elif should_refine_scope:
+            if artifact.metadata.get("disabled_reason") == "credit_assignment_negative_margin":
+                artifact.status = "active"
+                artifact.metadata.pop("disabled", None)
+                artifact.metadata.pop("disabled_reason", None)
+            artifact.metadata["retrieval_scope_refine_required"] = True
+            artifact.metadata["retrieval_scope_refine_reason"] = "positive_credit_protected_cross_domain_harm"
+            artifact.metadata["credit_filter_threshold"] = threshold
+            artifact.metadata["credit_positive_protect_threshold"] = positive_protect_threshold
+            artifact.metadata["credit_harmful_task_ids"] = list(row.get("harmful_task_ids") or [])
+            artifact.metadata["credit_helpful_task_ids"] = list(row.get("helpful_task_ids") or [])
+            artifact.metadata["credit_negative_margin"] = negative_margin
         decision = {
             "skill_name": name,
             "version": artifact.version,
             "negative_margin": negative_margin,
             "harmful_count": harmful_count,
-            "helpful_count": int(row.get("helpful_count") or 0),
+            "helpful_count": helpful_count,
+            "cross_domain_harmful_count": cross_domain_harmful_count,
+            "positive_protect_threshold": positive_protect_threshold,
             "threshold": threshold,
             "disabled_after": bool(artifact.is_disabled()),
-            "action": "disabled" if should_disable else "kept",
-            "reason": "credit_assignment_negative_margin" if should_disable else "below_disable_threshold",
+            "action": "disabled" if should_disable else "protected_refine_scope" if should_refine_scope else "kept",
+            "reason": "credit_assignment_negative_margin" if should_disable else "positive_credit_protected_cross_domain_harm" if should_refine_scope else "below_disable_threshold",
         }
         decisions.append(decision)
     decisions.sort(

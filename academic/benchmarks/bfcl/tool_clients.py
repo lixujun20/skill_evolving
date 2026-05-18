@@ -16,11 +16,15 @@ class ToolModelResponse:
     content: str
     tool_calls: List[Dict[str, Any]]
     assistant_msg: Dict[str, Any]
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cache_input_tokens: int = 0
 
 
 class ToolApiClient:
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    cache_input_tokens: int = 0
 
     async def ask(
         self,
@@ -37,7 +41,7 @@ class ToolApiClient:
         return {"role": "tool", "tool_call_id": tool_call_id, "content": content}
 
     def total_tokens(self) -> int:
-        return self.prompt_tokens + self.completion_tokens
+        return self.prompt_tokens + self.cache_input_tokens + self.completion_tokens
 
 
 class AnthropicDirectToolApiClient(ToolApiClient):
@@ -45,6 +49,7 @@ class AnthropicDirectToolApiClient(ToolApiClient):
         self.state = _make_anthropic_state(llm_config, model_name)
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.cache_input_tokens = 0
 
     async def ask(
         self,
@@ -68,7 +73,15 @@ class AnthropicDirectToolApiClient(ToolApiClient):
         content, tool_calls, assistant_msg, usage = _normalize_anthropic_response(response)
         self.prompt_tokens += usage[0]
         self.completion_tokens += usage[1]
-        return ToolModelResponse(content=content, tool_calls=tool_calls, assistant_msg=assistant_msg)
+        self.cache_input_tokens += usage[2]
+        return ToolModelResponse(
+            content=content,
+            tool_calls=tool_calls,
+            assistant_msg=assistant_msg,
+            prompt_tokens=usage[0],
+            completion_tokens=usage[1],
+            cache_input_tokens=usage[2],
+        )
 
     def tool_result_message(self, tool_call_id: str, content: str) -> Dict[str, Any]:
         return {
@@ -88,6 +101,7 @@ class OpenAIDirectToolApiClient(ToolApiClient):
         self.state = _make_openai_direct_state(llm_config, model_name)
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.cache_input_tokens = 0
 
     async def ask(
         self,
@@ -111,7 +125,15 @@ class OpenAIDirectToolApiClient(ToolApiClient):
         content, tool_calls, assistant_msg, usage = response
         self.prompt_tokens += usage[0]
         self.completion_tokens += usage[1]
-        return ToolModelResponse(content=content, tool_calls=tool_calls, assistant_msg=assistant_msg)
+        self.cache_input_tokens += usage[2]
+        return ToolModelResponse(
+            content=content,
+            tool_calls=tool_calls,
+            assistant_msg=assistant_msg,
+            prompt_tokens=usage[0],
+            completion_tokens=usage[1],
+            cache_input_tokens=usage[2],
+        )
 
 
 class OpenAIStreamToolApiClient(ToolApiClient):
@@ -119,6 +141,7 @@ class OpenAIStreamToolApiClient(ToolApiClient):
         self.state = _make_openai_stream_state(llm_config, model_name)
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.cache_input_tokens = 0
 
     async def ask(
         self,
@@ -142,7 +165,15 @@ class OpenAIStreamToolApiClient(ToolApiClient):
         content, tool_calls, assistant_msg, usage = response
         self.prompt_tokens += usage[0]
         self.completion_tokens += usage[1]
-        return ToolModelResponse(content=content, tool_calls=tool_calls, assistant_msg=assistant_msg)
+        self.cache_input_tokens += usage[2]
+        return ToolModelResponse(
+            content=content,
+            tool_calls=tool_calls,
+            assistant_msg=assistant_msg,
+            prompt_tokens=usage[0],
+            completion_tokens=usage[1],
+            cache_input_tokens=usage[2],
+        )
 
 
 class LegacyLLMToolApiClient(ToolApiClient):
@@ -160,6 +191,10 @@ class LegacyLLMToolApiClient(ToolApiClient):
     @property
     def completion_tokens(self) -> int:
         return self.llm.total_completion_tokens - self._completion_before
+
+    @property
+    def cache_input_tokens(self) -> int:
+        return 0
 
     async def ask(
         self,
@@ -203,7 +238,14 @@ class LegacyLLMToolApiClient(ToolApiClient):
                 }
                 for tc in tool_calls
             ]
-        return ToolModelResponse(content=content, tool_calls=tool_calls, assistant_msg=assistant_msg)
+        return ToolModelResponse(
+            content=content,
+            tool_calls=tool_calls,
+            assistant_msg=assistant_msg,
+            prompt_tokens=max(0, self.prompt_tokens),
+            completion_tokens=max(0, self.completion_tokens),
+            cache_input_tokens=0,
+        )
 
     def total_tokens(self) -> int:
         return (self.llm.total_input_tokens + self.llm.total_completion_tokens) - self._tokens_before
@@ -378,7 +420,7 @@ async def _ask_anthropic_tool_with_retry(
             await asyncio.sleep(min(30 * timeout_count, 120))
 
 
-def _normalize_anthropic_response(response: Any) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int]]:
+def _normalize_anthropic_response(response: Any) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int, int]]:
     text_parts: List[str] = []
     assistant_content: List[Dict[str, Any]] = []
     tool_calls: List[Dict[str, Any]] = []
@@ -410,11 +452,12 @@ def _normalize_anthropic_response(response: Any) -> Tuple[str, List[Dict[str, An
     usage = getattr(response, "usage", None)
     prompt_tokens = int(getattr(usage, "input_tokens", 0) or 0)
     completion_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+    cache_input_tokens = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
     return (
         "\n".join(part for part in text_parts if part),
         tool_calls,
         {"role": "assistant", "content": assistant_content},
-        (prompt_tokens, completion_tokens),
+        (prompt_tokens, completion_tokens, cache_input_tokens),
     )
 
 
@@ -457,7 +500,7 @@ async def _ask_openai_direct_tool_with_retry(
     *,
     temperature: Optional[float] = 0.001,
     max_request_wall_s: Optional[float] = None,
-) -> Optional[Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int]]]:
+) -> Optional[Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int, int]]]:
     attempt = 0
     timeout_count = 0
     while True:
@@ -507,7 +550,7 @@ async def _ask_openai_direct_tool_once(
     *,
     temperature: Optional[float] = 0.001,
     request_timeout_s: Optional[float] = None,
-) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int]]:
+) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int, int]]:
     send_messages = [{"role": "system", "content": system}] + messages if system else list(messages)
     params: Dict[str, Any] = {
         "model": state["model"],
@@ -551,6 +594,7 @@ async def _ask_openai_direct_tool_once(
         (
             int(getattr(usage, "prompt_tokens", 0) or 0),
             int(getattr(usage, "completion_tokens", 0) or 0),
+            int(getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0) or 0),
         ),
     )
 
@@ -563,7 +607,7 @@ async def _ask_openai_stream_tool_with_retry(
     *,
     temperature: Optional[float] = 0.001,
     max_request_wall_s: Optional[float] = None,
-) -> Optional[Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int]]]:
+) -> Optional[Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int, int]]]:
     attempt = 0
     timeout_count = 0
     while True:
@@ -613,7 +657,7 @@ async def _ask_openai_stream_tool_once(
     *,
     temperature: Optional[float] = 0.001,
     request_timeout_s: Optional[float] = None,
-) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int]]:
+) -> Tuple[str, List[Dict[str, Any]], Dict[str, Any], Tuple[int, int, int]]:
     send_messages = [{"role": "system", "content": system}] + messages if system else list(messages)
     params: Dict[str, Any] = {
         "model": state["model"],
@@ -630,13 +674,14 @@ async def _ask_openai_stream_tool_once(
     content_parts: List[str] = []
     reasoning_parts: List[str] = []
     tool_info: Dict[int, Dict[str, str]] = {}
-    usage_pair = (0, 0)
+    usage_pair = (0, 0, 0)
     async for chunk in stream:
         usage = getattr(chunk, "usage", None)
         if usage is not None:
             usage_pair = (
                 int(getattr(usage, "prompt_tokens", 0) or 0),
                 int(getattr(usage, "completion_tokens", 0) or 0),
+                int(getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0) or 0),
             )
         if not getattr(chunk, "choices", None):
             continue

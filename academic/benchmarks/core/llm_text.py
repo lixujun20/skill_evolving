@@ -18,6 +18,7 @@ class TextLLMResponse:
     content: str
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    cache_input_tokens: int = 0
     model_name: str = ""
     api_style: str = ""
 
@@ -128,6 +129,7 @@ async def _ask_anthropic_text(
         content="\n".join(part for part in text_parts if part),
         prompt_tokens=int(getattr(usage, "input_tokens", 0) or 0),
         completion_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+        cache_input_tokens=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
         model_name=str(model or ""),
         api_style=api_style,
     )
@@ -169,6 +171,7 @@ async def _ask_openai_text(
         content=str(getattr(message, "content", "") or ""),
         prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
         completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+        cache_input_tokens=int(getattr(getattr(usage, "prompt_tokens_details", None), "cached_tokens", 0) or 0),
         model_name=str(model or ""),
         api_style=api_style,
     )

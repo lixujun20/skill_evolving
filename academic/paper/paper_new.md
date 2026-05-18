@@ -1076,31 +1076,42 @@ extraction, validation, and planner-time invocation.
 
 ### 4.1. Main Results
 
-Benchmark: BFCL_v3, Spreadsheet, MineDojo, AIME
+Table 1 reports the current reproducible pilot results. BFCL uses the curated
+50/50 related-task split, with one online evolution epoch over 50 training
+tasks and a frozen skill-store snapshot evaluated on the 50 held-out tasks.
+SpreadsheetBench currently reports a baseline-only 50-task smoke run; its
+evolution result is left blank until the benchmark-specific skill maintenance
+path is enabled. MineDojo and AIME are not included in this pilot table.
 
-Model: GLM4.7, Claude-4.6-sonnet
+For BFCL we report three complementary metrics because exact task success is
+too strict to summarize multi-turn tool behavior alone: exact success,
+official-valid rate from the official runner, and call-level average score. We
+also report average total tokens per held-out task. The first interrupted BFCL
+evolve evaluation suffered a network/proxy failure and timed out on 30/50
+held-out tasks; the table uses the subsequent held-out-only rerun with the same
+frozen evolved skill snapshot.
 
-Setting: 现在训练集上evolve skills，可能过多个epoch。最后在测试集上评估
+| Benchmark | Model | Setting | Exact success | Official valid | Avg score | Avg tokens / task | Timeout |
+|---|---|---|---:|---:|---:|---:|---:|
+| BFCL v3 related 50/50 | Claude Sonnet 4.5 proxy | baseline, no skills | 0.06 | 0.44 | 0.7312 | 70,323.8 | 0.00 |
+| BFCL v3 related 50/50 | Claude Sonnet 4.5 proxy | evolve, 1 epoch, frozen skill-store rerun | 0.08 | 0.74 | 0.7991 | 86,813.3 | 0.00 |
+| SpreadsheetBench-Verified | Claude Sonnet 4.5 proxy | baseline, test 50 | 0.22 | N/A | 0.2564 | 1,552.1 | 0.00 |
 
-Metrics: Accuracy, token cost, turn count
+The BFCL pilot shows a clear gain in official-valid rate and call-level score:
+official-valid improves from 0.44 to 0.74, and average score improves from
+0.7312 to 0.7991. Exact success improves only slightly, from 0.06 to 0.08,
+indicating that the current skill layer primarily fixes workflow and contract
+structure, while strict end-state and exact-argument failures remain. The
+held-out token cost increases by 23.5% because prompt-only skill injection adds
+context and does not yet replace enough model/tool steps. This is a current
+limitation rather than a claimed efficiency result for the BFCL pilot.
 
-Results:
-
-glm4.7
-```
-        |BFCL_v3 acc    |BFCL_v3 token  |Spreadsheet acc    |Spreadsheet token  |MineDojo acc   |MineDojo token |AIME acc   |AIME token |
-baseline|               |               |                   |                   |               |               |           |           |
-evolve 1|               |               |                   |                   |               |               |           |           |
-evolve 3|               |               |                   |                   |               |               |           |           |
-```
-
-claude-4.7-opus
-```
-        |BFCL_v3 acc    |BFCL_v3 token  |Spreadsheet acc    |Spreadsheet token  |MineDojo acc   |MineDojo token |AIME acc   |AIME token |
-baseline|               |               |                   |                   |               |               |           |           |
-evolve 1|               |               |                   |                   |               |               |           |           |
-evolve 3|               |               |                   |                   |               |               |           |           |
-```
+The online maintenance phase for the BFCL run used 106 maintenance LLM calls
+and 744,385 maintenance tokens. The largest cost component is extraction
+(391,031 tokens), followed by refinement (139,262), credit assignment
+(100,248), refactoring (62,382), bundle construction (46,351), and extractor
+feedback (5,111). These costs are not included in the held-out inference-token
+columns and should be reported separately as training-time maintenance cost.
 
 ### 4.2. Ablation Studies
 Ablation 1: skill format (code function vs. workflow card vs. tool-use rule)

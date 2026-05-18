@@ -42,6 +42,7 @@ from academic.benchmarks.bfcl.skills import (
 )
 from academic.benchmarks.core.registry import BENCHMARK_REGISTRY
 from academic.benchmarks.core.evolution import OnlineSkillEvolutionRunner
+from academic.benchmarks.core.cost_accounting import cost_events_from_runs, summarize_cost_events
 from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig
 from academic.benchmarks.spreadsheet.adapter import (
     SpreadsheetMaintenanceAdapter,
@@ -111,6 +112,18 @@ async def main_async() -> None:
         choices=["none", "prompt_only", "tool_only", "hybrid"],
         default="prompt_only",
         help="How retrieved benchmark skills are exposed to the BFCL model.",
+    )
+    parser.add_argument(
+        "--skill-injector-mode",
+        choices=["full", "compact", "budget", "summary", "none", "off"],
+        default=None,
+        help="Optional test-time skill injector compression/filter mode. Defaults to env or full.",
+    )
+    parser.add_argument(
+        "--skill-context-budget-chars",
+        type=int,
+        default=None,
+        help="Optional prompt character budget for injected skill context.",
     )
     parser.add_argument("--bfcl-explicit-skill-tool", action="store_true")
     parser.add_argument("--save-skills", type=Path, default=None)
@@ -291,6 +304,8 @@ async def main_async() -> None:
             temperature=args.temperature,
             synthetic_continue=args.bfcl_synthetic_continue,
             explicit_skill_tool=args.bfcl_explicit_skill_tool,
+            skill_injector_mode=args.skill_injector_mode,
+            skill_context_budget_chars=args.skill_context_budget_chars,
         )
     elif args.benchmark == "spreadsheet":
         n_train = args.n_train if args.n_train is not None else 200
@@ -316,6 +331,10 @@ async def main_async() -> None:
                     test_concurrency=args.test_concurrency,
                     max_task_seconds=args.max_task_seconds,
                     top_k_skills=args.top_k_skills,
+                    extra={
+                        "skill_injector_mode": args.skill_injector_mode,
+                        "skill_context_budget_chars": args.skill_context_budget_chars,
+                    },
                 ),
             )
             summary = await runner.run(
@@ -342,12 +361,19 @@ async def main_async() -> None:
             args.llm_config,
             store,
             model_name=args.model_name,
+            concurrency=args.test_concurrency,
+            max_task_seconds=args.max_task_seconds,
+            top_k_skills=args.top_k_skills,
+            skill_injector_mode=args.skill_injector_mode,
+            skill_context_budget_chars=args.skill_context_budget_chars,
         )
     else:
         raise ValueError(f"Benchmark {args.benchmark} is registry-only for now")
 
     summary = _aggregate(args.benchmark, args.mode, args.tag, args.llm_config, len(train), details)
     summary["model_name"] = args.model_name
+    summary["skill_injector_mode"] = args.skill_injector_mode
+    summary["skill_context_budget_chars"] = args.skill_context_budget_chars
     if args.benchmark == "bfcl_v3":
         summary["adapter_mode"] = "official" if args.no_bfcl_tool_name_hints else args.bfcl_adapter_mode
         summary["execution_backend"] = args.bfcl_execution_backend
@@ -357,6 +383,8 @@ async def main_async() -> None:
         summary["top_k_skills"] = args.top_k_skills
         summary["min_skill_score"] = args.min_skill_score
         summary["skill_injection_mode"] = args.skill_injection_mode
+        summary["skill_injector_mode"] = args.skill_injector_mode
+        summary["skill_context_budget_chars"] = args.skill_context_budget_chars
         summary["max_steps_per_turn"] = args.max_steps_per_turn
         summary["temperature"] = args.temperature
         summary["bfcl_synthetic_continue"] = args.bfcl_synthetic_continue
@@ -389,6 +417,8 @@ async def _run_bfcl_baseline(
     temperature: float | None = None,
     synthetic_continue: bool = False,
     explicit_skill_tool: bool = False,
+    skill_injector_mode: str | None = None,
+    skill_context_budget_chars: int | None = None,
     debug_sink: DebugEventSink | None = None,
     phase: str = "",
     concurrency: int = 1,
@@ -436,6 +466,8 @@ async def _run_bfcl_baseline(
                         min_skill_score=min_skill_score,
                         max_steps_per_turn=max_steps_per_turn,
                         skill_injection_mode=skill_injection_mode,
+                        skill_injector_mode=skill_injector_mode,
+                        skill_context_budget_chars=skill_context_budget_chars,
                         temperature=temperature,
                         synthetic_continue=synthetic_continue,
                         debug_sink=run_sink,
@@ -457,6 +489,8 @@ async def _run_bfcl_baseline(
                     min_skill_score=min_skill_score,
                     max_steps_per_turn=max_steps_per_turn,
                     skill_injection_mode=skill_injection_mode,
+                    skill_injector_mode=skill_injector_mode,
+                    skill_context_budget_chars=skill_context_budget_chars,
                     temperature=temperature,
                     synthetic_continue=synthetic_continue,
                     debug_sink=run_sink,
@@ -562,6 +596,8 @@ async def _run_bfcl_baseline(
                         min_skill_score=min_skill_score,
                         max_steps_per_turn=max_steps_per_turn,
                         skill_injection_mode=skill_injection_mode,
+                        skill_injector_mode=skill_injector_mode,
+                        skill_context_budget_chars=skill_context_budget_chars,
                         temperature=temperature,
                         synthetic_continue=synthetic_continue,
                         debug_sink=run_sink,
@@ -583,6 +619,8 @@ async def _run_bfcl_baseline(
                     min_skill_score=min_skill_score,
                     max_steps_per_turn=max_steps_per_turn,
                     skill_injection_mode=skill_injection_mode,
+                    skill_injector_mode=skill_injector_mode,
+                    skill_context_budget_chars=skill_context_budget_chars,
                     temperature=temperature,
                     synthetic_continue=synthetic_continue,
                     debug_sink=run_sink,
@@ -652,22 +690,65 @@ async def _run_spreadsheet_baseline(
     llm_config: str,
     store: ArtifactStore,
     model_name: str | None = None,
+    concurrency: int = 1,
+    max_task_seconds: float | None = None,
+    top_k_skills: int = 5,
+    skill_injector_mode: str | None = None,
+    skill_context_budget_chars: int | None = None,
 ) -> List[Dict[str, Any]]:
-    details = []
-    for task in tasks:
+    concurrency = max(1, int(concurrency or 1))
+
+    async def run_one(task: Any, task_index: int) -> Tuple[int, Dict[str, Any]]:
         runs = []
+        task_store = copy.deepcopy(store) if concurrency > 1 else store
         for run_idx in range(n_runs):
-            result = await run_spreadsheet_task(
+            coro = run_spreadsheet_task(
                 task,
                 llm_config=llm_config,
                 model_name=model_name,
-                artifact_store=store,
+                artifact_store=task_store,
+                top_k_skills=top_k_skills,
+                skill_injector_mode=skill_injector_mode,
+                skill_context_budget_chars=skill_context_budget_chars,
             )
+            result = await asyncio.wait_for(coro, timeout=max_task_seconds) if max_task_seconds else await coro
             item = result.as_dict()
             item["run_idx"] = run_idx
             runs.append(item)
-        details.append(_task_runs(task, runs))
-    return details
+            metrics = item.get("metrics") or {}
+            print(
+                json.dumps(
+                    {
+                        "progress": "spreadsheet_task_run",
+                        "task_index": task_index,
+                        "n_tasks": len(tasks),
+                        "task_id": getattr(task, "task_id", ""),
+                        "run_idx": run_idx,
+                        "score": item.get("score"),
+                        "success": item.get("success"),
+                        "elapsed_s": metrics.get("elapsed_s"),
+                        "retrieved_skills": metrics.get("retrieved_skills"),
+                        "error": item.get("error"),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+        return task_index, _task_runs(task, runs)
+
+    if concurrency <= 1 or len(tasks) <= 1:
+        return [(await run_one(task, task_index))[1] for task_index, task in enumerate(tasks)]
+
+    sem = asyncio.Semaphore(concurrency)
+
+    async def guarded(task: Any, task_index: int) -> Tuple[int, Dict[str, Any]]:
+        async with sem:
+            return await run_one(task, task_index)
+
+    completed = await asyncio.gather(
+        *[guarded(task, task_index) for task_index, task in enumerate(tasks)]
+    )
+    return [detail for _idx, detail in sorted(completed, key=lambda item: item[0])]
 
 
 def _task_snapshot(task: Any) -> Dict[str, Any]:
@@ -843,6 +924,32 @@ def _aggregate(
         int((run.get("metrics") or {}).get("total_tokens", 0))
         for run in runs
     ]
+    input_tokens = [
+        int((run.get("metrics") or {}).get("input_tokens", 0))
+        for run in runs
+    ]
+    cache_input_tokens = [
+        int((run.get("metrics") or {}).get("cache_input_tokens", 0))
+        for run in runs
+    ]
+    output_tokens = [
+        int((run.get("metrics") or {}).get("completion_tokens", 0))
+        for run in runs
+    ]
+    total_token_sum = sum(total_tokens)
+    cost_events = cost_events_from_runs(runs)
+    cost_breakdown = summarize_cost_events(cost_events)
+    estimated_cost = float((cost_breakdown.get("summary") or {}).get("estimated_cost") or 0.0)
+    official_valid_count = sum(
+        1 for run in runs if (run.get("metrics") or {}).get("official_valid") is True
+    )
+    score_sum = sum(float(run.get("score", 0.0)) for run in runs)
+    correct_runs = [
+        run
+        for run in runs
+        if run.get("success") or (run.get("metrics") or {}).get("official_valid") is True
+    ]
+    correct_only_cost_breakdown = summarize_cost_events(cost_events_from_runs(correct_runs))
     retrieved_counts: Dict[str, int] = {}
     used_counts: Dict[str, int] = {}
     prompt_injected_counts: Dict[str, int] = {}
@@ -887,6 +994,28 @@ def _aggregate(
         "success_rate": round(total_success / max(total_runs, 1), 4),
         "avg_score": round(avg_score, 4),
         "avg_total_tokens": round(sum(total_tokens) / max(len(total_tokens), 1), 1),
+        "avg_input_tokens": round(sum(input_tokens) / max(len(input_tokens), 1), 1),
+        "avg_cache_input_tokens": round(sum(cache_input_tokens) / max(len(cache_input_tokens), 1), 1),
+        "avg_output_tokens": round(sum(output_tokens) / max(len(output_tokens), 1), 1),
+        "cost_breakdown": cost_breakdown,
+        "correct_only_cost_breakdown": correct_only_cost_breakdown,
+        "cost_metrics": {
+            "estimated_total_cost": round(estimated_cost, 8),
+            "estimated_cost_per_run": round(estimated_cost / max(total_runs, 1), 8),
+            "successes_per_dollar": round(total_success / estimated_cost, 6) if estimated_cost > 0 else None,
+            "score_points_per_dollar": round(score_sum / estimated_cost, 6) if estimated_cost > 0 else None,
+            "official_valid_per_dollar": round(official_valid_count / estimated_cost, 6) if estimated_cost > 0 else None,
+            "correct_run_count": len(correct_runs),
+        },
+        "utility_per_million_tokens": {
+            "successes_per_million_tokens": round(total_success * 1_000_000 / max(total_token_sum, 1), 6),
+            "score_points_per_million_tokens": round(score_sum * 1_000_000 / max(total_token_sum, 1), 6),
+            "official_valid_per_million_tokens": round(official_valid_count * 1_000_000 / max(total_token_sum, 1), 6),
+            "total_tokens": total_token_sum,
+            "input_tokens": sum(input_tokens),
+            "cache_input_tokens": sum(cache_input_tokens),
+            "output_tokens": sum(output_tokens),
+        },
         "timeout_rate": round(timeout_count / max(total_runs, 1), 4),
         "avg_elapsed_s": round(sum(elapsed_values) / max(len(elapsed_values), 1), 3) if elapsed_values else None,
         "max_elapsed_s": round(max(elapsed_values), 3) if elapsed_values else None,

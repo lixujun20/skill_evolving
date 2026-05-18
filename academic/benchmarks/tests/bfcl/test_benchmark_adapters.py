@@ -46,10 +46,11 @@ from academic.benchmarks.bfcl.maintenance.adapter import (
 )
 from academic.benchmarks.bfcl.skills import extract_bfcl_skills_from_results
 from academic.benchmarks.core.types import BenchmarkResult
-from academic.benchmarks.core.types import SkillArtifact, SkillBundleCase, SkillTestResult
+from academic.benchmarks.core.types import SkillArtifact, SkillBundleCase, SkillInterface, SkillTestResult
 from academic.benchmarks.core.types import BenchmarkTask
 from academic.benchmarks.core.registry import BENCHMARK_REGISTRY
 from academic.benchmarks.spreadsheet.adapter import load_spreadsheet_tasks, verify_spreadsheet_output
+from academic.benchmarks.spreadsheet.adapter import _answer_range_refs
 from academic.skill_repository.debug_events import DebugEventSink
 
 
@@ -113,6 +114,95 @@ def test_bfcl_scorer_returns_structured_error_for_invalid_expected_call() -> Non
     assert score["task_success"] is False
     assert score["call_f1"] == 0.0
     assert any(item["type"] == "invalid_expected" for item in score["call_errors"])
+
+
+def test_bfcl_retrieval_rejects_cross_domain_skill_scope() -> None:
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="multi_turn_base_93_like",
+        question=[
+            [{"role": "user", "content": "Fill the fuel tank, lock the doors, start the engine, and check tire pressure."}]
+        ],
+        expected=[["fillFuelTank(fuelAmount=39.5)", "pressBrakePedal(pedalPosition=1.0)", "startEngine(ignitionMode='START')"]],
+        input_artifacts={},
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    trading_skill = SkillArtifact(
+        name="tradingbot_direct_ticker_binding",
+        kind="interface_contract_card",
+        description="Bind company names directly to stock tickers.",
+        body="Use AAPL or ZETA directly for TradingBot calls.",
+        metadata={
+            "domains": ["TradingBot"],
+            "allowed_tools": ["get_stock_info", "add_to_watchlist", "place_order"],
+            "intent_keywords": ["stock", "watchlist", "purchase"],
+        },
+    )
+
+    assert _bfcl_skill_matches_task(trading_skill, task) is False
+
+
+def test_bfcl_retrieval_requires_strong_match_when_skill_domain_missing() -> None:
+    filesystem_task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="multi_turn_base_12_like",
+        question=[[{"role": "user", "content": "Go to Documents and create summary.txt."}]],
+        expected=[["cd(folder='Documents')", "touch(file_name='summary.txt')"]],
+        input_artifacts={},
+        metadata={"involved_classes": ["GorillaFileSystem"]},
+    )
+    invoice_task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="multi_turn_base_178_like",
+        question=[[{"role": "user", "content": "Retrieve the invoice for my recent insurance booking."}]],
+        expected=[["retrieve_invoice(access_token='abc123xyz', booking_id='flight_001')"]],
+        input_artifacts={},
+        metadata={"involved_classes": ["TravelAPI", "TicketAPI"]},
+    )
+    invoice_skill_without_domain = SkillArtifact(
+        name="retrieve_invoice_parameter_binding",
+        kind="interface_contract_card",
+        description="Correct retrieve_invoice arguments.",
+        body="Call retrieve_invoice with access_token and booking_id; do not pass insurance_id.",
+        metadata={
+            "allowed_tools": ["retrieve_invoice"],
+            "intent_keywords": ["invoice", "retrieve", "booking", "insurance"],
+        },
+    )
+
+    assert _bfcl_skill_matches_task(invoice_skill_without_domain, filesystem_task) is False
+    assert _bfcl_skill_matches_task(invoice_skill_without_domain, invoice_task) is True
+
+
+def test_bfcl_retrieval_audit_reports_injector_guard_reason() -> None:
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="multi_turn_base_93_like",
+        question=[
+            [{"role": "user", "content": "Fill the fuel tank, lock the doors, start the engine, and check tire pressure."}]
+        ],
+        expected=[["fillFuelTank(fuelAmount=39.5)", "pressBrakePedal(pedalPosition=1.0)", "startEngine(ignitionMode='START')"]],
+        input_artifacts={},
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    store = ArtifactStore(
+        [
+            SkillArtifact(
+                name="tradingbot_direct_ticker_binding",
+                kind="interface_contract_card",
+                description="Bind company names directly to stock tickers.",
+                body="Use AAPL or ZETA directly for TradingBot calls.",
+                metadata={"domains": ["TradingBot"], "allowed_tools": ["get_stock_info"], "intent_keywords": ["stock"]},
+            )
+        ]
+    )
+    policy = _RetrievalPolicy(store=store, task=task, top_k_skills=3, min_skill_score=0.0)
+
+    retrieved, audit = policy.retrieve_for_turn(turn_index=0, user_messages=task.question[0])
+
+    assert retrieved == []
+    row = next(item for item in audit["candidates"] if item["name"] == "tradingbot_direct_ticker_binding")
+    assert row["filter_reason"] == "domain_mismatch"
 
 
 def test_turn_watchdog_breaks_on_repeated_call() -> None:
@@ -299,6 +389,11 @@ wb.save(OUTPUT_XLSX)
     assert captured["model_name"] == "claude-sonnet-4-5"
     assert result.metrics["model_name"] == "claude-sonnet-4-5"
     assert result.metrics["llm_api_style"] == "anthropic_direct"
+    assert result.metrics["input_tokens"] == 10
+    assert result.metrics["cache_input_tokens"] == 0
+    assert result.metrics["completion_tokens"] == 5
+    assert result.metrics["cost_events"]
+    assert result.metrics["cost_events"][0]["role"] == "executor"
 
 
 def test_bfcl_refine_disables_harmful_auto_skill() -> None:
@@ -660,6 +755,160 @@ async def test_run_bfcl_task_error_feedback_uses_step_start_context_update(monke
 
 
 @pytest.mark.asyncio
+async def test_bfcl_function_skill_expands_to_raw_tool_calls(monkeypatch) -> None:
+    class FakeToolClient:
+        prompt_tokens = 0
+        completion_tokens = 0
+        cache_input_tokens = 0
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ask(self, *, messages, system, tools, temperature, max_request_wall_s):
+            self.calls += 1
+            if self.calls == 1:
+                return _ToolModelResponse(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "call_skill_1",
+                            "name": "skill__create_ticket_high_priority",
+                            "arguments": '{"title": "Issue", "description": "Help"}',
+                        }
+                    ],
+                    assistant_msg={
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "id": "call_skill_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "skill__create_ticket_high_priority",
+                                    "arguments": '{"title": "Issue", "description": "Help"}',
+                                },
+                            }
+                        ],
+                    },
+                )
+            return _ToolModelResponse(
+                content="done",
+                tool_calls=[],
+                assistant_msg={"role": "assistant", "content": "done"},
+            )
+
+        def tool_result_message(self, tool_call_id: str, content: str):
+            return {"role": "tool", "tool_call_id": tool_call_id, "content": content}
+
+        def total_tokens(self) -> int:
+            return 0
+
+    class FakeEnv:
+        available = True
+        backend_name = "official"
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.calls = []
+
+        def call(self, name, args):
+            self.calls.append((name, args))
+            return {"ok": True}, None
+
+    fake_client = FakeToolClient()
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter._make_tool_api_client", lambda **kwargs: fake_client)
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter.BFCLOfficialEnvironment", FakeEnv)
+
+    skill = SkillArtifact(
+        name="create_ticket_high_priority",
+        kind="executable_tool",
+        description="Create a high priority support ticket from title and description.",
+        body="Composite BFCL skill that expands into create_ticket.",
+        interface=SkillInterface(
+            invocation_contract={
+                "injection_type": "functional",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["title", "description"],
+                },
+            }
+        ),
+        metadata={
+            "domains": ["TicketAPI"],
+            "allowed_tools": ["create_ticket"],
+            "injection_type": "functional",
+            "bfcl_function_steps": [
+                {
+                    "tool": "create_ticket",
+                    "arguments": {
+                        "title": "$title",
+                        "description": "$description",
+                        "priority": 4,
+                    },
+                }
+            ],
+        },
+    )
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="ticket-task",
+        question=[[{"role": "user", "content": "Create a high priority support ticket: Issue / Help."}]],
+        expected=[["create_ticket(title='Issue', description='Help', priority=4)"]],
+        metadata={"involved_classes": ["TicketAPI"]},
+        input_artifacts={"initial_config": {}},
+    )
+
+    result = await run_bfcl_task(
+        task,
+        llm_config="unused",
+        model_name="fake",
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "create_ticket",
+                    "description": "Create a ticket.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "description": {"type": "string"},
+                            "priority": {"type": "integer"},
+                        },
+                        "required": ["title", "description", "priority"],
+                    },
+                    "x_bfcl_source_file": "ticket_api.json",
+                },
+            }
+        ],
+        artifact_store=ArtifactStore([skill]),
+        top_k_skills=1,
+        max_steps_per_turn=2,
+        adapter_mode="official",
+        execution_backend="official",
+        skill_injection_mode="tool_only",
+        debug_sink=DebugEventSink(collect_events=True),
+    )
+
+    assert result.success is True
+    assert result.metrics["called_skill_tools"] == ["create_ticket_high_priority"]
+    assert result.trace["tool_calls"] == [
+        {
+            "name": "create_ticket",
+            "arguments": {"title": "Issue", "description": "Help", "priority": 4},
+            "turn_index": 0,
+            "tool_call_id": "skill::create_ticket_high_priority::0",
+            "result": {"ok": True},
+            "error": None,
+        }
+    ]
+    assert any(event["event_type"] == "function_skill_raw_tool_call" for event in result.trace["debug_events"])
+
+
+@pytest.mark.asyncio
 async def test_bfcl_baseline_concurrency_runs_tasks_in_parallel(monkeypatch) -> None:
     active = 0
     max_active = 0
@@ -697,6 +946,40 @@ async def test_bfcl_baseline_concurrency_runs_tasks_in_parallel(monkeypatch) -> 
 
     assert [row["task_id"] for row in details] == ["task_0", "task_1", "task_2", "task_3"]
     assert max_active == 2
+
+
+@pytest.mark.asyncio
+async def test_bfcl_baseline_serial_passes_skill_injector_knobs(monkeypatch) -> None:
+    seen: dict[str, Any] = {}
+
+    async def fake_run_bfcl_task(task, **kwargs):
+        seen.update(kwargs)
+        return BenchmarkResult(
+            benchmark="bfcl_v3",
+            task_id=task.task_id,
+            success=True,
+            score=1.0,
+            metrics={"official_valid": True, "call_f1": 1.0},
+            trace={"task_id": task.task_id},
+        )
+
+    monkeypatch.setattr("academic.benchmarks.core.runner.run_bfcl_task", fake_run_bfcl_task)
+    task = type("Task", (), {"task_id": "task_0", "as_dict": lambda self: {"task_id": self.task_id}})()
+
+    await _run_bfcl_baseline(
+        [task],
+        1,
+        "unused",
+        [],
+        ArtifactStore(),
+        adapter_mode="official",
+        concurrency=1,
+        skill_injector_mode="compact",
+        skill_context_budget_chars=1234,
+    )
+
+    assert seen["skill_injector_mode"] == "compact"
+    assert seen["skill_context_budget_chars"] == 1234
 
 
 def test_bfcl_skill_predicate_rejects_cross_domain_and_cross_tool_noise() -> None:
@@ -740,6 +1023,23 @@ def test_bfcl_skill_predicate_rejects_cross_domain_and_cross_tool_noise() -> Non
         vehicle_task.question[0],
     ) is False
     assert _bfcl_skill_matches_task(vehicle_skill, vehicle_task) is True
+
+
+def test_spreadsheet_answer_range_parser_handles_official_multi_ranges() -> None:
+    assert _answer_range_refs("'Main!'A2:M70", default_sheet="Main") == [("Main", "A2:M70")]
+    assert _answer_range_refs(
+        "'Sheet1!'A1:A50,'Sheet2!'A1:E20,'Sheet3!'A1:A50",
+        default_sheet="Sheet1",
+    ) == [
+        ("Sheet1", "A1:A50"),
+        ("Sheet2", "A1:E20"),
+        ("Sheet3", "A1:A50"),
+    ]
+    assert _answer_range_refs("G4:G6, G11:G13, G20:G22", default_sheet=None) == [
+        (None, "G4:G6"),
+        (None, "G11:G13"),
+        (None, "G20:G22"),
+    ]
 
 
 def test_bfcl_skill_predicate_does_not_use_expected_tools_as_filter() -> None:

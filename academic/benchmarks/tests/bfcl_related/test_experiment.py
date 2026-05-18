@@ -1861,6 +1861,60 @@ def test_credit_helpers_build_summary_and_disable_only_strongly_negative_skill()
     assert [row["skill_name"] for row in disabled] == ["skill_a"]
 
 
+def test_credit_filter_protects_positive_skill_and_requests_scope_refine() -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(
+                name="vehicle_engine_start_brake_requirement",
+                kind="workflow_guardrail_card",
+                description="Brake before engine start.",
+                body="Call pressBrakePedal before startEngine.",
+                metadata={"domains": ["VehicleControlAPI"], "allowed_tools": ["pressBrakePedal", "startEngine"]},
+            )
+        ]
+    )
+    events: List[Dict[str, Any]] = []
+    for idx in range(2):
+        events.append(
+            {
+                "skill_name": "vehicle_engine_start_brake_requirement",
+                "task_id": f"vehicle_positive_{idx}",
+                "judgment": "helpful",
+                "effect_type": "workflow_alignment",
+                "confidence": 0.9,
+                "retrieved": True,
+                "injected": True,
+                "used": False,
+                "evidence": {"trace_signals": ["VehicleControlAPI engine start followed the brake prerequisite"]},
+            }
+        )
+    for idx in range(8):
+        events.append(
+            {
+                "skill_name": "vehicle_engine_start_brake_requirement",
+                "task_id": f"travel_negative_{idx}",
+                "judgment": "harmful",
+                "effect_type": "domain_mismatch",
+                "confidence": 0.85,
+                "retrieved": True,
+                "injected": True,
+                "used": False,
+                "evidence": {"trace_signals": ["domain mismatch: TravelAPI task received VehicleControlAPI skill"]},
+            }
+        )
+
+    summary = _aggregate_skill_credit(events, store=store)
+    decisions = _apply_skill_credit_filter(store=store, credit_summary=summary, threshold=2)
+    skill = store.get("vehicle_engine_start_brake_requirement")
+
+    assert skill is not None
+    assert skill.is_disabled() is False
+    assert skill.metadata["retrieval_scope_refine_required"] is True
+    assert decisions[0]["action"] == "protected_refine_scope"
+    assert decisions[0]["helpful_count"] == 2
+    assert decisions[0]["harmful_count"] == 8
+
+
 async def test_run_related_evolve_experiment_rejects_incomplete_resume_state(monkeypatch, tmp_path: Path) -> None:
     checkpoint = tmp_path / "checkpoint.json"
     current_round_state = {

@@ -644,6 +644,16 @@ Rules:
     `mark_stale` unless you explicitly identify the failed case as invalid or
     unrelated to this skill. A post-bundle strict failure is not a reason to
     keep by default.
+23. Strong harmful credit must not be ignored. If `judgment=harmful` with
+    confidence >= 0.65 and `effect_type=domain_mismatch`, return
+    `refine_minor` with a retrieval/scope guard such as
+    `artifact.metadata.retrieval_guard.excluded_domains`, stricter
+    `metadata.domains`, or clearer non-applicability notes. Do not return
+    `keep` unless you explicitly explain why the harmful credit is invalid.
+24. If credit maintenance actions include `narrow_scope`,
+    `fix_schema_contract`, or `refine_workflow`, either apply that local change
+    or explain why the action is unsafe. A bare `keep` is invalid for these
+    concrete actions.
 
 Field semantics and empty-value rules:
 - `decision.action`: `keep` means no semantic change; `refine_minor` means a
@@ -824,10 +834,17 @@ def _extractor_rule_suffix(extractor_rules: Iterable[Dict[str, Any]] | None) -> 
 def _normalize_usage_payload(usage: Dict[str, Any] | None) -> Dict[str, int]:
     payload = dict(usage or {})
     prompt_tokens = int(payload.get("prompt_tokens") or 0)
+    cache_input_tokens = int(
+        payload.get("cache_input_tokens")
+        or payload.get("cached_tokens")
+        or payload.get("cache_read_input_tokens")
+        or 0
+    )
     completion_tokens = int(payload.get("completion_tokens") or 0)
-    total_tokens = int(payload.get("total_tokens") or (prompt_tokens + completion_tokens))
+    total_tokens = int(payload.get("total_tokens") or (prompt_tokens + cache_input_tokens + completion_tokens))
     return {
         "prompt_tokens": prompt_tokens,
+        "cache_input_tokens": cache_input_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": total_tokens,
     }
@@ -923,16 +940,29 @@ def _record_maintenance_token_event(
     system_chars: int,
     user_chars: int,
 ) -> None:
+    from academic.benchmarks.core.cost_accounting import PricingConfig
+
     normalized_usage = _normalize_usage_payload(usage)
+    cache_input_tokens = int(normalized_usage.get("cache_input_tokens", 0) or 0)
+    estimated_cost = PricingConfig().estimate_cost(
+        input_tokens=normalized_usage["prompt_tokens"],
+        cache_input_tokens=cache_input_tokens,
+        output_tokens=normalized_usage["completion_tokens"],
+    )
     event = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "role": str(role or "").strip(),
         "phase": str((metadata or {}).get("phase") or "").strip(),
+        "benchmark": str((metadata or {}).get("benchmark") or "maintenance").strip(),
         "llm_config": str(llm_config or "").strip(),
         "model_name": model_name,
         "prompt_tokens": normalized_usage["prompt_tokens"],
+        "input_tokens": normalized_usage["prompt_tokens"],
+        "cache_input_tokens": cache_input_tokens,
         "completion_tokens": normalized_usage["completion_tokens"],
+        "output_tokens": normalized_usage["completion_tokens"],
         "total_tokens": normalized_usage["total_tokens"],
+        "estimated_cost": estimated_cost,
         "duration_ms": int(duration_ms or 0),
         "system_chars": int(system_chars or 0),
         "user_chars": int(user_chars or 0),
@@ -956,8 +986,12 @@ def snapshot_maintenance_token_stats(*, start_index: int = 0) -> Dict[str, Any]:
         return {
             "n_calls": 0,
             "prompt_tokens": 0,
+            "input_tokens": 0,
+            "cache_input_tokens": 0,
             "completion_tokens": 0,
+            "output_tokens": 0,
             "total_tokens": 0,
+            "estimated_cost": 0.0,
             "duration_ms": 0,
         }
 
@@ -968,8 +1002,15 @@ def snapshot_maintenance_token_stats(*, start_index: int = 0) -> Dict[str, Any]:
         for row in (summary, by_role.setdefault(event["role"] or "unknown", _empty_row()), by_phase.setdefault(event["phase"] or "unscoped", _empty_row())):
             row["n_calls"] += 1
             row["prompt_tokens"] += int(event.get("prompt_tokens") or 0)
+            row["input_tokens"] += int(event.get("input_tokens") or event.get("prompt_tokens") or 0)
+            row["cache_input_tokens"] += int(event.get("cache_input_tokens") or 0)
             row["completion_tokens"] += int(event.get("completion_tokens") or 0)
+            row["output_tokens"] += int(event.get("output_tokens") or event.get("completion_tokens") or 0)
             row["total_tokens"] += int(event.get("total_tokens") or 0)
+            row["estimated_cost"] = round(
+                float(row.get("estimated_cost") or 0.0) + float(event.get("estimated_cost") or 0.0),
+                8,
+            )
             row["duration_ms"] += int(event.get("duration_ms") or 0)
     return {
         "start_index": int(start_index or 0),
@@ -1154,13 +1195,15 @@ async def _ask_anthropic_json(
             parts.append(str(text))
     usage_obj = getattr(response, "usage", None)
     prompt_tokens = int(getattr(usage_obj, "input_tokens", 0) or 0)
+    cache_input_tokens = int(getattr(usage_obj, "cache_read_input_tokens", 0) or 0)
     completion_tokens = int(getattr(usage_obj, "output_tokens", 0) or 0)
     return {
         "text": "\n".join(parts).strip(),
         "usage": {
             "prompt_tokens": prompt_tokens,
+            "cache_input_tokens": cache_input_tokens,
             "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
+            "total_tokens": prompt_tokens + cache_input_tokens + completion_tokens,
         },
     }
 

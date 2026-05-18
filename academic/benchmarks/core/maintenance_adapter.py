@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Protocol, Sequence, runtime_checkable
 
 from academic.benchmarks.core.artifacts import ArtifactStore
+from academic.benchmarks.core.cost_accounting import cost_events_from_runs, summarize_cost_events
 from academic.benchmarks.core.types import BenchmarkResult
 
 
@@ -111,6 +112,12 @@ def aggregate_run_details(
         for run in runs
         if (run.get("metrics") or {}).get("total_tokens") is not None
     ]
+    input_values = [int((run.get("metrics") or {}).get("input_tokens") or 0) for run in runs]
+    cache_values = [int((run.get("metrics") or {}).get("cache_input_tokens") or 0) for run in runs]
+    output_values = [int((run.get("metrics") or {}).get("completion_tokens") or 0) for run in runs]
+    cost_events = cost_events_from_runs(runs)
+    cost_breakdown = summarize_cost_events(cost_events)
+    total_tokens = sum(token_values)
     return {
         "benchmark": benchmark,
         "mode": mode,
@@ -125,6 +132,18 @@ def aggregate_run_details(
         "avg_total_tokens": round(sum(token_values) / max(len(token_values), 1), 2)
         if token_values
         else 0.0,
+        "avg_input_tokens": round(sum(input_values) / max(len(input_values), 1), 2) if input_values else 0.0,
+        "avg_cache_input_tokens": round(sum(cache_values) / max(len(cache_values), 1), 2) if cache_values else 0.0,
+        "avg_output_tokens": round(sum(output_values) / max(len(output_values), 1), 2) if output_values else 0.0,
+        "utility_per_million_tokens": {
+            "successes_per_million_tokens": round(total_success * 1_000_000 / max(total_tokens, 1), 6),
+            "score_points_per_million_tokens": round(sum(scores) * 1_000_000 / max(total_tokens, 1), 6),
+            "total_tokens": total_tokens,
+            "input_tokens": sum(input_values),
+            "cache_input_tokens": sum(cache_values),
+            "output_tokens": sum(output_values),
+        },
+        "cost_breakdown": cost_breakdown,
     }
 
 

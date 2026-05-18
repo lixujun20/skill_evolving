@@ -24,10 +24,17 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from academic.benchmarks.core.artifacts import ArtifactStore
+from academic.benchmarks.core.credit_events import (
+    apply_credit_evidence,
+    is_actionable_helpful_credit,
+    is_strong_harmful_credit,
+    normalize_credit_events,
+)
 from academic.benchmarks.core.credit_scope import (
     skill_exposure_from_mappings,
     unique_skill_names,
 )
+from academic.benchmarks.core.micro_maintenance import micro_target_names
 from academic.benchmarks.bfcl import load_bfcl_tools
 from academic.benchmarks.bfcl.maintenance.adapter import (
     _bundle_test_signature,
@@ -372,16 +379,17 @@ def _credit_context_by_skill(events: Sequence[Dict[str, Any]]) -> Dict[str, List
 
 
 def _strong_credit_targets(events: Sequence[Dict[str, Any]]) -> List[str]:
-    targets: List[str] = []
-    for event in events:
-        judgment = str(event.get("judgment") or "").strip().lower()
-        confidence = float(event.get("confidence") or 0.0)
-        direct = bool(event.get("used")) or bool((event.get("evidence") or {}).get("used"))
-        if judgment in {"harmful", "helpful"} and (confidence >= 0.75 or direct):
-            name = str(event.get("skill_name") or "").strip()
-            if name:
-                targets.append(name)
-    return _unique_ordered(targets)
+    return micro_target_names(
+        credit_events=[
+            event for event in events
+            if is_strong_harmful_credit(event, confidence_threshold=0.75)
+            or (
+                is_actionable_helpful_credit(event)
+                and (float(event.get("confidence") or 0.0) >= 0.75 or bool(event.get("used")) or bool((event.get("evidence") or {}).get("used")))
+            )
+        ],
+        credit_bundle_cases=[],
+    )
 
 
 def _micro_write_target_names(
@@ -391,17 +399,14 @@ def _micro_write_target_names(
     relevant_skill_names: Sequence[str],
 ) -> List[str]:
     relevant = {str(name or "").strip() for name in relevant_skill_names if str(name or "").strip()}
-    changed_case_targets = _unique_ordered(
-        str(row.get("skill_name") or "")
-        for row in credit_bundle_cases
-        if isinstance(row, dict)
+    strong_targets = _strong_credit_targets(task_credit_events)
+    if relevant:
+        strong_targets = [name for name in strong_targets if name in relevant]
+    return micro_target_names(
+        credit_events=[],
+        credit_bundle_cases=credit_bundle_cases,
+        relevant_skill_names=strong_targets,
     )
-    strong_targets = [
-        name
-        for name in _strong_credit_targets(task_credit_events)
-        if not relevant or name in relevant
-    ]
-    return _unique_ordered([*changed_case_targets, *strong_targets])
 
 
 def _credit_event_records(
@@ -437,45 +442,44 @@ def _credit_event_records(
             action.setdefault("skill_name", skill_name)
         for suggestion in bundle_case_suggestions:
             suggestion.setdefault("skill_name", skill_name)
-        rows.append(
-            {
-                "task_id": task_id,
-                "round_index": round_index,
-                "task_index": task_index,
-                "skill_name": skill_name,
-                "judgment": str(row.get("judgment") or "uncertain").strip().lower() or "uncertain",
-                "effect_type": str(row.get("effect_type") or "unknown").strip().lower() or "unknown",
-                "confidence": float(row.get("confidence") or 0.0),
-                "reason": str(row.get("reason") or ""),
-                "maintenance_actions": maintenance_actions,
-                "bundle_case_suggestions": bundle_case_suggestions,
-                "refine_required": bool(row.get("refine_required")),
-                "filter_candidate": bool(row.get("filter_candidate")),
-                "evidence_strength": str(row.get("evidence_strength") or "weak").strip().lower() or "weak",
-                "attribution_scope": str(row.get("attribution_scope") or "none").strip().lower() or "none",
-                "evidence": copy.deepcopy(evidence),
-                "mentioned_in_trace": skill_name in mentioned,
-                "retrieved": bool(evidence.get("retrieved", skill_name in set(metrics.get("retrieved_skills") or []))),
-                "injected": bool(
-                    evidence.get(
-                        "injected",
-                        skill_name in set(metrics.get("prompt_injected_skills") or [])
-                        or skill_name in set(metrics.get("tool_injected_skills") or []),
-                    )
-                ),
-                "used": bool(
-                    evidence.get(
-                        "used",
-                        skill_name in set(metrics.get("used_skills") or [])
-                        or skill_name in set(metrics.get("called_skill_tools") or []),
-                    )
-                ),
-                "official_valid": metrics.get("official_valid", task_summary.get("official_valid")),
-                "score": run.get("score", task_summary.get("score")),
-                "n_model_steps": metrics.get("n_model_steps", task_summary.get("n_model_steps")),
-                "total_tokens": metrics.get("total_tokens", task_summary.get("total_tokens")),
-            }
-        )
+        base_event = {
+            "task_id": task_id,
+            "round_index": round_index,
+            "task_index": task_index,
+            "skill_name": skill_name,
+            "judgment": str(row.get("judgment") or "uncertain").strip().lower() or "uncertain",
+            "effect_type": str(row.get("effect_type") or "unknown").strip().lower() or "unknown",
+            "confidence": float(row.get("confidence") or 0.0),
+            "reason": str(row.get("reason") or ""),
+            "maintenance_actions": maintenance_actions,
+            "bundle_case_suggestions": bundle_case_suggestions,
+            "refine_required": bool(row.get("refine_required")),
+            "filter_candidate": bool(row.get("filter_candidate")),
+            "evidence_strength": str(row.get("evidence_strength") or "weak").strip().lower() or "weak",
+            "attribution_scope": str(row.get("attribution_scope") or "none").strip().lower() or "none",
+            "evidence": copy.deepcopy(evidence),
+            "mentioned_in_trace": skill_name in mentioned,
+            "retrieved": bool(evidence.get("retrieved", skill_name in set(metrics.get("retrieved_skills") or []))),
+            "injected": bool(
+                evidence.get(
+                    "injected",
+                    skill_name in set(metrics.get("prompt_injected_skills") or [])
+                    or skill_name in set(metrics.get("tool_injected_skills") or []),
+                )
+            ),
+            "used": bool(
+                evidence.get(
+                    "used",
+                    skill_name in set(metrics.get("used_skills") or [])
+                    or skill_name in set(metrics.get("called_skill_tools") or []),
+                )
+            ),
+            "official_valid": metrics.get("official_valid", task_summary.get("official_valid")),
+            "score": run.get("score", task_summary.get("score")),
+            "n_model_steps": metrics.get("n_model_steps", task_summary.get("n_model_steps")),
+            "total_tokens": metrics.get("total_tokens", task_summary.get("total_tokens")),
+        }
+        rows.append(normalize_credit_events([base_event], task_id=task_id, benchmark="bfcl_v3")[0])
     return rows
 
 
@@ -484,40 +488,23 @@ def _apply_credit_case_evidence(
     store: ArtifactStore,
     credit_events: Sequence[Dict[str, Any]],
 ) -> None:
-    by_name: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    for event in credit_events:
-        name = str(event.get("skill_name") or "").strip()
-        if name:
-            by_name[name].append(dict(event))
-    for artifact in store.all():
-        events = by_name.get(artifact.name, [])
-        if not events:
+    touched_names = {
+        str(event.get("skill_name") or "").strip()
+        for event in credit_events
+        if str(event.get("skill_name") or "").strip()
+    }
+    for name in touched_names:
+        artifact = store.get(name)
+        if artifact is None:
             continue
-        helpful: List[Dict[str, Any]] = []
-        harmful: List[Dict[str, Any]] = []
-        for event in events:
-            compact = {
-                "task_id": event.get("task_id"),
-                "round_index": event.get("round_index"),
-                "task_index": event.get("task_index"),
-                "judgment": event.get("judgment"),
-                "effect_type": event.get("effect_type"),
-                "confidence": event.get("confidence"),
-                "reason": event.get("reason"),
-                "retrieved": event.get("retrieved"),
-                "injected": event.get("injected"),
-                "used": event.get("used"),
-                "official_valid": event.get("official_valid"),
-                "evidence": copy.deepcopy(event.get("evidence") or {}),
-            }
-            if compact["judgment"] == "helpful":
-                helpful.append(compact)
-            elif compact["judgment"] == "harmful":
-                harmful.append(compact)
-        if helpful:
-            artifact.evidence.helpful_cases = helpful[-_CREDIT_EVIDENCE_CASE_LIMIT:]
-        if harmful:
-            artifact.evidence.harmful_cases = harmful[-_CREDIT_EVIDENCE_CASE_LIMIT:]
+        artifact.evidence.helpful_cases = []
+        artifact.evidence.harmful_cases = []
+        artifact.evidence.repeated_evidence = []
+    apply_credit_evidence(
+        store=store,
+        credit_events=normalize_credit_events(credit_events, benchmark="bfcl_v3"),
+        limit_per_skill=_CREDIT_EVIDENCE_CASE_LIMIT,
+    )
 
 
 def _credit_bundle_case_id(*, skill_name: str, task_id: str, judgment: str) -> str:

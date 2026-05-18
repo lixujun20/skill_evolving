@@ -82,6 +82,20 @@ def _sample_artifact() -> SkillArtifact:
     return artifact
 
 
+def test_bfcl_trim_bundle_cases_uses_common_budget_and_bumps_version() -> None:
+    artifact = _sample_artifact()
+    artifact.bundle.bundle_version = 3
+
+    changed = trim_bundle_cases(artifact, per_polarity_limit=2)
+
+    assert changed is True
+    assert artifact.bundle.bundle_version == 4
+    assert len(artifact.bundle.positive_cases) <= 2
+    assert len(artifact.bundle.negative_cases) <= 2
+    assert artifact.bundle.fixtures["bundle_trimmed"] is True
+    assert artifact.bundle.fixtures["bundle_case_budget"]["per_polarity_limit"] == 2
+
+
 def build_runtime_optimization_scenario_report(tmp_path: Path) -> Dict[str, Any]:
     report: Dict[str, Any] = {"scenarios": []}
 

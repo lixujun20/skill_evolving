@@ -17,6 +17,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     _build_extractor_feedback_rows,
     _checkpoint_payload,
     _compact_task_detail,
+    _apply_credit_case_evidence,
     _credit_event_records,
     _default_output_path,
     _load_saved_details,
@@ -1860,6 +1861,83 @@ def test_credit_helpers_build_summary_and_disable_only_strongly_negative_skill()
     assert skill_b is not None and skill_b.is_disabled() is False
     disabled = [row for row in decisions if row["action"] == "disabled"]
     assert [row["skill_name"] for row in disabled] == ["skill_a"]
+
+
+def test_bfcl_credit_events_use_common_normalization_and_evidence_limits() -> None:
+    detail = {
+        "task_id": "train_alias",
+        "runs": [
+            {
+                "score": 1.0,
+                "metrics": {
+                    "official_valid": True,
+                    "retrieved_skills": ["skill_a"],
+                    "prompt_injected_skills": ["skill_a"],
+                    "tool_injected_skills": [],
+                    "used_skills": [],
+                    "called_skill_tools": [],
+                    "n_model_steps": 2,
+                    "total_tokens": 20,
+                },
+            }
+        ],
+    }
+    rows = _credit_event_records(
+        detail=detail,
+        credit_payload={
+            "task_summary": {"official_valid": True, "score": 1.0},
+            "skill_judgments": [
+                {
+                    "skill_name": "skill_a",
+                    "judgment": "positive",
+                    "effect_type": "schema_help",
+                    "confidence": "0.8",
+                    "reason": "helped schema",
+                    "bundle_case_suggestions": [{"polarity": "positive"}],
+                }
+            ],
+        },
+        round_index=1,
+        task_index=2,
+    )
+    store = ArtifactStore([SkillArtifact(name="skill_a", kind="atomic_tool_rule_card", description="a", body="a")])
+    many_rows = [
+        {**rows[0], "task_id": f"task_{idx}", "judgment": "helpful", "confidence": 0.8}
+        for idx in range(30)
+    ]
+
+    _apply_credit_case_evidence(store=store, credit_events=many_rows)
+    _apply_credit_case_evidence(store=store, credit_events=many_rows)
+
+    assert rows[0]["judgment"] == "helpful"
+    assert rows[0]["benchmark"] == "bfcl_v3"
+    assert rows[0]["source"] == "credit_assigner"
+    assert rows[0]["event_index"] == 0
+    assert store.get("skill_a").evidence.helpful_cases[0]["task_id"] == "task_18"
+    assert store.get("skill_a").evidence.helpful_cases[-1]["task_id"] == "task_29"
+    assert len(store.get("skill_a").evidence.helpful_cases) == 12
+
+
+def test_bfcl_micro_write_targets_use_common_target_ordering() -> None:
+    targets = _micro_write_target_names(
+        task_credit_events=[
+            {"skill_name": "skill_weak", "judgment": "harmful", "confidence": 0.2},
+            {"skill_name": "skill_strong", "judgment": "harmful", "confidence": 0.8},
+            {
+                "skill_name": "skill_helpful",
+                "judgment": "helpful",
+                "confidence": 0.9,
+                "helpful_reasons": ["schema_help"],
+            },
+        ],
+        credit_bundle_cases=[
+            {"skill_name": "skill_bundle", "case_id": "case_1"},
+            {"skill_name": "skill_strong", "case_id": "case_2"},
+        ],
+        relevant_skill_names=["skill_strong", "skill_helpful"],
+    )
+
+    assert targets == ["skill_strong", "skill_helpful", "skill_bundle"]
 
 
 def test_bfcl_credit_candidates_exclude_retrieved_only_skill() -> None:

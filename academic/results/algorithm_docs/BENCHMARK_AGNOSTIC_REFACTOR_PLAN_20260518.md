@@ -1636,11 +1636,280 @@ AssertionError: Missing historical BFCL fixture:
 
 ### Implementation Log
 
-Not started.
+Completed.
+
+#### Updated `academic/benchmarks/bfcl/related/experiment.py`
+
+Lines 26-37 import common credit and micro helpers.
+
+```python
+    26	from academic.benchmarks.core.artifacts import ArtifactStore
+    27	from academic.benchmarks.core.credit_events import (
+    28	    apply_credit_evidence,
+    29	    is_actionable_helpful_credit,
+    30	    is_strong_harmful_credit,
+    31	    normalize_credit_events,
+    32	)
+    33	from academic.benchmarks.core.credit_scope import (
+    34	    skill_exposure_from_mappings,
+    35	    unique_skill_names,
+    36	)
+    37	from academic.benchmarks.core.micro_maintenance import micro_target_names
+```
+
+Lines 381-409 keep BFCL's existing public helper names but delegate strong target ordering to common `micro_target_names`.
+
+```python
+   381	def _strong_credit_targets(events: Sequence[Dict[str, Any]]) -> List[str]:
+   382	    return micro_target_names(
+   383	        credit_events=[
+   384	            event for event in events
+   385	            if is_strong_harmful_credit(event, confidence_threshold=0.75)
+   386	            or (
+   387	                is_actionable_helpful_credit(event)
+   388	                and (float(event.get("confidence") or 0.0) >= 0.75 or bool(event.get("used")) or bool((event.get("evidence") or {}).get("used")))
+   389	            )
+   390	        ],
+   391	        credit_bundle_cases=[],
+   392	    )
+   395	def _micro_write_target_names(
+   396	    *,
+   397	    task_credit_events: Sequence[Dict[str, Any]],
+   398	    credit_bundle_cases: Sequence[Dict[str, Any]],
+   399	    relevant_skill_names: Sequence[str],
+   400	) -> List[str]:
+   401	    relevant = {str(name or "").strip() for name in relevant_skill_names if str(name or "").strip()}
+   402	    strong_targets = _strong_credit_targets(task_credit_events)
+   403	    if relevant:
+   404	        strong_targets = [name for name in strong_targets if name in relevant]
+   405	    return micro_target_names(
+   406	        credit_events=[],
+   407	        credit_bundle_cases=credit_bundle_cases,
+   408	        relevant_skill_names=strong_targets,
+   409	    )
+```
+
+Lines 412-496 keep BFCL-specific credit projection fields but normalize final rows and evidence writes through common credit helpers.
+
+```python
+   412	def _credit_event_records(
+   413	    *,
+   414	    detail: Dict[str, Any],
+   415	    credit_payload: Dict[str, Any],
+   416	    round_index: int,
+   417	    task_index: int,
+   418	) -> List[Dict[str, Any]]:
+   419	    run = _first_run(detail)
+   420	    metrics = dict(run.get("metrics") or {})
+   421	    mentioned = set(_mentioned_skill_names(detail))
+   422	    task_id = str(detail.get("task_id") or "")
+   423	    task_summary = dict(credit_payload.get("task_summary") or {})
+   424	    rows: List[Dict[str, Any]] = []
+   425	    for item in list(credit_payload.get("skill_judgments") or []):
+   426	        row = dict(item or {})
+   427	        skill_name = str(row.get("skill_name") or "").strip()
+   428	        if not skill_name:
+   429	            continue
+   430	        evidence = dict(row.get("evidence") or {})
+   431	        maintenance_actions = [
+   432	            copy.deepcopy(action)
+   433	            for action in list(row.get("maintenance_actions") or [])
+   434	            if str((action or {}).get("skill_name") or skill_name).strip() == skill_name
+   435	        ]
+   436	        bundle_case_suggestions = [
+   437	            copy.deepcopy(suggestion)
+   438	            for suggestion in list(row.get("bundle_case_suggestions") or [])
+   439	            if str((suggestion or {}).get("skill_name") or skill_name).strip() == skill_name
+   440	        ]
+   441	        for action in maintenance_actions:
+   442	            action.setdefault("skill_name", skill_name)
+   443	        for suggestion in bundle_case_suggestions:
+   444	            suggestion.setdefault("skill_name", skill_name)
+   445	        base_event = {
+   446	            "task_id": task_id,
+   447	            "round_index": round_index,
+   448	            "task_index": task_index,
+   449	            "skill_name": skill_name,
+   450	            "judgment": str(row.get("judgment") or "uncertain").strip().lower() or "uncertain",
+   451	            "effect_type": str(row.get("effect_type") or "unknown").strip().lower() or "unknown",
+   452	            "confidence": float(row.get("confidence") or 0.0),
+   453	            "reason": str(row.get("reason") or ""),
+   454	            "maintenance_actions": maintenance_actions,
+   455	            "bundle_case_suggestions": bundle_case_suggestions,
+   456	            "refine_required": bool(row.get("refine_required")),
+   457	            "filter_candidate": bool(row.get("filter_candidate")),
+   458	            "evidence_strength": str(row.get("evidence_strength") or "weak").strip().lower() or "weak",
+   459	            "attribution_scope": str(row.get("attribution_scope") or "none").strip().lower() or "none",
+   460	            "evidence": copy.deepcopy(evidence),
+   461	            "mentioned_in_trace": skill_name in mentioned,
+   462	            "retrieved": bool(evidence.get("retrieved", skill_name in set(metrics.get("retrieved_skills") or []))),
+   463	            "injected": bool(
+   464	                evidence.get(
+   465	                    "injected",
+   466	                    skill_name in set(metrics.get("prompt_injected_skills") or [])
+   467	                    or skill_name in set(metrics.get("tool_injected_skills") or []),
+   468	                )
+   469	            ),
+   470	            "used": bool(
+   471	                evidence.get(
+   472	                    "used",
+   473	                    skill_name in set(metrics.get("used_skills") or [])
+   474	                    or skill_name in set(metrics.get("called_skill_tools") or []),
+   475	                )
+   476	            ),
+   477	            "official_valid": metrics.get("official_valid", task_summary.get("official_valid")),
+   478	            "score": run.get("score", task_summary.get("score")),
+   479	            "n_model_steps": metrics.get("n_model_steps", task_summary.get("n_model_steps")),
+   480	            "total_tokens": metrics.get("total_tokens", task_summary.get("total_tokens")),
+   481	        }
+   482	        rows.append(normalize_credit_events([base_event], task_id=task_id, benchmark="bfcl_v3")[0])
+   483	    return rows
+   486	def _apply_credit_case_evidence(
+   487	    *,
+   488	    store: ArtifactStore,
+   489	    credit_events: Sequence[Dict[str, Any]],
+   490	) -> None:
+   491	    touched_names = {
+   492	        str(event.get("skill_name") or "").strip()
+   493	        for event in credit_events
+   494	        if str(event.get("skill_name") or "").strip()
+   495	    }
+   496	    for name in touched_names:
+   497	        artifact = store.get(name)
+   498	        if artifact is None:
+   499	            continue
+   500	        artifact.evidence.helpful_cases = []
+   501	        artifact.evidence.harmful_cases = []
+   502	        artifact.evidence.repeated_evidence = []
+   503	    apply_credit_evidence(
+   504	        store=store,
+   505	        credit_events=normalize_credit_events(credit_events, benchmark="bfcl_v3"),
+   506	        limit_per_skill=_CREDIT_EVIDENCE_CASE_LIMIT,
+   507	    )
+```
+
+#### Updated `academic/benchmarks/bfcl/maintenance/adapter.py`
+
+Lines 17-18 import the common bundle budget helper.
+
+```python
+    17	from academic.benchmarks.core.artifacts import ArtifactStore
+    18	from academic.benchmarks.core.bundle_policy import trim_bundle_cases_to_budget
+```
+
+Lines 3055-3067 replace BFCL's local trimming implementation with common bundle budgeting while preserving BFCL's version bump behavior.
+
+```python
+  3055	def trim_bundle_cases(
+  3056	    artifact: SkillArtifact,
+  3057	    *,
+  3058	    per_polarity_limit: int | None = None,
+  3059	) -> bool:
+  3060	    changed = trim_bundle_cases_to_budget(
+  3061	        artifact,
+  3062	        per_polarity_limit=per_polarity_limit or _bundle_case_limit_per_polarity(),
+  3063	        total_limit=_bundle_max_total_cases(),
+  3064	    )
+  3065	    if changed:
+  3066	        artifact.bundle.bundle_version = max(int(artifact.bundle.bundle_version or 1), 1) + 1
+  3067	    return changed
+```
+
+#### Updated Tests
+
+`academic/benchmarks/tests/bfcl_related/test_experiment.py` lines 1885-1939 add coverage for common credit normalization/evidence limits and common micro target ordering.
+
+```python
+  1885	    rows = _credit_event_records(
+  1886	        detail=detail,
+  1887	        credit_payload={
+  1888	            "task_summary": {"official_valid": True, "score": 1.0},
+  1889	            "skill_judgments": [
+  1890	                {
+  1891	                    "skill_name": "skill_a",
+  1892	                    "judgment": "positive",
+  1893	                    "effect_type": "schema_help",
+  1894	                    "confidence": "0.8",
+  1895	                    "reason": "helped schema",
+  1896	                    "bundle_case_suggestions": [{"polarity": "positive"}],
+  1897	                }
+  1898	            ],
+  1899	        },
+  1900	        round_index=1,
+  1901	        task_index=2,
+  1902	    )
+  1903	    store = ArtifactStore([SkillArtifact(name="skill_a", kind="atomic_tool_rule_card", description="a", body="a")])
+  1904	    many_rows = [
+  1905	        {**rows[0], "task_id": f"task_{idx}", "judgment": "helpful", "confidence": 0.8}
+  1906	        for idx in range(30)
+  1907	    ]
+  1909	    _apply_credit_case_evidence(store=store, credit_events=many_rows)
+  1911	    assert rows[0]["judgment"] == "helpful"
+  1912	    assert rows[0]["benchmark"] == "bfcl_v3"
+  1913	    assert rows[0]["source"] == "credit_assigner"
+  1914	    assert rows[0]["event_index"] == 0
+  1915	    assert store.get("skill_a").evidence.helpful_cases[0]["task_id"] == "task_18"
+  1916	    assert store.get("skill_a").evidence.helpful_cases[-1]["task_id"] == "task_29"
+  1917	    assert len(store.get("skill_a").evidence.helpful_cases) == 12
+```
+
+```python
+  1920	def test_bfcl_micro_write_targets_use_common_target_ordering() -> None:
+  1921	    targets = _micro_write_target_names(
+  1922	        task_credit_events=[
+  1923	            {"skill_name": "skill_weak", "judgment": "harmful", "confidence": 0.2},
+  1924	            {"skill_name": "skill_strong", "judgment": "harmful", "confidence": 0.8},
+  1925	            {
+  1926	                "skill_name": "skill_helpful",
+  1927	                "judgment": "helpful",
+  1928	                "confidence": 0.9,
+  1929	                "helpful_reasons": ["schema_help"],
+  1930	            },
+  1931	        ],
+  1932	        credit_bundle_cases=[
+  1933	            {"skill_name": "skill_bundle", "case_id": "case_1"},
+  1934	            {"skill_name": "skill_strong", "case_id": "case_2"},
+  1935	        ],
+  1936	        relevant_skill_names=["skill_strong", "skill_helpful"],
+  1937	    )
+  1939	    assert targets == ["skill_strong", "skill_helpful", "skill_bundle"]
+```
+
+`academic/benchmarks/tests/maintenance/test_runtime_optimization_scenarios.py` lines 85-96 add coverage that BFCL's wrapper still bumps bundle version after using the common budget helper.
+
+```python
+    85	def test_bfcl_trim_bundle_cases_uses_common_budget_and_bumps_version() -> None:
+    86	    artifact = _sample_artifact()
+    87	    artifact.bundle.bundle_version = 3
+    89	    changed = trim_bundle_cases(artifact, per_polarity_limit=2)
+    91	    assert changed is True
+    92	    assert artifact.bundle.bundle_version == 4
+    93	    assert len(artifact.bundle.positive_cases) <= 2
+    94	    assert len(artifact.bundle.negative_cases) <= 2
+    95	    assert artifact.bundle.fixtures["bundle_trimmed"] is True
+    96	    assert artifact.bundle.fixtures["bundle_case_budget"]["per_polarity_limit"] == 2
+```
 
 ### Tests
 
-Not started.
+Passed.
+
+```text
+$ python -m py_compile academic/benchmarks/bfcl/related/experiment.py academic/benchmarks/bfcl/maintenance/adapter.py academic/benchmarks/tests/bfcl_related/test_experiment.py academic/benchmarks/tests/maintenance/test_runtime_optimization_scenarios.py
+```
+
+```text
+$ pytest -q academic/benchmarks/tests/bfcl_related/test_experiment.py academic/benchmarks/tests/maintenance/test_runtime_optimization_scenarios.py academic/benchmarks/tests/bfcl_related/test_paper_new_algorithm_contract.py academic/benchmarks/tests/maintenance/test_bundle_agent.py
+........................................................................ [ 86%]
+...........                                                              [100%]
+83 passed, 10 warnings in 25.75s
+```
+
+```text
+$ pytest -q academic/benchmarks/tests/test_common_maintenance_core.py academic/benchmarks/tests/test_spreadsheet_evolution.py academic/benchmarks/tests/test_generic_evolution.py
+..................................                                       [100%]
+34 passed, 10 warnings in 1.98s
+```
 
 ## Chapter 4: BFCL 结构拆分
 

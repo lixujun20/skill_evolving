@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 from uuid import uuid4
 
 from academic.benchmarks.core.artifacts import ArtifactStore
+from academic.benchmarks.core.bundle_policy import trim_bundle_cases_to_budget
 from academic.benchmarks.bfcl import (
     filter_bfcl_tools_by_class,
     load_bfcl_tools,
@@ -3056,111 +3057,11 @@ def trim_bundle_cases(
     *,
     per_polarity_limit: int | None = None,
 ) -> bool:
-    limit = max(1, int(per_polarity_limit or _bundle_case_limit_per_polarity()))
-    total_limit = max(1, _bundle_max_total_cases())
-    changed = False
-    trimmed_case_ids: List[str] = []
-
-    def case_priority(case: SkillBundleCase, index: int) -> tuple[int, float, int, int]:
-        ctx = dict(case.context or {})
-        credit_event = dict(ctx.get("credit_event") or {})
-        source = str(case.source or "")
-        confidence = float(credit_event.get("confidence") or 0.0)
-        is_credit = 1 if source.startswith("credit_assigner_") else 0
-        is_regression = 1 if "regression" in source or "failure" in source or "integration" in source else 0
-        return (is_credit + is_regression, confidence, index, 1)
-
-    for attr in ("positive_cases", "negative_cases", "integration_cases"):
-        cases = list(getattr(artifact.bundle, attr) or [])
-        if len(cases) <= limit:
-            continue
-        indexed = list(enumerate(cases))
-        indexed.sort(key=lambda item: case_priority(item[1], item[0]), reverse=True)
-        kept = [case for _idx, case in indexed[:limit]]
-        kept_ids = {case.case_id for case in kept}
-        trimmed_case_ids.extend([case.case_id for case in cases if case.case_id not in kept_ids])
-        setattr(artifact.bundle, attr, kept)
-        changed = True
-    ordered_groups = [
-        (
-            "positive_cases",
-            [
-                case for _idx, case in sorted(
-                    enumerate(list(artifact.bundle.positive_cases or [])),
-                    key=lambda item: case_priority(item[1], item[0]),
-                    reverse=True,
-                )
-            ],
-        ),
-        (
-            "negative_cases",
-            [
-                case for _idx, case in sorted(
-                    enumerate(list(artifact.bundle.negative_cases or [])),
-                    key=lambda item: case_priority(item[1], item[0]),
-                    reverse=True,
-                )
-            ],
-        ),
-        (
-            "integration_cases",
-            [
-                case for _idx, case in sorted(
-                    enumerate(list(artifact.bundle.integration_cases or [])),
-                    key=lambda item: case_priority(item[1], item[0]),
-                    reverse=True,
-                )
-            ],
-        ),
-    ]
-    total_cases = sum(len(cases) for _, cases in ordered_groups)
-    if total_cases > total_limit:
-        kept: Dict[str, List[SkillBundleCase]] = {name: [] for name, _ in ordered_groups}
-        group_iters = {name: list(cases) for name, cases in ordered_groups}
-        while sum(len(items) for items in kept.values()) < total_limit:
-            progress = False
-            for name, _cases in ordered_groups:
-                remaining = group_iters[name]
-                if not remaining:
-                    continue
-                kept[name].append(remaining.pop(0))
-                progress = True
-                if sum(len(items) for items in kept.values()) >= total_limit:
-                    break
-            if not progress:
-                break
-        artifact.bundle.positive_cases = kept["positive_cases"]
-        artifact.bundle.negative_cases = kept["negative_cases"]
-        artifact.bundle.integration_cases = kept["integration_cases"]
-        kept_ids = {case.case_id for cases in kept.values() for case in cases}
-        trimmed_case_ids.extend(
-            case.case_id
-            for _name, cases in ordered_groups
-            for case in cases
-            if case.case_id not in kept_ids
-        )
-        overflow = total_cases - total_limit
-        artifact.bundle.fixtures = {
-            **dict(artifact.bundle.fixtures or {}),
-            "bundle_split_count": overflow,
-            "bundle_trimmed": True,
-            "bundle_case_budget": {
-                "per_polarity_limit": limit,
-                "total_limit": total_limit,
-            },
-            "bundle_trimmed_case_ids": list(dict.fromkeys(trimmed_case_ids))[-24:],
-        }
-        changed = True
-    elif changed:
-        artifact.bundle.fixtures = {
-            **dict(artifact.bundle.fixtures or {}),
-            "bundle_trimmed": True,
-            "bundle_case_budget": {
-                "per_polarity_limit": limit,
-                "total_limit": total_limit,
-            },
-            "bundle_trimmed_case_ids": list(dict.fromkeys(trimmed_case_ids))[-24:],
-        }
+    changed = trim_bundle_cases_to_budget(
+        artifact,
+        per_polarity_limit=per_polarity_limit or _bundle_case_limit_per_polarity(),
+        total_limit=_bundle_max_total_cases(),
+    )
     if changed:
         artifact.bundle.bundle_version = max(int(artifact.bundle.bundle_version or 1), 1) + 1
     return changed

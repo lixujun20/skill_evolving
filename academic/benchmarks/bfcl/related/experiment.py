@@ -24,6 +24,10 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from academic.benchmarks.core.artifacts import ArtifactStore
+from academic.benchmarks.core.credit_scope import (
+    skill_exposure_from_mappings,
+    unique_skill_names,
+)
 from academic.benchmarks.bfcl import load_bfcl_tools
 from academic.benchmarks.bfcl.maintenance.adapter import (
     _bundle_test_signature,
@@ -301,26 +305,26 @@ def _extraction_event_records(
 def _mentioned_skill_names(detail: Dict[str, Any]) -> List[str]:
     run = _first_run(detail)
     metrics = dict(run.get("metrics") or {})
-    ordered: List[str] = []
-    for name in (
-        list(metrics.get("retrieved_skills") or [])
-        + list(metrics.get("prompt_injected_skills") or [])
-        + list(metrics.get("tool_injected_skills") or [])
-        + list(metrics.get("used_skills") or [])
-        + list(metrics.get("called_skill_tools") or [])
-    ):
-        norm = str(name or "").strip()
-        if norm and norm not in ordered:
-            ordered.append(norm)
-    return ordered
+    trace = dict(run.get("trace") or {})
+    return skill_exposure_from_mappings(metrics, trace)["credit_candidate_names"]
+
+
+def _retrieved_only_skill_names(detail: Dict[str, Any]) -> List[str]:
+    run = _first_run(detail)
+    metrics = dict(run.get("metrics") or {})
+    trace = dict(run.get("trace") or {})
+    return skill_exposure_from_mappings(metrics, trace)["retrieved_only_skills"]
 
 
 def _used_skill_names(detail: Dict[str, Any]) -> List[str]:
     run = _first_run(detail)
     metrics = dict(run.get("metrics") or {})
-    return _unique_ordered(
+    trace = dict(run.get("trace") or {})
+    exposure = skill_exposure_from_mappings(metrics, trace)
+    return unique_skill_names(
         list(metrics.get("used_skills") or [])
         + list(metrics.get("called_skill_tools") or [])
+        + exposure["direct_used_skill_names"]
     )
 
 

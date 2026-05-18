@@ -34,6 +34,225 @@ python -m py_compile academic/benchmarks/spreadsheet/adapter.py academic/benchma
 
 结果：`20 passed`。pytest 只出现已有的 pytest config / pydantic deprecation warnings。
 
+### Chapter 1.5: 跨 benchmark 的 credit exposure 公共层
+
+提交：本节对应提交 `Cross-benchmark credit scope`。
+
+状态：已完成初版，定向测试通过。
+
+动机：Chapter 1 先在 Spreadsheet adapter 内实现了“只对 exposed/called skill 做 credit”，但 BFCL 仍在相关实验路径中用 `_mentioned_skill_names()` 把 `retrieved_skills`、`prompt_injected_skills`、`tool_injected_skills`、`used_skills`、`called_skill_tools` 全部混在一起。这会导致两个问题：
+
+1. 同一个算法策略在不同 benchmark 下各写一套，容易分叉。
+2. BFCL 的 retrieved-only skill 仍可能进入 credit assigner，被错误归因。
+
+设计边界：
+
+- 公共层只做 benchmark-agnostic 的 exposure policy：字段归一化、去重、credit candidate 选择、retrieved-only audit。
+- adapter 仍负责 benchmark-native evidence extraction。
+- Spreadsheet 可以用 AST 解析 Python code，得到 `called_skill_functions`。
+- BFCL 不能用 AST，因为 executor 输出是 tool-call trace；它用 `prompt_injected_skills`、`tool_injected_skills`、`called_skill_tools`、`used_skills` 作为非 AST 的暴露/调用证据。
+
+验证命令：
+
+```bash
+pytest -q \
+  academic/benchmarks/tests/test_credit_scope.py \
+  academic/benchmarks/tests/test_spreadsheet_evolution.py::test_spreadsheet_credit_ignores_retrieved_only_skill \
+  academic/benchmarks/tests/test_spreadsheet_evolution.py::test_spreadsheet_credit_fallback_ignores_retrieved_only_skill \
+  academic/benchmarks/tests/bfcl_related/test_experiment.py::test_bfcl_credit_candidates_exclude_retrieved_only_skill \
+  academic/benchmarks/tests/bfcl_related/test_experiment.py::test_credit_helpers_build_summary_and_disable_only_strongly_negative_skill
+```
+
+结果：`6 passed`。pytest 只出现已有 warning。
+
+#### 1. 新增公共 credit scope 模块
+
+位置：`academic/benchmarks/core/credit_scope.py:1-99`
+
+改动目的：把“retrieved 不等于 credit candidate”这条算法规则从 Spreadsheet adapter 抽出，供 BFCL / Spreadsheet / 后续 benchmark 共享。
+
+代码片段：
+
+```python
+def skill_exposure_from_mappings(*mappings: Mapping[str, Any] | None) -> Dict[str, List[str]]:
+    """Normalize skill exposure fields from benchmark metrics/trace mappings.
+
+    For each canonical field, the first non-empty list wins.  This mirrors the
+    existing adapter convention of preferring score metrics and falling back to
+    raw trace fields.
+    """
+
+    exposure = {
+        "retrieved_skills": first_list("retrieved_skills"),
+        "prompt_injected_skills": first_list("prompt_injected_skills"),
+        "tool_injected_skills": first_list("tool_injected_skills"),
+        "used_skills": first_list("used_skills"),
+        "called_skill_tools": first_list("called_skill_tools"),
+        "called_skill_functions": first_list("called_skill_functions"),
+    }
+    exposed = unique_skill_names(
+        [
+            *exposure["prompt_injected_skills"],
+            *exposure["tool_injected_skills"],
+            *exposure["used_skills"],
+            *exposure["called_skill_tools"],
+            *exposure["called_skill_functions"],
+        ]
+    )
+    direct_used = unique_skill_names(
+        [
+            *exposure["used_skills"],
+            *exposure["called_skill_tools"],
+            *exposure["called_skill_functions"],
+        ]
+    )
+    retrieved_only = [
+        name for name in exposure["retrieved_skills"] if name not in set(exposed)
+    ]
+    exposure.update(
+        {
+            "exposed_skill_names": exposed,
+            "direct_used_skill_names": direct_used,
+            "credit_candidate_names": exposed,
+            "retrieved_only_skills": retrieved_only,
+        }
+    )
+    return exposure
+```
+
+#### 2. Spreadsheet credit candidate 改为复用公共层
+
+位置：`academic/benchmarks/spreadsheet/adapter.py:34-38`、`1456-1474`、`1701-1722`、`1826-1833`
+
+改动目的：删除 Spreadsheet 本地 `_spreadsheet_credit_candidate_names()` 与 `_list_difference_preserve_order()`，避免算法策略只存在于单个 adapter。
+
+代码片段：
+
+```python
+from academic.benchmarks.core.credit_scope import (
+    credit_candidate_skill_names,
+    skill_exposure_flags,
+    skill_exposure_from_mappings,
+)
+
+projection = _spreadsheet_trace_projection(detail)
+candidate_names = credit_candidate_skill_names(projection)
+```
+
+Trace projection 现在直接从公共层取 exposure：
+
+```python
+exposure = skill_exposure_from_mappings(metrics, trace)
+return {
+    "retrieved_skills": exposure["retrieved_skills"],
+    "prompt_injected_skills": exposure["prompt_injected_skills"],
+    "called_skill_functions": exposure["called_skill_functions"],
+    "retrieved_only_skills": exposure["retrieved_only_skills"],
+}
+```
+
+Skill projection / fallback evidence 复用同一个 flag 计算：
+
+```python
+exposure = skill_exposure_flags(artifact.name, projection)
+return {
+    "retrieved": exposure["retrieved"],
+    "injected": exposure["injected"],
+    "used": exposure["used"],
+}
+```
+
+#### 3. BFCL credit candidate 改为 exposed/called only
+
+位置：`academic/benchmarks/bfcl/related/experiment.py:27-30`、`305-328`
+
+改动目的：BFCL 相关实验路径之前 `_mentioned_skill_names()` 会把 retrieved-only skill 也交给 credit assigner。现在它改为公共层的 `credit_candidate_names`，即 prompt/tool injected、explicit used、called skill tools，而不是 raw retrieved。
+
+代码片段：
+
+```python
+from academic.benchmarks.core.credit_scope import (
+    skill_exposure_from_mappings,
+    unique_skill_names,
+)
+
+def _mentioned_skill_names(detail: Dict[str, Any]) -> List[str]:
+    run = _first_run(detail)
+    metrics = dict(run.get("metrics") or {})
+    trace = dict(run.get("trace") or {})
+    return skill_exposure_from_mappings(metrics, trace)["credit_candidate_names"]
+
+def _retrieved_only_skill_names(detail: Dict[str, Any]) -> List[str]:
+    run = _first_run(detail)
+    metrics = dict(run.get("metrics") or {})
+    trace = dict(run.get("trace") or {})
+    return skill_exposure_from_mappings(metrics, trace)["retrieved_only_skills"]
+```
+
+BFCL 的“不能用 AST”对应机制：
+
+```python
+def _used_skill_names(detail: Dict[str, Any]) -> List[str]:
+    run = _first_run(detail)
+    metrics = dict(run.get("metrics") or {})
+    trace = dict(run.get("trace") or {})
+    exposure = skill_exposure_from_mappings(metrics, trace)
+    return unique_skill_names(
+        list(metrics.get("used_skills") or [])
+        + list(metrics.get("called_skill_tools") or [])
+        + exposure["direct_used_skill_names"]
+    )
+```
+
+其中 `called_skill_tools` 由 BFCL executor 的 tool-call handler 写入 trace，而不是从代码 AST 解析。
+
+#### 4. 新增测试
+
+位置：`academic/benchmarks/tests/test_credit_scope.py:1-43`
+
+覆盖：
+
+- `retrieved_only` 不进入 `credit_candidate_names`。
+- prompt-injected、tool-injected、called function、explicit used 都进入候选。
+- trace 字段 fallback 生效。
+
+代码片段：
+
+```python
+def test_credit_scope_uses_exposed_and_called_skills_not_retrieved_only() -> None:
+    metrics = {
+        "retrieved_skills": ["retrieved_only", "prompt_skill", "tool_skill", "called_function", "used_skill"],
+        "prompt_injected_skills": ["prompt_skill"],
+        "tool_injected_skills": ["tool_skill"],
+        "called_skill_functions": ["called_function"],
+        "used_skills": ["used_skill"],
+    }
+
+    exposure = skill_exposure_from_mappings(metrics)
+
+    assert exposure["credit_candidate_names"] == [
+        "prompt_skill",
+        "tool_skill",
+        "used_skill",
+        "called_function",
+    ]
+    assert exposure["retrieved_only_skills"] == ["retrieved_only"]
+```
+
+位置：`academic/benchmarks/tests/bfcl_related/test_experiment.py:1889-1890`
+
+覆盖：
+
+- BFCL retrieved-only skill 不进入 `_mentioned_skill_names()`。
+- BFCL prompt/tool/used skill 仍进入候选。
+
+代码片段：
+
+```python
+assert _mentioned_skill_names(detail) == ["prompt_skill", "tool_skill", "used_skill"]
+assert _retrieved_only_skill_names(detail) == ["retrieved_only"]
+```
+
 #### 1. Credit prompt 语义改为 exposed/called candidate skills
 
 位置：`academic/benchmarks/spreadsheet/adapter.py:173-177`

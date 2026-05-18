@@ -21,6 +21,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     _default_output_path,
     _load_saved_details,
     _mentioned_skill_names,
+    _retrieved_only_skill_names,
     _micro_write_target_names,
     _mark_candidate_competition_artifacts,
     _build_candidate_group_feedback_rows,
@@ -1859,6 +1860,34 @@ def test_credit_helpers_build_summary_and_disable_only_strongly_negative_skill()
     assert skill_b is not None and skill_b.is_disabled() is False
     disabled = [row for row in decisions if row["action"] == "disabled"]
     assert [row["skill_name"] for row in disabled] == ["skill_a"]
+
+
+def test_bfcl_credit_candidates_exclude_retrieved_only_skill() -> None:
+    detail = {
+        "task_id": "train_scope",
+        "runs": [
+            {
+                "score": 1.0,
+                "metrics": {
+                    "official_valid": True,
+                    "retrieved_skills": ["retrieved_only", "prompt_skill", "tool_skill", "used_skill"],
+                    "prompt_injected_skills": ["prompt_skill"],
+                    "tool_injected_skills": ["tool_skill"],
+                    "used_skills": ["used_skill"],
+                    "called_skill_tools": ["tool_skill"],
+                },
+                "trace": {
+                    "retrieved_skills": ["retrieved_only", "prompt_skill", "tool_skill", "used_skill"],
+                    "prompt_injected_skills": ["prompt_skill"],
+                    "tool_injected_skills": ["tool_skill"],
+                    "called_skill_tools": ["tool_skill"],
+                },
+            }
+        ],
+    }
+
+    assert _mentioned_skill_names(detail) == ["prompt_skill", "tool_skill", "used_skill"]
+    assert _retrieved_only_skill_names(detail) == ["retrieved_only"]
 
 
 def test_credit_filter_protects_positive_skill_and_requests_scope_refine() -> None:

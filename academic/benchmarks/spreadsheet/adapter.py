@@ -31,6 +31,11 @@ import openpyxl
 
 from academic.benchmarks.core.artifacts import ArtifactStore
 from academic.benchmarks.core.cost_accounting import make_cost_event
+from academic.benchmarks.core.credit_scope import (
+    credit_candidate_skill_names,
+    skill_exposure_flags,
+    skill_exposure_from_mappings,
+)
 from academic.benchmarks.core.llm_text import ask_text_llm
 from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig, NoOpMaintenanceAdapter
 from academic.benchmarks.core.skill_injector import BudgetSkillInjector
@@ -1450,7 +1455,7 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
     ) -> List[Dict[str, Any]]:
         del round_index
         projection = _spreadsheet_trace_projection(detail)
-        candidate_names = _spreadsheet_credit_candidate_names(projection)
+        candidate_names = credit_candidate_skill_names(projection)
         candidate_artifacts = [
             artifact for name in candidate_names for artifact in [store.get(str(name))] if artifact
         ]
@@ -1698,9 +1703,7 @@ def _spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
     first = runs[0] if runs else {}
     metrics = first.get("metrics") or {}
     trace = first.get("trace") or {}
-    retrieved_skills = metrics.get("retrieved_skills") or trace.get("retrieved_skills") or []
-    prompt_injected_skills = metrics.get("prompt_injected_skills") or trace.get("prompt_injected_skills") or []
-    called_skill_functions = metrics.get("called_skill_functions") or trace.get("called_skill_functions") or []
+    exposure = skill_exposure_from_mappings(metrics, trace)
     return {
         "task_id": detail.get("task_id"),
         "success": first.get("success"),
@@ -1711,36 +1714,13 @@ def _spreadsheet_trace_projection(detail: Dict[str, Any]) -> Dict[str, Any]:
         "mismatched_cells": metrics.get("mismatched_cells", [])[:5],
         "execution_ok": metrics.get("execution_ok"),
         "llm_api_style": metrics.get("llm_api_style"),
-        "retrieved_skills": retrieved_skills,
-        "prompt_injected_skills": prompt_injected_skills,
+        "retrieved_skills": exposure["retrieved_skills"],
+        "prompt_injected_skills": exposure["prompt_injected_skills"],
         "callable_skills": metrics.get("callable_skills") or trace.get("callable_skills") or [],
-        "called_skill_functions": called_skill_functions,
-        "retrieved_only_skills": _list_difference_preserve_order(
-            retrieved_skills,
-            [*prompt_injected_skills, *called_skill_functions],
-        ),
+        "called_skill_functions": exposure["called_skill_functions"],
+        "retrieved_only_skills": exposure["retrieved_only_skills"],
         "stderr_tail": str(trace.get("stderr") or "")[-800:],
     }
-
-
-def _list_difference_preserve_order(items: Sequence[Any], excluded: Sequence[Any]) -> List[str]:
-    excluded_set = {str(item) for item in excluded}
-    out: List[str] = []
-    for item in items:
-        value = str(item)
-        if value and value not in excluded_set and value not in out:
-            out.append(value)
-    return out
-
-
-def _spreadsheet_credit_candidate_names(projection: Dict[str, Any]) -> List[str]:
-    names: List[str] = []
-    for key in ("prompt_injected_skills", "called_skill_functions"):
-        for item in projection.get(key) or []:
-            name = str(item).strip()
-            if name and name not in names:
-                names.append(name)
-    return names
 
 
 def _json_block(value: Any) -> str:
@@ -1828,6 +1808,7 @@ def _spreadsheet_skill_projection(
     *,
     projection: Dict[str, Any],
 ) -> Dict[str, Any]:
+    exposure = skill_exposure_flags(artifact.name, projection)
     return {
         "skill_name": artifact.name,
         "version": artifact.version,
@@ -1843,9 +1824,9 @@ def _spreadsheet_skill_projection(
             "source_task_ids": artifact.metadata.get("source_task_ids") or [],
             "non_applicability": artifact.metadata.get("non_applicability"),
         },
-        "retrieved": artifact.name in set(projection.get("retrieved_skills") or []),
-        "injected": artifact.name in set(projection.get("prompt_injected_skills") or []),
-        "used": artifact.name in set(projection.get("called_skill_functions") or []),
+        "retrieved": exposure["retrieved"],
+        "injected": exposure["injected"],
+        "used": exposure["used"],
         "usage_count": artifact.usage_count,
         "success_count": artifact.success_count,
         "recent_helpful": artifact.evidence.helpful_cases[-3:],
@@ -2261,9 +2242,7 @@ def _heuristic_spreadsheet_credit_events(
                 "attribution_scope": "prompt_influence" if judgment == "helpful" else "none",
                 "bundle_case_suggestions": suggestions,
                 "evidence": {
-                    "retrieved": artifact.name in set(projection.get("retrieved_skills") or []),
-                    "injected": artifact.name in set(projection.get("prompt_injected_skills") or []),
-                    "used": artifact.name in set(projection.get("called_skill_functions") or []),
+                    **skill_exposure_flags(artifact.name, projection),
                     "trace_signals": [reason],
                 },
                 "projection": copy.deepcopy(projection),

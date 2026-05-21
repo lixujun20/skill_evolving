@@ -49,7 +49,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     build_analysis_artifacts,
     validate_experiment_config,
 )
-from academic.benchmarks.bfcl.maintenance.adapter import extract_bfcl_skill_artifacts_llm
+from academic.benchmarks.bfcl.maintenance.adapter import extract_bfcl_skill_artifacts_llm, refine_bfcl_skill_store_llm
 from academic.benchmarks.bfcl.related.manifest import (
     build_curated_related_task_manifest,
     validate_curated_manifest,
@@ -428,9 +428,166 @@ def test_replay_buffer_samples_by_source_role() -> None:
         ],
     )
 
-    assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "extractor")] == ["extractor"]
+    assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "extractor", extractor_refiner_probability=0.0)] == ["extractor"]
     assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "refactorer")] == ["refactorer"]
     assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "refiner_revision")] == ["refiner_revision"]
+    assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "refiner")] == ["refiner_revision"]
+    mixed = _sample_replay_rows_for_role(
+        replay_buffer,
+        "extractor",
+        round_index=0,
+        macro_index=0,
+        extractor_refiner_probability=1.0,
+    )
+    assert [row["source_role"] for row in mixed] == ["extractor", "refiner_revision"]
+
+
+def test_candidate_group_feedback_rows_include_refiner_revision_store_candidates() -> None:
+    group_id = "refiner:r0:group:skill_a"
+    store = ArtifactStore(
+        [
+            SkillArtifact(
+                name="skill_a__refined_r0_c0",
+                kind="rule_card",
+                description="candidate 0",
+                body="body",
+                status="trial",
+                metadata={
+                    "candidate_group_id": group_id,
+                    "candidate_group_source_role": "refiner_revision",
+                    "candidate_sample_index": 0,
+                },
+            ),
+            SkillArtifact(
+                name="skill_a__refined_r0_c1",
+                kind="rule_card",
+                description="candidate 1",
+                body="body",
+                status="trial",
+                metadata={
+                    "candidate_group_id": group_id,
+                    "candidate_group_source_role": "refiner_revision",
+                    "candidate_sample_index": 1,
+                },
+            ),
+        ]
+    )
+    rows = _build_candidate_group_feedback_rows(
+        extraction_events=[],
+        train_details=[],
+        credit_events=[],
+        maintenance_test_results=[],
+        store=store,
+    )
+    assert rows[0]["candidate_group_id"] == group_id
+    assert rows[0]["source_role"] == "refiner_revision"
+    assert {member["skill_name"] for member in rows[0]["members"]} == {
+        "skill_a__refined_r0_c0",
+        "skill_a__refined_r0_c1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_refiner_multi_candidate_creates_zero_credit_trial_revisions(monkeypatch) -> None:
+    parent = SkillArtifact(
+        name="lookup_then_update",
+        kind="rule_card",
+        description="Use lookup before update.",
+        body="Original body",
+        status="active",
+        evidence=SkillEvidence(
+            helpful_cases=[{"task_id": "old_help"}],
+            harmful_cases=[{"task_id": "old_harm"}],
+            repeated_evidence=[{"pattern": "old"}],
+            integration_failures=[{"case": "old"}],
+        ),
+        bundle=SkillBundle(
+            bundle_id="lookup_then_update.bundle",
+            negative_cases=[
+                SkillBundleCase(
+                    case_id="wrong_account",
+                    source="unit",
+                    prompt="Update only after lookup.",
+                    expected={"official_valid": True},
+                    polarity="negative",
+                )
+            ],
+        ),
+    )
+    store = ArtifactStore([parent])
+    test_result = SkillTestResult(
+        result_id="unit_refine_result",
+        skill_name="lookup_then_update",
+        skill_version=parent.version,
+        bundle_id=parent.bundle.bundle_id,
+        bundle_version=parent.bundle.bundle_version,
+        aggregate={"pass_all_tests": False, "n_regressed": 1, "n_improved": 0},
+        integration_failures=[{"task_id": "wrong_account", "reason": "updated wrong account"}],
+    )
+    payloads = [
+        {
+            "decision": {
+                "action": "refine_minor",
+                "reason": "tighten account match",
+                "version_kind": "minor",
+                "migration_reason": "candidate 0",
+            },
+            "artifact": {"body": "Refined body 0", "description": "candidate 0"},
+        },
+        {
+            "decision": {
+                "action": "refine_minor",
+                "reason": "require canonical id",
+                "version_kind": "minor",
+                "migration_reason": "candidate 1",
+            },
+            "artifact": {"body": "Refined body 1", "description": "candidate 1"},
+        },
+    ]
+
+    async def fake_refine_skill_artifact_llm(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+        index = int((kwargs.get("audit_context") or {}).get("candidate_index") or 0)
+        return copy.deepcopy(payloads[index])
+
+    async def fake_apply_refine_payload_via_editor(artifact: SkillArtifact, payload: Dict[str, Any]) -> SkillArtifact:
+        updated = copy.deepcopy(artifact)
+        updated.body = str((payload.get("artifact") or {}).get("body") or updated.body)
+        updated.description = str((payload.get("artifact") or {}).get("description") or updated.description)
+        return updated
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.maintenance.adapter.refine_skill_artifact_llm",
+        fake_refine_skill_artifact_llm,
+    )
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.maintenance.adapter.apply_refine_payload_via_editor",
+        fake_apply_refine_payload_via_editor,
+    )
+
+    decisions = await refine_bfcl_skill_store_llm(
+        store,
+        maintenance_test_results=[test_result],
+        llm_config="mock",
+        model_name="mock-model",
+        artifact_names=["lookup_then_update"],
+        candidate_count=2,
+        candidate_group_id="refiner:r0:unit:lookup_then_update",
+        audit_context={"phase": "unit_refine", "round_index": 0},
+    )
+
+    candidate_names = [row["skill_name"] for row in decisions if row.get("source_role") == "refiner_revision"]
+    assert candidate_names == ["lookup_then_update__refined_r0_c0", "lookup_then_update__refined_r0_c1"]
+    assert store.get("lookup_then_update").body == "Original body"
+    assert store.get("lookup_then_update").metadata["refiner_revision_candidates"] == candidate_names
+    for index, name in enumerate(candidate_names):
+        candidate = store.get(name)
+        assert candidate is not None
+        assert candidate.status == "trial"
+        assert candidate.body == f"Refined body {index}"
+        assert candidate.metadata["candidate_group_source_role"] == "refiner_revision"
+        assert candidate.metadata["candidate_for_existing_skill"] == "lookup_then_update"
+        assert candidate.evidence == SkillEvidence()
+        assert candidate.lineage.refactor_group_id == "refiner:r0:unit:lookup_then_update"
 
 
 def test_group_refiner_actions_refine_archive_and_backup() -> None:
@@ -2352,10 +2509,10 @@ def test_role_feedback_normalization_caps_rules_and_reindexes() -> None:
     assert len(normalized["extractor"]["history"]) == 12
     assert projected["extractor"]["n_rules"] == 5
     assert projected["refactorer"]["n_rules"] == 0
-    assert "refiner" not in projected
+    assert projected["refiner"]["n_rules"] == 0
 
 
-def test_role_feedback_normalization_drops_refiner_and_keeps_refactorer() -> None:
+def test_role_feedback_normalization_keeps_refiner_and_refactorer() -> None:
     raw = {
         "refiner": {
             "rules": [{"text": "Narrow triggers when extra calls appear.", "focus": "strictness"}],
@@ -2367,7 +2524,7 @@ def test_role_feedback_normalization_drops_refiner_and_keeps_refactorer() -> Non
         },
     }
     projected = _role_feedback_projection(raw)
-    assert "refiner" not in projected
+    assert projected["refiner"]["rules"][0]["rule_id"] == "refiner_rule_1"
     assert projected["refactorer"]["rules"][0]["rule_id"] == "refactorer_rule_1"
 
 

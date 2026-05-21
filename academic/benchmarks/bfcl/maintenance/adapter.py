@@ -25,6 +25,7 @@ from academic.benchmarks.core.types import (
     BenchmarkTask,
     SkillArtifact,
     SkillBundleCase,
+    SkillEvidence,
     SkillLineage,
     SkillTestCaseRun,
     SkillTestResult,
@@ -2329,6 +2330,8 @@ async def refine_bfcl_skill_store_llm(
     credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
     dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
     refiner_rules: Sequence[Dict[str, Any]] | None = None,
+    candidate_count: int = 1,
+    candidate_group_id: str | None = None,
     audit_context: Dict[str, Any] | None = None,
 ) -> List[Dict[str, Any]]:
     results_by_name = {item.skill_name: item for item in maintenance_test_results}
@@ -2398,34 +2401,152 @@ async def refine_bfcl_skill_store_llm(
         if dependency_context is None:
             dependency_context = _dependency_neighborhood(store, artifact)
         credit_context = list(credit_context_by_skill.get(artifact.name) or [])
-        try:
-            payload = await refine_skill_artifact_llm(
-                artifact,
-                test_result=test_result.as_dict(),
-                integration_failures=list(test_result.integration_failures or []),
-                refinement_history=refinement_history,
-                dependency_summaries=dependency_context,
-                credit_context=credit_context,
-                refiner_rules=refiner_rules,
-                llm_config=llm_config,
-                model_name=model_name,
-                audit_context={
-                    **dict(audit_context or {}),
-                    "artifact_name": artifact.name,
-                },
-            )
-        except Exception as exc:
+        n_candidates = max(1, int(candidate_count or 1))
+        payloads: List[Dict[str, Any]] = []
+        errors: List[str] = []
+        for candidate_index in range(n_candidates):
+            try:
+                payloads.append(
+                    await refine_skill_artifact_llm(
+                        artifact,
+                        test_result=test_result.as_dict(),
+                        integration_failures=list(test_result.integration_failures or []),
+                        refinement_history=refinement_history,
+                        dependency_summaries=dependency_context,
+                        credit_context=credit_context,
+                        refiner_rules=refiner_rules,
+                        llm_config=llm_config,
+                        model_name=model_name,
+                        audit_context={
+                            **dict(audit_context or {}),
+                            "artifact_name": artifact.name,
+                            "candidate_index": candidate_index,
+                            "candidate_count": n_candidates,
+                        },
+                    )
+                )
+            except Exception as exc:
+                errors.append(f"{type(exc).__name__}:{exc}")
+        if not payloads:
             decisions.append(
                 {
                     "skill_name": artifact.name,
                     "action": "keep",
-                    "reason": f"refiner failed to return valid JSON; preserving current stable artifact: {exc}",
+                    "reason": f"refiner failed to return valid JSON; preserving current stable artifact: {'; '.join(errors)}",
                     "version_before": artifact.version,
                     "version_after": artifact.version,
-                    "refiner_error": str(exc),
+                    "refiner_error": "; ".join(errors),
                 }
             )
             continue
+        if n_candidates > 1:
+            group_id = str(candidate_group_id or "").strip()
+            if not group_id:
+                phase = str((audit_context or {}).get("phase") or "refine")
+                round_index = str((audit_context or {}).get("round_index") or "0")
+                repair_round = str((audit_context or {}).get("repair_round") or "0")
+                slug = re.sub(r"[^a-zA-Z0-9_]+", "_", artifact.name).strip("_")[:48] or "skill"
+                group_id = f"refiner:r{round_index}:{phase}:rr{repair_round}:{slug}"
+            competitor_names: List[str] = []
+            candidate_decisions: List[Dict[str, Any]] = []
+            existing_names = {item.name for item in store.all()}
+            for candidate_index, payload in enumerate(payloads):
+                action = str((payload.get("decision") or {}).get("action") or "keep")
+                if action not in {"refine_minor", "refine_major"}:
+                    candidate_decisions.append(
+                        {
+                            "candidate_index": candidate_index,
+                            "action": action,
+                            "reason": str((payload.get("decision") or {}).get("reason") or ""),
+                        }
+                    )
+                    continue
+                updated = await apply_refine_payload_via_editor(artifact, payload)
+                base_name = re.sub(r"[^a-zA-Z0-9_]+", "_", artifact.name).strip("_") or "refined_skill"
+                candidate_name = f"{base_name}__refined_r{str((audit_context or {}).get('round_index') or '0')}_c{candidate_index}"
+                suffix = 1
+                while candidate_name in existing_names:
+                    suffix += 1
+                    candidate_name = f"{base_name}__refined_r{str((audit_context or {}).get('round_index') or '0')}_c{candidate_index}_{suffix}"
+                existing_names.add(candidate_name)
+                updated.name = candidate_name
+                updated.status = "trial"
+                updated.evidence = SkillEvidence()
+                updated.metadata = {
+                    **dict(updated.metadata or {}),
+                    "source": "llm_refiner_revision",
+                    "candidate_group_id": group_id,
+                    "candidate_group_role": "alternative",
+                    "candidate_group_source_role": "refiner_revision",
+                    "candidate_sample_count": n_candidates,
+                    "candidate_sample_index": candidate_index,
+                    "candidate_for_existing_skill": artifact.name,
+                    "refiner_parent_skill_name": artifact.name,
+                    "refiner_parent_version": artifact.version,
+                    "competition_status": "trial",
+                    "promotion_state": "trial",
+                    "is_promoted": True,
+                }
+                updated.bundle.bundle_id = updated.bundle.bundle_id or f"{updated.name}.bundle"
+                if updated.bundle.bundle_id == f"{artifact.name}.bundle":
+                    updated.bundle.bundle_id = f"{updated.name}.bundle"
+                updated.lineage = SkillLineage(
+                    parent_version=artifact.version,
+                    parent_version_id=artifact.version_id(),
+                    version_kind=str((payload.get("decision") or {}).get("version_kind") or "minor"),
+                    migration_reason=str((payload.get("decision") or {}).get("migration_reason") or ""),
+                    refined_from_result_ids=[*list(artifact.lineage.refined_from_result_ids or []), test_result.result_id],
+                    refactor_group_id=group_id,
+                )
+                updated.metadata["refinement_history"] = refinement_history + [
+                    {
+                        "test_result_id": test_result.result_id,
+                        "decision": copy.deepcopy(payload.get("decision") or {}),
+                        "candidate_index": candidate_index,
+                        "candidate_group_id": group_id,
+                    }
+                ]
+                store.add(updated)
+                competitor_names.append(updated.name)
+                candidate_decisions.append(
+                    {
+                        "skill_name": updated.name,
+                        "parent_skill_name": artifact.name,
+                        "action": action,
+                        "reason": str((payload.get("decision") or {}).get("reason") or ""),
+                        "version_before": artifact.version,
+                        "version_after": store.get(updated.name).version if store.get(updated.name) else updated.version,
+                        "candidate_group_id": group_id,
+                        "candidate_index": candidate_index,
+                        "source_role": "refiner_revision",
+                    }
+                )
+            for name in competitor_names:
+                candidate = store.get(name)
+                if candidate is None:
+                    continue
+                competitors = [other for other in competitor_names if other != name]
+                candidate.metadata["competes_with"] = competitors
+                relation = dict(candidate.metadata.get("skill_relation_graph") or {})
+                relation["conflicts_with"] = _unique_names([*list(relation.get("conflicts_with") or []), *competitors])
+                relation["refines"] = _unique_names([*list(relation.get("refines") or []), artifact.name])
+                candidate.metadata["skill_relation_graph"] = relation
+            if competitor_names:
+                artifact.metadata["refiner_revision_group_id"] = group_id
+                artifact.metadata["refiner_revision_candidates"] = list(competitor_names)
+                artifact.metadata["competition_backup_state"] = artifact.metadata.get("competition_backup_state") or "refiner_parent_backup"
+                update_skill_relation_graph(store, refines={name: [artifact.name] for name in competitor_names})
+            decisions.extend(candidate_decisions or [{
+                "skill_name": artifact.name,
+                "action": "keep",
+                "reason": "multi-candidate refiner produced no committable refine candidates",
+                "version_before": artifact.version,
+                "version_after": artifact.version,
+                "candidate_group_id": group_id,
+                "source_role": "refiner_revision",
+            }])
+            continue
+        payload = payloads[0]
         action = str((payload.get("decision") or {}).get("action") or "keep")
         decision_reason = str((payload.get("decision") or {}).get("reason") or "")
         if action == "keep":

@@ -49,6 +49,13 @@ def _bundle_max_total_cases() -> int:
         return 6
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 EXTRACT_SYSTEM = """\
 You are the extractor role in a skill-repository maintenance system.
 
@@ -273,18 +280,15 @@ Your job:
 10. Do not infer quality from zero or low use unless the record explicitly passed the maturity/opportunity gates.
 11. Treat winner_score or summaries as bookkeeping only; ground conclusions in objective exposure_records, credit_records, and bundle_test_records.
 
-Return strict JSON:
-{
-  "analysis": "free-form evidence interpretation",
-  "summary": "brief update rationale",
-  "rules": [
-    {
-      "rule_id": "extractor_rule_1",
-      "text": "one concise actionable rule",
-      "focus": "scope | contract | reuse | anti_pattern | evidence"
-    }
-  ]
-}
+Return exactly this delimiter format:
+=== ANALYSIS ===
+free-form evidence interpretation
+=== SUMMARY ===
+brief update rationale
+=== RULES ===
+[scope] one concise actionable rule
+[contract] another concise actionable rule
+=== END ===
 """
 
 ROLE_RULE_UPDATE_SYSTEMS = {
@@ -312,18 +316,47 @@ Priorities:
    or suppress alternatives without positive harmful evidence.
 5. Keep at most {max_rules} active rules.
 
-Return strict JSON:
-{
-  "analysis": "free-form evidence interpretation",
-  "summary": "one sentence",
-  "rules": [
-    {
-      "rule_id": "refactorer_rule_1",
-      "focus": "merge_guard | residual_scope | trigger | arguments | anti_pattern",
-      "text": "one concise actionable refactorer rule"
-    }
-  ]
-}
+Return exactly this delimiter format:
+=== ANALYSIS ===
+free-form evidence interpretation
+=== SUMMARY ===
+one sentence
+=== RULES ===
+[merge_guard] one concise actionable refactorer rule
+[trigger] another concise actionable refactorer rule
+=== END ===
+""",
+    "refiner": """\
+You maintain a compact runtime-informed rulebook for the refiner role.
+
+Input evidence is mature candidate-group feedback from refiner_revision groups:
+multiple refined versions of the same parent skill that later competed under
+objective exposure, credit, official/strict, and bundle-test records.
+
+Your job is to improve future refinements. Learn when to narrow scope, repair
+exact argument/schema contracts, patch workflow ordering, roll back, or keep
+the parent unchanged. Do not use extractor-only candidate pairs as evidence.
+
+Priorities:
+1. First write free-form analysis interpreting retrieved, injected, used,
+   helpful, harmful, per-exposure, strict/official, bundle, and winner/loser
+   differences.
+2. Prefer small concrete repairs over broad rewrites.
+3. Do not refine from weak attribution; require concrete schema/scope/workflow
+   evidence.
+4. Treat positive-credit-per-exposure and harmful-credit-per-exposure as the
+   main normalized signals.
+5. Keep at most {max_rules} active rules.
+
+Return exactly this delimiter format:
+=== ANALYSIS ===
+free-form evidence interpretation
+=== SUMMARY ===
+one sentence
+=== RULES ===
+[focus] one concise actionable refiner rule
+[focus] another concise actionable refiner rule
+=== END ===
 """,
 }
 
@@ -1058,6 +1091,48 @@ def _normalize_feedback_rules(
     return out
 
 
+def _parse_role_rule_update_text(text: str, *, max_rules: int, prefix: str) -> Dict[str, Any]:
+    raw = str(text or "").strip()
+    if not raw:
+        return {"analysis": "", "summary": "", "rules": []}
+    try:
+        parsed = json.loads(_extract_json_text(raw))
+        if isinstance(parsed, dict):
+            parsed["rules"] = _normalize_feedback_rules(parsed.get("rules"), max_rules=max_rules, prefix=prefix)
+            return parsed
+    except Exception:
+        pass
+
+    def section(name: str) -> str:
+        pattern = rf"===\s*{re.escape(name)}\s*===\s*(.*?)(?=\n===\s*[A-Z_ ]+\s*===|\Z)"
+        match = re.search(pattern, raw, flags=re.IGNORECASE | re.DOTALL)
+        return match.group(1).strip() if match else ""
+
+    analysis = section("ANALYSIS")
+    summary = section("SUMMARY")
+    rules_text = section("RULES")
+    rules: List[Dict[str, Any]] = []
+    for line in rules_text.splitlines():
+        item = line.strip()
+        if not item or item == "=== END ===":
+            continue
+        item = re.sub(r"^\s*[-*]\s*", "", item).strip()
+        match = re.match(r"^\[([^\]]+)\]\s*(.+)$", item)
+        if match:
+            focus = match.group(1).strip().lower() or "evidence"
+            text_value = match.group(2).strip()
+        else:
+            focus = "evidence"
+            text_value = item
+        if text_value:
+            rules.append({"focus": focus, "text": text_value})
+    return {
+        "analysis": analysis,
+        "summary": summary or (analysis[:180] if analysis else ""),
+        "rules": _normalize_feedback_rules(rules, max_rules=max_rules, prefix=prefix),
+    }
+
+
 def _role_rule_suffix(
     rules_payload: Iterable[Dict[str, Any]] | None,
     *,
@@ -1122,6 +1197,16 @@ class JsonRoleClient:
     ) -> Dict[str, Any]:
         raise NotImplementedError
 
+    async def ask_text(
+        self,
+        *,
+        system: str,
+        user: str,
+        llm_config: str,
+        model_name: str | None,
+    ) -> Dict[str, Any]:
+        return await self.ask_json(system=system, user=user, llm_config=llm_config, model_name=model_name)
+
 
 class AnthropicJsonRoleClient(JsonRoleClient):
     async def ask_json(
@@ -1164,6 +1249,37 @@ class GenericJsonRoleClient(JsonRoleClient):
                 messages=[{"role": "user", "content": user}],
                 system_msgs=[{"role": "system", "content": system}],
                 force_json=True,
+                new_model=model_name,
+                temperature=0.0,
+            ),
+            timeout=LLM_CALL_TIMEOUT,
+        )
+        return {
+            "text": str(response or ""),
+            "usage": {
+                "prompt_tokens": int(getattr(llm, "total_input_tokens", 0) or 0) - before_prompt_tokens,
+                "completion_tokens": int(getattr(llm, "total_completion_tokens", 0) or 0) - before_completion_tokens,
+            },
+        }
+
+    async def ask_text(
+        self,
+        *,
+        system: str,
+        user: str,
+        llm_config: str,
+        model_name: str | None,
+    ) -> Dict[str, Any]:
+        from app.llm import LLM
+
+        llm = LLM(config_name=llm_config)
+        before_prompt_tokens = int(getattr(llm, "total_input_tokens", 0) or 0)
+        before_completion_tokens = int(getattr(llm, "total_completion_tokens", 0) or 0)
+        response = await asyncio.wait_for(
+            llm.ask(
+                messages=[{"role": "user", "content": user}],
+                system_msgs=[{"role": "system", "content": system}],
+                force_json=False,
                 new_model=model_name,
                 temperature=0.0,
             ),
@@ -1440,6 +1556,87 @@ async def _ask_json(
         )
         return data
     raise ValueError(f"LLM did not return valid JSON after {max_attempts} attempts: {last_error}\nRaw: {last_response[:1000]}")
+
+
+async def _ask_text(
+    *,
+    system: str,
+    user: str,
+    llm_config: str = EXTRACT_MODEL,
+    model_name: str | None = None,
+    role: str = "llm_maintenance",
+    metadata: Dict[str, Any] | None = None,
+) -> str:
+    from app.config import config
+
+    started = time.monotonic()
+    cfg = config.llm.get(llm_config, config.llm["default"])
+    model = model_name or cfg.model
+    print(
+        json.dumps(
+            {
+                "progress": "maintenance_llm_start",
+                "role": role,
+                "llm_config": llm_config,
+                "model": model,
+                "user_chars": len(user),
+                "system_chars": len(system),
+                "attempt": 1,
+                "max_attempts": 1,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    response_payload = await asyncio.wait_for(
+        _json_role_client(llm_config=llm_config, model_name=model_name).ask_text(
+            system=system,
+            user=user,
+            llm_config=llm_config,
+            model_name=model_name,
+        ),
+        timeout=LLM_CALL_TIMEOUT,
+    )
+    response = str(response_payload.get("text") or "")
+    usage = _normalize_usage_payload(dict(response_payload.get("usage") or {}))
+    duration_ms = int((time.monotonic() - started) * 1000)
+    _record_maintenance_token_event(
+        role=role,
+        llm_config=llm_config,
+        model_name=model_name,
+        usage=usage,
+        metadata={**dict(metadata or {}), "text_mode": True},
+        duration_ms=duration_ms,
+        system_chars=len(system),
+        user_chars=len(user),
+    )
+    print(
+        json.dumps(
+            {
+                "progress": "maintenance_llm_done",
+                "role": role,
+                "duration_ms": duration_ms,
+                "response_chars": len(response),
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0),
+                "attempt": 1,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    _append_llm_audit_log(
+        role=role,
+        llm_config=llm_config,
+        model_name=model_name,
+        system=system,
+        user=user,
+        raw_response=response,
+        parsed_response=None,
+        metadata={**dict(metadata or {}), "duration_ms": duration_ms, "usage": usage, "text_mode": True},
+    )
+    return response
 
 
 def _json_retry_user(original_user: str, *, response: str, error: str) -> str:
@@ -2503,23 +2700,36 @@ async def update_role_rules_from_feedback_llm(
         f"{_role_json_block(feedback_rows)}\n"
     )
     system = ROLE_RULE_UPDATE_SYSTEMS[normalized_role].replace("{max_rules}", str(max_rules))
-    data = await _ask_json(
-        system=system,
-        user=_trim_text(user, limit=12000),
-        llm_config=llm_config,
-        model_name=model_name,
-        role=f"{normalized_role}_feedback",
-        metadata={
-            "feedback_role": normalized_role,
-            "n_current_rules": len(normalized_current),
-            "n_feedback_rows": len(feedback_rows),
-            **dict(audit_context or {}),
-        },
-    )
+    metadata = {
+        "feedback_role": normalized_role,
+        "n_current_rules": len(normalized_current),
+        "n_feedback_rows": len(feedback_rows),
+        **dict(audit_context or {}),
+    }
+    if _env_bool("MAINTENANCE_ROLE_RULE_USE_JSON", False):
+        data = await _ask_json(
+            system=system,
+            user=_trim_text(user, limit=12000),
+            llm_config=llm_config,
+            model_name=model_name,
+            role=f"{normalized_role}_feedback",
+            metadata=metadata,
+        )
+    else:
+        response_text = await _ask_text(
+            system=system,
+            user=_trim_text(user, limit=12000),
+            llm_config=llm_config,
+            model_name=model_name,
+            role=f"{normalized_role}_feedback",
+            metadata=metadata,
+        )
+        data = _parse_role_rule_update_text(response_text, max_rules=max_rules, prefix=prefix)
     updated_rules = _normalize_feedback_rules(data.get("rules"), max_rules=max_rules, prefix=prefix)
     if not updated_rules:
         updated_rules = normalized_current
     return {
+        "analysis": str(data.get("analysis") or ""),
         "summary": str(data.get("summary") or ""),
         "rules": updated_rules,
         "updated_at": datetime.now(timezone.utc).isoformat(),

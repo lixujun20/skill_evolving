@@ -8,6 +8,7 @@ from academic.skill_repository.llm_maintenance import (
     EXTRACT_SYSTEM,
     JsonRoleClient,
     _ask_json,
+    _parse_role_rule_update_text,
     _role_json_block,
     propose_group_refiner_actions_llm,
     update_extractor_rules_from_feedback_llm,
@@ -167,33 +168,22 @@ async def test_update_extractor_rules_from_synthetic_feedback_captures_prompt(mo
 
     captured: dict = {}
 
-    async def fake_ask_json(*, system, user, llm_config, model_name, role, metadata):
+    async def fake_ask_text(*, system, user, llm_config, model_name, role, metadata):
         captured["system"] = system
         captured["user"] = user
         captured["llm_config"] = llm_config
         captured["model_name"] = model_name
         captured["role"] = role
         captured["metadata"] = metadata
-        return {
-            "summary": (
-                "Broader shortcut skills reused less reliably and caused regressions "
-                "when hidden identifier-resolution preconditions varied."
-            ),
-            "rules": [
-                {
-                    "rule_id": "extractor_rule_1",
-                    "text": (
-                        "When success depends on resolving a canonical identifier "
-                        "before an action, extract that lookup-to-action contract "
-                        "explicitly instead of a shortcut that skips lookup based on "
-                        "surface familiarity."
-                    ),
-                    "focus": "reuse",
-                }
-            ],
-        }
+        return """=== ANALYSIS ===
+The lookup-to-action candidate had repeated helpful use, while the shortcut was harmful when hidden identifier-resolution preconditions varied.
+=== SUMMARY ===
+Broader shortcut skills reused less reliably and caused regressions when hidden identifier-resolution preconditions varied.
+=== RULES ===
+[reuse] When success depends on resolving a canonical identifier before an action, extract that lookup-to-action contract explicitly instead of a shortcut that skips lookup based on surface familiarity.
+=== END ==="""
 
-    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_json", fake_ask_json)
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_text", fake_ask_text)
 
     result = await update_extractor_rules_from_feedback_llm(
         current_rules=[
@@ -220,6 +210,7 @@ async def test_update_extractor_rules_from_synthetic_feedback_captures_prompt(mo
     assert "helped_valid_count" in captured["user"]
     assert "Compare candidates within the same candidate group" in captured["system"]
     assert "objective exposure_records, credit_records, and bundle_test_records" in captured["system"]
+    assert "Return exactly this delimiter format" in captured["system"]
     assert result["rules"][0]["focus"] == "reuse"
     assert "canonical identifier" in result["rules"][0]["text"]
 
@@ -325,6 +316,26 @@ async def test_ask_json_retries_after_malformed_json(monkeypatch) -> None:
     assert result == {"ok": True}
     assert len(calls) == 2
     assert "JSON repair retry" in calls[1]
+
+
+def test_parse_role_rule_update_text_delimiter_output() -> None:
+    parsed = _parse_role_rule_update_text(
+        """=== ANALYSIS ===
+Candidate A had more positive-credit-per-exposure than Candidate B.
+=== SUMMARY ===
+Prefer narrow lookup contracts.
+=== RULES ===
+[contract] Preserve the exact lookup result id when extracting action skills.
+[scope] Split skills when candidate siblings differ in hidden state preconditions.
+        === END ===""",
+        max_rules=5,
+        prefix="extractor_rule",
+    )
+
+    assert parsed["summary"] == "Prefer narrow lookup contracts."
+    assert parsed["rules"][0]["rule_id"] == "extractor_rule_1"
+    assert parsed["rules"][0]["focus"] == "contract"
+    assert "lookup result id" in parsed["rules"][0]["text"]
 
 
 def test_extract_system_encodes_se_norms_and_few_shots() -> None:

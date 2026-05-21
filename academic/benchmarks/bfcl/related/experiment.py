@@ -225,7 +225,7 @@ def _first_run(detail: Dict[str, Any]) -> Dict[str, Any]:
 
 def _normalize_role_feedback_memory(role_feedback: Dict[str, Any] | None) -> Dict[str, Any]:
     payload = copy.deepcopy(role_feedback or {})
-    for role in ("extractor", "refactorer"):
+    for role in ("extractor", "refactorer", "refiner"):
         source = dict(payload.get(role) or {})
         rules: List[Dict[str, Any]] = []
         seen: set[str] = set()
@@ -256,14 +256,13 @@ def _normalize_role_feedback_memory(role_feedback: Dict[str, Any] | None) -> Dic
             "last_update_summary": str(source.get("last_update_summary") or ""),
             "updated_at": source.get("updated_at"),
         }
-    payload.pop("refiner", None)
     return payload
 
 
 def _role_feedback_projection(role_feedback: Dict[str, Any] | None) -> Dict[str, Any]:
     normalized = _normalize_role_feedback_memory(role_feedback)
     out: Dict[str, Any] = {}
-    for role in ("extractor", "refactorer"):
+    for role in ("extractor", "refactorer", "refiner"):
         payload = dict(normalized.get(role) or {})
         out[role] = {
             "rules": copy.deepcopy(payload.get("rules") or []),
@@ -1209,11 +1208,29 @@ def _sample_replay_rows_for_role(
     role_name: str,
     *,
     max_rows: int = 8,
+    round_index: int | None = None,
+    macro_index: int | None = None,
+    extractor_refiner_probability: float | None = None,
 ) -> List[Dict[str, Any]]:
     source_role = str(role_name or "").strip().lower()
+    if source_role == "refiner":
+        source_role = "refiner_revision"
     if source_role not in {"extractor", "refactorer", "refiner_revision"}:
         return []
-    return copy.deepcopy(list(replay_buffer.get(source_role) or [])[-max_rows:])
+    rows = list(replay_buffer.get(source_role) or [])[-max_rows:]
+    if source_role == "extractor":
+        probability = (
+            float(extractor_refiner_probability)
+            if extractor_refiner_probability is not None
+            else max(0.0, min(1.0, _env_float("BFCL_TRL_EXTRACTOR_REFINER_REPLAY_PROB", 0.5)))
+        )
+        if probability > 0.0:
+            seed_text = f"{round_index if round_index is not None else 0}:{macro_index if macro_index is not None else 0}:extractor_refiner_replay"
+            bucket = sum(ord(ch) for ch in seed_text) % 10000
+            if bucket < int(probability * 10000):
+                refiner_rows = list(replay_buffer.get("refiner_revision") or [])[-max_rows:]
+                rows = [*rows, *refiner_rows][-max_rows:]
+    return copy.deepcopy(rows)
 
 
 def _group_refiner_source_task_id(row: Dict[str, Any], *, window_details: Sequence[Dict[str, Any]] | None = None) -> str:
@@ -1510,6 +1527,7 @@ def _build_candidate_group_feedback_rows(
     train_details: Sequence[Dict[str, Any]],
     credit_events: Sequence[Dict[str, Any]],
     maintenance_test_results: Sequence[Dict[str, Any]] | None = None,
+    store: ArtifactStore | None = None,
 ) -> List[Dict[str, Any]]:
     groups: Dict[str, Dict[str, Any]] = {}
     member_to_group: Dict[str, str] = {}
@@ -1525,6 +1543,7 @@ def _build_candidate_group_feedback_rows(
             {
                 "feedback_type": "candidate_group",
                 "candidate_group_id": group_id,
+                "source_role": _source_role_for_candidate_group(event),
                 "source_task_ids": [],
                 "source_task_indices": [],
                 "members": {},
@@ -1563,6 +1582,69 @@ def _build_candidate_group_feedback_rows(
             },
         )
         member_to_group[name] = group_id
+    if store is not None:
+        for artifact in store.all():
+            group_id = str(artifact.metadata.get("candidate_group_id") or "").strip()
+            if not group_id:
+                continue
+            source_role = _source_role_for_candidate_group(
+                {
+                    "candidate_group_id": group_id,
+                    "source_role": artifact.metadata.get("candidate_group_source_role"),
+                    "candidate_group_source_role": artifact.metadata.get("candidate_group_source_role"),
+                }
+            )
+            if source_role not in {"refactorer", "refiner_revision"}:
+                continue
+            group = groups.setdefault(
+                group_id,
+                {
+                    "feedback_type": "candidate_group",
+                    "candidate_group_id": group_id,
+                    "source_role": source_role,
+                    "source_task_ids": [],
+                    "source_task_indices": [],
+                    "members": {},
+                },
+            )
+            source_task_ids = artifact.metadata.get("source_task_ids") or artifact.metadata.get("prior_extraction_task_id") or []
+            if isinstance(source_task_ids, str):
+                source_task_ids = [source_task_ids]
+            for source_task_id in source_task_ids:
+                text = str(source_task_id or "").strip()
+                if text and text not in group["source_task_ids"]:
+                    group["source_task_ids"].append(text)
+            created_index = artifact.metadata.get("prior_extraction_task_index")
+            if created_index is not None and str(created_index).lstrip("-").isdigit():
+                group["source_task_indices"].append(int(created_index))
+            group["members"].setdefault(
+                artifact.name,
+                {
+                    "skill_name": artifact.name,
+                    "description": artifact.description,
+                    "kind": artifact.kind,
+                    "sample_index": artifact.metadata.get("candidate_sample_index"),
+                    "status": artifact.status,
+                    "retrieved_count": 0,
+                    "injected_count": 0,
+                    "used_count": 0,
+                    "helpful_count": 0,
+                    "harmful_count": 0,
+                    "neutral_count": 0,
+                    "uncertain_count": 0,
+                    "strict_helpful_count": 0,
+                    "strict_harmful_count": 0,
+                    "official_helpful_count": 0,
+                    "official_harmful_count": 0,
+                    "bundle_failures": 0,
+                    "bundle_passes": 0,
+                    "task_ids": [],
+                    "exposure_records": [],
+                    "credit_records": [],
+                    "bundle_test_records": [],
+                },
+            )
+            member_to_group[artifact.name] = group_id
     if not groups:
         return []
     for detail in train_details:
@@ -1727,6 +1809,7 @@ def _build_candidate_group_feedback_rows(
             {
                 "feedback_type": "candidate_group",
                 "candidate_group_id": group["candidate_group_id"],
+                "source_role": _source_role_for_candidate_group(group),
                 "source_task_ids": sorted(str(item) for item in group.get("source_task_ids") or [] if str(item)),
                 "created_task_index": created_task_index,
                 "winner": winner,
@@ -3242,6 +3325,7 @@ async def _run_round_refine_and_refactor(
             artifact_names=targets,
             credit_context_by_skill=credit_context_by_skill,
             refiner_rules=refiner_rules,
+            candidate_count=max(1, _env_int("BFCL_REFINER_CANDIDATE_COUNT", 2)),
             audit_context={"phase": f"{phase}_refine", "round_index": round_index, "experiment": tag},
         )
     overlap_refactor: Dict[str, Any] = {"attempts": [], "refactor_segment_coverage": []}
@@ -3315,6 +3399,7 @@ async def _run_bundle_test_and_refine_targets(
     lock_manager: SkillMaintenanceLockManager | None = None,
     run_refine: bool = True,
     max_repair_rounds: int = 1,
+    refiner_candidate_count: int | None = None,
 ) -> Dict[str, Any]:
     target_names = _unique_ordered(targets)
     test_results: List[SkillTestResult] = []
@@ -3375,6 +3460,14 @@ async def _run_bundle_test_and_refine_targets(
             credit_context_by_skill=credit_context_by_skill,
             dependency_context_by_skill=dependency_context_by_skill,
             refiner_rules=refiner_rules,
+            candidate_count=max(
+                1,
+                int(
+                    refiner_candidate_count
+                    if refiner_candidate_count is not None
+                    else _env_int("BFCL_REFINER_CANDIDATE_COUNT", 2)
+                ),
+            ),
             audit_context={
                 "phase": f"{phase}_refine",
                 "round_index": round_index,
@@ -3578,6 +3671,7 @@ async def _run_credit_pre_refine_targets(
         credit_context_by_skill=credit_context_by_skill,
         dependency_context_by_skill=dependency_context_by_skill,
         refiner_rules=refiner_rules,
+        candidate_count=max(1, _env_int("BFCL_REFINER_CANDIDATE_COUNT", 2)),
         audit_context={
             "phase": "micro_credit_pre_refine",
             "round_index": round_index,
@@ -3867,6 +3961,7 @@ async def _run_group_maintenance(
         lock_manager=lock_manager,
         run_refine=True,
         max_repair_rounds=max(1, int(os.environ.get("BFCL_GROUP_REPAIR_ROUNDS", "2") or "2")),
+        refiner_candidate_count=1,
     )
     report.update(maintenance_results)
     report["group_refiner_credit_rows"] = copy.deepcopy(credit_rows)
@@ -4284,6 +4379,7 @@ async def _run_related_evolve_experiment(
                     train_details=window_details,
                     credit_events=credit_events,
                     maintenance_test_results=macro_report.get("maintenance_test_results") or [],
+                    store=store,
                 )
                 feedback_rows = _select_macro_candidate_group_feedback_rows(
                     raw_rows=raw_rows,
@@ -4392,7 +4488,7 @@ async def _run_related_evolve_experiment(
                         for member in (row.get("members") or [])
                         if isinstance(member, dict)
                     ]),
-                    refiner_rules=[],
+                    refiner_rules=copy.deepcopy((role_feedback.get("refiner") or {}).get("rules") or []) if extractor_trl_enabled else [],
                     lock_manager=maintenance_locks,
                     group_refiner_actions=group_refiner_actions,
                     group_refiner_action_payload=group_refiner_action_payload,
@@ -4410,11 +4506,13 @@ async def _run_related_evolve_experiment(
                 }
                 if extractor_trl_enabled and feedback_rows:
                     role_updates: Dict[str, Dict[str, Any]] = {}
-                    for feedback_role in ("extractor", "refactorer"):
+                    for feedback_role in ("extractor", "refactorer", "refiner"):
                         role_rows = _sample_replay_rows_for_role(
                             replay_buffer,
                             feedback_role,
-                            max_rows=max(_ROLE_FEEDBACK_RULE_LIMIT, len(feedback_rows)),
+                            max_rows=max(_env_int("BFCL_TRL_ROLE_REPLAY_MAX_ROWS", 8), _ROLE_FEEDBACK_RULE_LIMIT),
+                            round_index=round_index,
+                            macro_index=macro_index,
                         )
                         role_updates[feedback_role] = await update_role_rules_from_feedback_llm(
                             role_name=feedback_role,

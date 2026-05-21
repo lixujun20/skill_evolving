@@ -20,7 +20,7 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from academic.config import EXTRACT_MODEL, LLM_CALL_TIMEOUT
 from academic.skill_repository.types import (
@@ -249,29 +249,121 @@ You maintain a compact runtime-informed rulebook for the extractor role.
 
 You receive:
 - the current extractor rules of thumb
-- runtime evidence about previously extracted skills:
-  - whether they were retrieved / injected / used
-  - whether they helped or harmed official validity
-  - whether maintenance tests later failed
+- objective runtime evidence about mature candidate groups produced by the extractor:
+  - competing candidate skill alternatives from the same source task
+  - raw exposure records showing whether each candidate was retrieved / injected / used
+  - raw credit records showing official-validity outcomes and credit judgments
+  - raw bundle-test records when available
 
 Your job:
-1. Infer a small set of reusable extractor rules that improve future extraction quality.
-2. Prefer rules about scope control, local contract precision, anti-pollution, and reusable/generalizable skill boundaries.
-3. Use both positive and negative evidence. Harmful or noisy skills should push the rules toward narrower and better-grounded extraction.
-4. Keep at most {max_rules} active rules.
-5. Merge duplicates or near-duplicates instead of rephrasing the same point many times.
-6. Remove stale or weak rules if stronger replacements exist.
-7. Rules must be concise, imperative, and actionable by the extractor prompt.
-8. Do not emit role-management advice like "look at the evidence carefully"; emit concrete extraction behavior rules.
+1. First write a free-form `analysis` field that interprets retrieved,
+   injected, used, helpful, harmful, per-exposure, strict/official, bundle, and
+   winner/loser differences.
+2. Then infer a small set of reusable extractor rules that improve future
+   extraction quality.
+3. Prefer rules about scope control, local contract precision, anti-pollution,
+   and reusable/generalizable skill boundaries.
+4. Compare candidates within the same candidate group; do not judge a single
+   skill in isolation.
+5. Keep at most {max_rules} active rules.
+6. Merge duplicates or near-duplicates instead of rephrasing the same point many times.
+7. Remove stale or weak rules if stronger replacements exist.
+8. Rules must be concise, imperative, and actionable by the extractor prompt.
+9. Do not emit role-management advice like "look at the evidence carefully"; emit concrete extraction behavior rules.
+10. Do not infer quality from zero or low use unless the record explicitly passed the maturity/opportunity gates.
+11. Treat winner_score or summaries as bookkeeping only; ground conclusions in objective exposure_records, credit_records, and bundle_test_records.
 
 Return strict JSON:
 {
+  "analysis": "free-form evidence interpretation",
   "summary": "brief update rationale",
   "rules": [
     {
       "rule_id": "extractor_rule_1",
       "text": "one concise actionable rule",
       "focus": "scope | contract | reuse | anti_pattern | evidence"
+    }
+  ]
+}
+"""
+
+ROLE_RULE_UPDATE_SYSTEMS = {
+    "extractor": EXTRACTOR_RULE_UPDATE_SYSTEM,
+    "refactorer": """\
+You maintain a compact runtime-informed rulebook for the refactorer role.
+
+Input evidence is mature candidate-group feedback from later rollouts. It
+contains objective exposure counts, credit records, strict/official outcomes,
+bundle-test records, and normalized credit rates.
+
+Your job is to improve future overlap refactoring decisions. Learn when to
+extract a shared skill, when to keep residual skills separate, and when a merge
+would broaden triggers enough to harm strict exactness.
+
+Priorities:
+1. First write a free-form `analysis` field that interprets retrieved,
+   injected, used, helpful, harmful, per-exposure, strict/official, bundle, and
+   winner/loser differences.
+2. Prefer "do not merge" rules when candidates differ in trigger, argument
+   binding, state preconditions, or tool schemas.
+3. Shared skills must preserve strict-exact behavior; official-valid partial
+   gains are not enough if extra/missing calls increase.
+4. Use group comparisons and positive-credit-per-exposure rates. Do not archive
+   or suppress alternatives without positive harmful evidence.
+5. Keep at most {max_rules} active rules.
+
+Return strict JSON:
+{
+  "analysis": "free-form evidence interpretation",
+  "summary": "one sentence",
+  "rules": [
+    {
+      "rule_id": "refactorer_rule_1",
+      "focus": "merge_guard | residual_scope | trigger | arguments | anti_pattern",
+      "text": "one concise actionable refactorer rule"
+    }
+  ]
+}
+""",
+}
+
+GROUP_REFINER_ACTION_SYSTEM = """\
+You are a macro-stage candidate-group refiner.
+
+You receive mature candidate-group evidence after the group has had enough
+opportunity to be retrieved/injected/used. Each group contains competing skill
+alternatives from the same source, raw exposure records, raw credit records,
+bundle-test records when available, and per-exposure helpful/harmful rates.
+
+First write a free-form `analysis` that interprets the objective evidence.
+Consider:
+- whether each skill was retrieved, injected, and explicitly used/called
+- helpful vs harmful credit per exposure
+- strict vs official-valid outcomes
+- bundle pass/fail records
+- winner/loser differences inside the same group
+- whether zero exposure means no opportunity rather than bad content
+
+Then output actions for existing skills only:
+- keep: enough helpful evidence and no meaningful harmful evidence
+- refine: useful/helpful idea exists but scope, trigger, argument binding, or
+  non-applicability must be tightened because harmful/mixed evidence exists
+- archive: explicit harmful evidence dominates and there is no helpful signal
+- backup: zero/low/neutral evidence; preserve as a non-primary alternative
+
+Prefer refine over archive when a skill has any clear helpful evidence. Do not
+archive neutral or zero-exposure skills. Do not rely on winner_score alone.
+
+Return strict JSON:
+{
+  "analysis": "free-form evidence interpretation grounded in the supplied records",
+  "actions": [
+    {
+      "candidate_group_id": "group id",
+      "skill_name": "existing skill name",
+      "action": "keep | refine | archive | backup",
+      "reason": "objective evidence supporting the action",
+      "patch_intent": "for refine only, what scope/trigger/body/interface should change"
     }
   ]
 }
@@ -763,11 +855,159 @@ def _json_block(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
+def _role_json_block(value: Any, *, preserve_keys: Iterable[str] | None = None) -> str:
+    return json.dumps(
+        _compact_role_payload(value, preserve_keys=set(preserve_keys or ())),
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 def _trim_text(value: str, limit: int = 14000) -> str:
     text = str(value or "")
     if len(text) <= limit:
         return text
     return text[:limit] + "\n...[truncated]"
+
+
+_ROLE_DROP_KEYS = {
+    "raw",
+    "raw_response",
+    "input_artifacts",
+    "golden_xlsx",
+    "prompt_txt_preview",
+    "history_tail",
+    "lineage",
+    "fixtures",
+    "version_id",
+}
+
+_ROLE_TEXT_LIMITS = {
+    "description": 360,
+    "reason": 420,
+    "failure_summary": 900,
+    "stderr": 900,
+    "stderr_tail": 900,
+    "stdout": 500,
+    "stdout_tail": 500,
+    "question": 1400,
+    "question_preview": 1400,
+    "instruction": 1400,
+    "user_messages": 1400,
+    "raw_error": 700,
+}
+
+_ROLE_PRESERVE_TEXT_KEYS = {
+    "body",
+    "code",
+    "code_preview",
+    "code_snippet",
+    "executable_code",
+    "implementation",
+    "source_code",
+}
+
+_ROLE_LIST_LIMITS = {
+    "positive_cases": 4,
+    "negative_cases": 4,
+    "integration_cases": 4,
+    "unit_case_runs": 8,
+    "failed_cases": 6,
+    "passed_cases": 4,
+    "candidate_skills": 8,
+    "recent_helpful": 2,
+    "recent_harmful": 2,
+    "dependency_summaries": 6,
+    "refinement_history": 3,
+    "integration_failures": 6,
+    "contract_validation_failures": 6,
+    "credit_cases": 6,
+    "credit_context": 6,
+    "question": 4,
+    "expected": 6,
+    "expected_calls": 6,
+    "expected_focused": 6,
+    "focused_turns": 6,
+    "turns": 6,
+    "tool_calls": 8,
+    "tool_results": 4,
+    "notebook_steps": 10,
+    "tool_summary": 80,
+    "error_summary": 40,
+}
+
+
+def _compact_role_payload(
+    value: Any,
+    *,
+    key: str = "",
+    depth: int = 0,
+    preserve_keys: set[str] | None = None,
+) -> Any:
+    preserve_keys = preserve_keys or set()
+    if value in (None, "", [], {}):
+        return None
+    if isinstance(value, str):
+        if key in _ROLE_PRESERVE_TEXT_KEYS:
+            return value
+        limit = _ROLE_TEXT_LIMITS.get(key, 1800 if len(value) > 2400 else 0)
+        return _trim_text(value, limit=limit) if limit else value
+    if isinstance(value, (int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        out: Dict[str, Any] = {}
+        for child_key, child_value in value.items():
+            if child_key in _ROLE_DROP_KEYS and child_key not in preserve_keys:
+                continue
+            if child_key == "metadata" and isinstance(child_value, dict):
+                child_value = {
+                    k: child_value.get(k)
+                    for k in (
+                        "domains",
+                        "allowed_tools",
+                        "intent_keywords",
+                        "source_task_ids",
+                        "source_success",
+                        "non_applicability",
+                        "promotion_state",
+                        "disabled_reason",
+                    )
+                    if child_value.get(k) not in (None, "", [], {})
+                }
+            compacted = _compact_role_payload(
+                child_value,
+                key=str(child_key),
+                depth=depth + 1,
+                preserve_keys=preserve_keys,
+            )
+            if compacted not in (None, "", [], {}):
+                out[str(child_key)] = compacted
+        return out
+    if isinstance(value, (list, tuple, set)):
+        items = list(value)
+        limit = _ROLE_LIST_LIMITS.get(key)
+        truncated = False
+        if limit is not None and len(items) > limit:
+            items = items[:limit]
+            truncated = True
+        compacted_items = [
+            compacted
+            for item in items
+            for compacted in [
+                _compact_role_payload(
+                    item,
+                    key=key,
+                    depth=depth + 1,
+                    preserve_keys=preserve_keys,
+                )
+            ]
+            if compacted not in (None, "", [], {})
+        ]
+        if truncated:
+            compacted_items.append({"truncated_count": len(value) - len(items)})
+        return compacted_items
+    return str(value)
+
 
 
 def _first_nonempty(mapping: Dict[str, Any], *keys: str) -> Any:
@@ -818,17 +1058,36 @@ def _normalize_feedback_rules(
     return out
 
 
-def _extractor_rule_suffix(extractor_rules: Iterable[Dict[str, Any]] | None) -> str:
-    rules = _normalize_feedback_rules(extractor_rules)
+def _role_rule_suffix(
+    rules_payload: Iterable[Dict[str, Any]] | None,
+    *,
+    role_label: str,
+    prefix: str,
+) -> str:
+    rules = _normalize_feedback_rules(rules_payload, prefix=prefix)
     if not rules:
         return ""
     lines = [
         "",
-        "Runtime-informed extractor rules of thumb:",
+        f"Runtime-informed {role_label} rules of thumb:",
+        "- These are learned soft constraints. Direct task evidence, tool schemas, and official trace evidence take priority.",
+        "- Do not copy rule text into skill bodies. Use rules only to shape scope, trigger, argument contract, and merge/refactor decisions.",
     ]
     for row in rules:
         lines.append(f"- [{row['focus']}] {row['text']}")
     return "\n".join(lines)
+
+
+def _extractor_rule_suffix(extractor_rules: Iterable[Dict[str, Any]] | None) -> str:
+    return _role_rule_suffix(extractor_rules, role_label="extractor", prefix="extractor_rule")
+
+
+def _refiner_rule_suffix(refiner_rules: Iterable[Dict[str, Any]] | None) -> str:
+    return _role_rule_suffix(refiner_rules, role_label="refiner", prefix="refiner_rule")
+
+
+def _refactorer_rule_suffix(refactorer_rules: Iterable[Dict[str, Any]] | None) -> str:
+    return _role_rule_suffix(refactorer_rules, role_label="refactorer", prefix="refactorer_rule")
 
 
 def _normalize_usage_payload(usage: Dict[str, Any] | None) -> Dict[str, int]:
@@ -1018,6 +1277,7 @@ def snapshot_maintenance_token_stats(*, start_index: int = 0) -> Dict[str, Any]:
         "summary": summary,
         "by_role": by_role,
         "by_phase": by_phase,
+        "events": events,
         "recent_events": events[-20:],
     }
 
@@ -1036,94 +1296,161 @@ async def _ask_json(
     started = time.monotonic()
     cfg = config.llm.get(llm_config, config.llm["default"])
     model = model_name or cfg.model
-    print(
-        json.dumps(
-            {
-                "progress": "maintenance_llm_start",
-                "role": role,
-                "llm_config": llm_config,
-                "model": model,
-                "user_chars": len(user),
-                "system_chars": len(system),
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
-    )
-    response_payload = await asyncio.wait_for(
-        _json_role_client(llm_config=llm_config, model_name=model_name).ask_json(
-            system=system,
-            user=user,
-            llm_config=llm_config,
-            model_name=model_name,
-        ),
-        timeout=LLM_CALL_TIMEOUT,
-    )
-    response = str(response_payload.get("text") or "")
-    usage = _normalize_usage_payload(dict(response_payload.get("usage") or {}))
-    duration_ms = int((time.monotonic() - started) * 1000)
-    _record_maintenance_token_event(
-        role=role,
-        llm_config=llm_config,
-        model_name=model_name,
-        usage=usage,
-        metadata=metadata,
-        duration_ms=duration_ms,
-        system_chars=len(system),
-        user_chars=len(user),
-    )
-    print(
-        json.dumps(
-            {
-                "progress": "maintenance_llm_done",
-                "role": role,
-                "duration_ms": duration_ms,
-                "response_chars": len(str(response or "")),
-                "prompt_tokens": usage.get("prompt_tokens", 0),
-                "completion_tokens": usage.get("completion_tokens", 0),
-                "total_tokens": usage.get("total_tokens", 0),
-            },
-            ensure_ascii=False,
-        ),
-        flush=True,
-    )
-    try:
-        data = json.loads(_extract_json_text(response))
-    except Exception as exc:
-        _append_llm_audit_log(
-            role=role,
-            llm_config=llm_config,
-            model_name=model_name,
-            system=system,
-            user=user,
-            raw_response=response,
-            parsed_response=None,
-            metadata={**dict(metadata or {}), "parse_error": str(exc), "duration_ms": duration_ms, "usage": usage},
+    max_attempts = max(1, int(os.environ.get("MAINTENANCE_JSON_MAX_ATTEMPTS", "3") or "3"))
+    retry_user = user
+    last_error = ""
+    last_response = ""
+    for attempt in range(1, max_attempts + 1):
+        print(
+            json.dumps(
+                {
+                    "progress": "maintenance_llm_start",
+                    "role": role,
+                    "llm_config": llm_config,
+                    "model": model,
+                    "user_chars": len(retry_user),
+                    "system_chars": len(system),
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
         )
-        raise ValueError(f"LLM did not return valid JSON: {exc}\nRaw: {response[:1000]}") from exc
-    if not isinstance(data, dict):
+        try:
+            response_payload = await asyncio.wait_for(
+                _json_role_client(llm_config=llm_config, model_name=model_name).ask_json(
+                    system=system,
+                    user=retry_user,
+                    llm_config=llm_config,
+                    model_name=model_name,
+                ),
+                timeout=LLM_CALL_TIMEOUT,
+            )
+        except Exception as exc:
+            last_error = f"request_error:{type(exc).__name__}:{exc}"
+            duration_ms = int((time.monotonic() - started) * 1000)
+            print(
+                json.dumps(
+                    {
+                        "progress": "maintenance_llm_error",
+                        "role": role,
+                        "llm_config": llm_config,
+                        "model": model,
+                        "duration_ms": duration_ms,
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[-1000:],
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            _append_llm_audit_log(
+                role=role,
+                llm_config=llm_config,
+                model_name=model_name,
+                system=system,
+                user=retry_user,
+                raw_response="",
+                parsed_response=None,
+                metadata={
+                    **dict(metadata or {}),
+                    "request_error": str(exc),
+                    "request_error_type": type(exc).__name__,
+                    "duration_ms": duration_ms,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                },
+            )
+            if attempt >= max_attempts:
+                raise
+            await asyncio.sleep(min(30.0, 2.0 * attempt))
+            continue
+        response = str(response_payload.get("text") or "")
+        last_response = response
+        usage = _normalize_usage_payload(dict(response_payload.get("usage") or {}))
+        duration_ms = int((time.monotonic() - started) * 1000)
+        _record_maintenance_token_event(
+            role=role,
+            llm_config=llm_config,
+            model_name=model_name,
+            usage=usage,
+            metadata={**dict(metadata or {}), "attempt": attempt, "max_attempts": max_attempts},
+            duration_ms=duration_ms,
+            system_chars=len(system),
+            user_chars=len(retry_user),
+        )
+        print(
+            json.dumps(
+                {
+                    "progress": "maintenance_llm_done",
+                    "role": role,
+                    "duration_ms": duration_ms,
+                    "response_chars": len(str(response or "")),
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                    "attempt": attempt,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        try:
+            data = json.loads(_extract_json_text(response))
+        except Exception as exc:
+            last_error = f"parse_error:{exc}"
+            _append_llm_audit_log(
+                role=role,
+                llm_config=llm_config,
+                model_name=model_name,
+                system=system,
+                user=retry_user,
+                raw_response=response,
+                parsed_response=None,
+                metadata={**dict(metadata or {}), "parse_error": str(exc), "duration_ms": duration_ms, "usage": usage, "attempt": attempt},
+            )
+            retry_user = _json_retry_user(user, response=response, error=str(exc))
+            continue
+        if not isinstance(data, dict):
+            last_error = f"type_error:{type(data).__name__}"
+            _append_llm_audit_log(
+                role=role,
+                llm_config=llm_config,
+                model_name=model_name,
+                system=system,
+                user=retry_user,
+                raw_response=response,
+                parsed_response=data,
+                metadata={**dict(metadata or {}), "type_error": type(data).__name__, "duration_ms": duration_ms, "usage": usage, "attempt": attempt},
+            )
+            retry_user = _json_retry_user(user, response=response, error=f"Expected JSON object, got {type(data).__name__}")
+            continue
         _append_llm_audit_log(
             role=role,
             llm_config=llm_config,
             model_name=model_name,
             system=system,
-            user=user,
+            user=retry_user,
             raw_response=response,
             parsed_response=data,
-            metadata={**dict(metadata or {}), "type_error": type(data).__name__, "duration_ms": duration_ms, "usage": usage},
+            metadata={**dict(metadata or {}), "duration_ms": duration_ms, "usage": usage, "attempt": attempt},
         )
-        raise ValueError(f"Expected JSON object, got: {type(data).__name__}")
-    _append_llm_audit_log(
-        role=role,
-        llm_config=llm_config,
-        model_name=model_name,
-        system=system,
-        user=user,
-        raw_response=response,
-        parsed_response=data,
-        metadata={**dict(metadata or {}), "duration_ms": duration_ms, "usage": usage},
+        return data
+    raise ValueError(f"LLM did not return valid JSON after {max_attempts} attempts: {last_error}\nRaw: {last_response[:1000]}")
+
+
+def _json_retry_user(original_user: str, *, response: str, error: str) -> str:
+    return (
+        f"{original_user}\n\n"
+        "## JSON repair retry\n"
+        "Your previous response could not be parsed as a JSON object. Return only one valid JSON object matching the requested schema. "
+        "Do not include Markdown fences or explanatory prose.\n"
+        f"Parser/type error: {error}\n"
+        f"Previous response prefix: {str(response or '')[:1200]}"
     )
-    return data
 
 
 def _extract_json_text(response: str) -> str:
@@ -1559,13 +1886,29 @@ def _artifact_prompt_block(artifact: SkillArtifact) -> Dict[str, Any]:
         "version": artifact.version,
         "status": artifact.status,
         "stale": artifact.stale,
-        "metadata": artifact.metadata,
-        "interface": artifact.interface.as_dict(),
-        "bundle": artifact.bundle.as_dict(),
-        "lineage": artifact.lineage.as_dict(),
+        "metadata": {
+            key: artifact.metadata.get(key)
+            for key in (
+                "domains",
+                "allowed_tools",
+                "intent_keywords",
+                "source_task_ids",
+                "non_applicability",
+                "disabled_reason",
+            )
+            if artifact.metadata.get(key) not in (None, "", [], {})
+        },
+        "interface": {
+            "summary": artifact.interface.summary,
+            "usage": artifact.interface.usage,
+            "input_contract": artifact.interface.input_contract,
+            "output_contract": artifact.interface.output_contract,
+            "invocation_contract": artifact.interface.invocation_contract,
+            "compatibility_notes": artifact.interface.compatibility_notes,
+        },
+        "bundle": _bundle_projection(artifact.bundle),
         "dependencies": list(artifact.dependencies or []),
         "dependency_pins": [item.as_dict() for item in artifact.dependency_pins],
-        "history_tail": list(artifact.history[-3:]),
     }
 
 
@@ -1586,7 +1929,6 @@ def _result_prompt_block(
                 "task_id": task.get("task_id"),
                 "question": task.get("question"),
                 "expected": task.get("expected"),
-                "input_artifacts": task.get("input_artifacts"),
                 "metadata": task.get("metadata"),
             },
             "success": result.get("success"),
@@ -1605,7 +1947,7 @@ def _result_prompt_block(
                 "total_tokens": metrics.get("total_tokens"),
             },
             "trace": {
-                "turns": trace.get("turns"),
+                "turns": _focused_turn_summaries(trace.get("turns") or []),
                 "tool_calls": trace.get("tool_calls"),
                 "skill_events": trace.get("skill_events"),
             },
@@ -1690,6 +2032,24 @@ def _result_prompt_block(
     }
 
 
+def _focused_turn_summaries(turns: Sequence[Any], *, limit: int = 8) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for idx, turn in enumerate(list(turns or [])[:limit]):
+        if not isinstance(turn, dict):
+            continue
+        out.append(
+            {
+                "turn_index": turn.get("turn_index", idx),
+                "user_messages": turn.get("user_messages"),
+                "tool_calls": turn.get("tool_calls"),
+                "early_stop_reason": turn.get("early_stop_reason"),
+            }
+        )
+    if len(turns or []) > limit:
+        out.append({"truncated_count": len(turns or []) - limit})
+    return out
+
+
 def _error_focus_hints(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     hints: List[Dict[str, Any]] = []
     for item in results:
@@ -1772,16 +2132,25 @@ def _skill_credit_projection(
         "injection_type": artifact.injection_type(),
         "description": artifact.description,
         "body": artifact.body,
-        "interface": artifact.interface.as_dict(),
+        "interface": {
+            "summary": artifact.interface.summary,
+            "usage": artifact.interface.usage,
+            "input_contract": artifact.interface.input_contract,
+            "output_contract": artifact.interface.output_contract,
+            "invocation_contract": artifact.interface.invocation_contract,
+            "compatibility_notes": artifact.interface.compatibility_notes,
+        },
         "source_domains": source_domains,
         "task_domain_overlap": sorted(set(source_domains) & set(task_domains)),
         "allowed_tools": allowed_tools,
         "dependencies": list(artifact.dependencies or []),
         "source_task_ids": list(artifact.metadata.get("source_task_ids") or []),
-        "retrieved": artifact.name in set(metrics.get("retrieved_skills") or []),
-        "prompt_injected": artifact.name in prompt_injected,
-        "tool_injected": artifact.name in tool_injected,
-        "used": artifact.name in used,
+        "exposure": {
+            "retrieved": artifact.name in set(metrics.get("retrieved_skills") or []),
+            "prompt_injected": artifact.name in prompt_injected,
+            "tool_injected": artifact.name in tool_injected,
+            "used": artifact.name in used,
+        },
     }
 
 
@@ -1858,18 +2227,10 @@ def _credit_assignment_prompt_block(
                 "n_model_steps": metrics.get("n_model_steps"),
                 "total_tokens": metrics.get("total_tokens"),
                 "call_errors": call_errors,
-                "retrieved_skills": metrics.get("retrieved_skills"),
                 "prompt_injected_skills": metrics.get("prompt_injected_skills"),
                 "tool_injected_skills": metrics.get("tool_injected_skills"),
                 "used_skills": metrics.get("used_skills"),
             },
-        },
-        "skill_lists": {
-            "retrieved": metrics.get("retrieved_skills") or [],
-            "prompt_injected": metrics.get("prompt_injected_skills") or [],
-            "tool_injected": metrics.get("tool_injected_skills") or [],
-            "used": metrics.get("used_skills") or [],
-            "called_skill_tools": metrics.get("called_skill_tools") or [],
         },
         "trace": {
             "focused_turns": selected_turns,
@@ -1975,7 +2336,7 @@ async def assign_skill_credit_llm(
     )
     user = (
         "## Completed Task Trace\n"
-        f"{_json_block(prompt_payload)}\n"
+        f"{_role_json_block(prompt_payload)}\n"
     )
     data = await _ask_json(
         system=CREDIT_ASSIGNMENT_SYSTEM,
@@ -2062,15 +2423,15 @@ async def extract_skill_artifacts_from_results_llm(
             )
     user = (
         "## Existing Artifacts\n"
-        f"{_json_block(existing_summary)}\n\n"
+        f"{_role_json_block(existing_summary)}\n\n"
         "## Tool Schemas\n"
-        f"{_json_block(tool_summary[:120])}\n\n"
+        f"{_role_json_block(tool_summary[:80])}\n\n"
         "## Call Error Evidence\n"
-        f"{_json_block(error_summary[:80])}\n\n"
+        f"{_role_json_block(error_summary[:40])}\n\n"
         "## Error Focus Hints\n"
-        f"{_json_block(_error_focus_hints(results)[:80])}\n\n"
+        f"{_role_json_block(_error_focus_hints(results)[:40])}\n\n"
         "## Benchmark Results\n"
-        f"{_json_block([_result_prompt_block(item) for item in results])}\n"
+        f"{_role_json_block([_result_prompt_block(item) for item in results])}\n"
     )
     data = await _ask_json(
         system=EXTRACT_SYSTEM + _extractor_rule_suffix(extractor_rules),
@@ -2114,6 +2475,57 @@ async def extract_skill_artifacts_from_results_llm(
     return artifacts
 
 
+async def update_role_rules_from_feedback_llm(
+    *,
+    role_name: str,
+    current_rules: Iterable[Dict[str, Any]] | None,
+    feedback_rows: List[Dict[str, Any]],
+    llm_config: str = EXTRACT_MODEL,
+    model_name: str | None = None,
+    max_rules: int = 5,
+    audit_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    normalized_role = str(role_name or "extractor").strip().lower() or "extractor"
+    if normalized_role not in ROLE_RULE_UPDATE_SYSTEMS:
+        normalized_role = "extractor"
+    prefix = f"{normalized_role}_rule"
+    normalized_current = _normalize_feedback_rules(current_rules, max_rules=max_rules, prefix=prefix)
+    if not feedback_rows:
+        return {
+            "summary": "no_feedback_rows",
+            "rules": normalized_current,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    user = (
+        "## Current Extractor Rules\n"
+        f"{_role_json_block(normalized_current)}\n\n"
+        "## Runtime Feedback Evidence\n"
+        f"{_role_json_block(feedback_rows)}\n"
+    )
+    system = ROLE_RULE_UPDATE_SYSTEMS[normalized_role].replace("{max_rules}", str(max_rules))
+    data = await _ask_json(
+        system=system,
+        user=_trim_text(user, limit=12000),
+        llm_config=llm_config,
+        model_name=model_name,
+        role=f"{normalized_role}_feedback",
+        metadata={
+            "feedback_role": normalized_role,
+            "n_current_rules": len(normalized_current),
+            "n_feedback_rows": len(feedback_rows),
+            **dict(audit_context or {}),
+        },
+    )
+    updated_rules = _normalize_feedback_rules(data.get("rules"), max_rules=max_rules, prefix=prefix)
+    if not updated_rules:
+        updated_rules = normalized_current
+    return {
+        "summary": str(data.get("summary") or ""),
+        "rules": updated_rules,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 async def update_extractor_rules_from_feedback_llm(
     *,
     current_rules: Iterable[Dict[str, Any]] | None,
@@ -2123,37 +2535,65 @@ async def update_extractor_rules_from_feedback_llm(
     max_rules: int = 5,
     audit_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
-    normalized_current = _normalize_feedback_rules(current_rules, max_rules=max_rules)
-    if not feedback_rows:
-        return {
-            "summary": "no_feedback_rows",
-            "rules": normalized_current,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-    user = (
-        "## Current Extractor Rules\n"
-        f"{_json_block(normalized_current)}\n\n"
-        "## Runtime Feedback Evidence\n"
-        f"{_json_block(feedback_rows)}\n"
-    )
-    data = await _ask_json(
-        system=EXTRACTOR_RULE_UPDATE_SYSTEM.replace("{max_rules}", str(max_rules)),
-        user=_trim_text(user, limit=12000),
+    return await update_role_rules_from_feedback_llm(
+        role_name="extractor",
+        current_rules=current_rules,
+        feedback_rows=feedback_rows,
         llm_config=llm_config,
         model_name=model_name,
-        role="extractor_feedback",
+        max_rules=max_rules,
+        audit_context=audit_context,
+    )
+
+
+async def propose_group_refiner_actions_llm(
+    *,
+    group_feedback_rows: List[Dict[str, Any]],
+    current_actions: List[Dict[str, Any]] | None = None,
+    llm_config: str = EXTRACT_MODEL,
+    model_name: str | None = None,
+    audit_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    if not group_feedback_rows:
+        return {"analysis": "no_group_feedback_rows", "actions": []}
+    user = (
+        "## Current Deterministic Action Proposal\n"
+        f"{_role_json_block(list(current_actions or []))}\n\n"
+        "## Candidate Group Evidence\n"
+        f"{_role_json_block(group_feedback_rows)}\n"
+    )
+    data = await _ask_json(
+        system=GROUP_REFINER_ACTION_SYSTEM,
+        user=_trim_text(user, limit=18000),
+        llm_config=llm_config,
+        model_name=model_name,
+        role="group_refiner",
         metadata={
-            "n_current_rules": len(normalized_current),
-            "n_feedback_rows": len(feedback_rows),
+            "n_group_feedback_rows": len(group_feedback_rows),
+            "n_current_actions": len(current_actions or []),
             **dict(audit_context or {}),
         },
     )
-    updated_rules = _normalize_feedback_rules(data.get("rules"), max_rules=max_rules)
-    if not updated_rules:
-        updated_rules = normalized_current
+    actions: List[Dict[str, Any]] = []
+    for item in data.get("actions") or []:
+        if not isinstance(item, dict):
+            continue
+        skill_name = str(item.get("skill_name") or "").strip()
+        action = str(item.get("action") or "").strip().lower()
+        if not skill_name or action not in {"keep", "refine", "archive", "backup"}:
+            continue
+        actions.append(
+            {
+                "candidate_group_id": str(item.get("candidate_group_id") or "").strip(),
+                "skill_name": skill_name,
+                "action": action,
+                "reason": str(item.get("reason") or "").strip(),
+                "patch_intent": str(item.get("patch_intent") or "").strip(),
+            }
+        )
     return {
-        "summary": str(data.get("summary") or ""),
-        "rules": updated_rules,
+        "analysis": str(data.get("analysis") or ""),
+        "actions": actions,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -2170,13 +2610,13 @@ async def distill_skill_bundle_llm(
 ) -> SkillBundle:
     user = (
         "## Target Skill Artifact\n"
-        f"{_json_block(_artifact_prompt_block(artifact))}\n\n"
+        f"{_role_json_block(_artifact_prompt_block(artifact))}\n\n"
         "## Source Results (focused to turns relevant to this skill)\n"
-        f"{_json_block([_result_prompt_block(item, focus_artifact=artifact) for item in source_results])}\n\n"
+        f"{_role_json_block([_result_prompt_block(item, focus_artifact=artifact) for item in source_results])}\n\n"
         "## Replay Results (focused)\n"
-        f"{_json_block([_result_prompt_block(item, focus_artifact=artifact) for item in (replay_results or [])])}\n\n"
+        f"{_role_json_block([_result_prompt_block(item, focus_artifact=artifact) for item in (replay_results or [])])}\n\n"
         "## Integration Failures\n"
-        f"{_json_block(list(integration_failures or []))}\n"
+        f"{_role_json_block(list(integration_failures or []))}\n"
     )
     data = await _ask_json(
         system=BUNDLE_SYSTEM,
@@ -2291,15 +2731,15 @@ async def maintain_skill_bundle_llm(
 ) -> Dict[str, Any]:
     user = (
         "## Target Skill Artifact\n"
-        f"{_json_block(_artifact_prompt_block(artifact))}\n\n"
+        f"{_role_json_block(_artifact_prompt_block(artifact))}\n\n"
         "## Current Bundle\n"
-        f"{_json_block(_bundle_projection(artifact.bundle))}\n\n"
+        f"{_role_json_block(_bundle_projection(artifact.bundle))}\n\n"
         "## Credit-Assigned Bundle Cases\n"
-        f"{_json_block(list(credit_cases or []))}\n\n"
+        f"{_role_json_block(list(credit_cases or []))}\n\n"
         "## Integration Failures\n"
-        f"{_json_block(list(integration_failures or []))}\n\n"
+        f"{_role_json_block(list(integration_failures or []))}\n\n"
         "## Contract Validation Failures\n"
-        f"{_json_block(list(contract_validation_failures or []))}\n"
+        f"{_role_json_block(list(contract_validation_failures or []))}\n"
     )
     data = await _ask_json(
         system=BUNDLE_MAINTAIN_SYSTEM,
@@ -2336,26 +2776,27 @@ async def refine_skill_artifact_llm(
     refinement_history: List[Dict[str, Any]] | None = None,
     dependency_summaries: List[Dict[str, Any]] | None = None,
     credit_context: List[Dict[str, Any]] | None = None,
+    refiner_rules: Iterable[Dict[str, Any]] | None = None,
     llm_config: str = EXTRACT_MODEL,
     model_name: str | None = None,
     audit_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     user = (
         "## Current Artifact\n"
-        f"{_json_block(_artifact_prompt_block(artifact))}\n\n"
+        f"{_role_json_block(_artifact_prompt_block(artifact))}\n\n"
         "## Test Result\n"
-        f"{_json_block(test_result)}\n\n"
+        f"{_role_json_block(test_result)}\n\n"
         "## Integration Failures\n"
-        f"{_json_block(list(integration_failures or []))}\n\n"
+        f"{_role_json_block(list(integration_failures or []))}\n\n"
         "## Refinement History\n"
-        f"{_json_block(list(refinement_history or []))}\n\n"
+        f"{_role_json_block(list(refinement_history or []))}\n\n"
         "## Neighbor Dependency Summaries\n"
-        f"{_json_block(list(dependency_summaries or []))}\n\n"
+        f"{_role_json_block(list(dependency_summaries or []))}\n\n"
         "## Recent Credit Assignment Context\n"
-        f"{_json_block(list(credit_context or []))}\n"
+        f"{_role_json_block(list(credit_context or []))}\n"
     )
     return await _ask_json(
-        system=REFINE_SYSTEM,
+        system=REFINE_SYSTEM + _refiner_rule_suffix(refiner_rules),
         user=_trim_text(user),
         llm_config=llm_config,
         model_name=model_name,
@@ -2363,6 +2804,7 @@ async def refine_skill_artifact_llm(
         metadata={
             "artifact_name": artifact.name,
             "skill_version": artifact.version,
+            "n_refiner_rules": len(_normalize_feedback_rules(refiner_rules, prefix="refiner_rule")),
             "n_integration_failures": len(integration_failures or []),
             "n_refinement_history": len(refinement_history or []),
             **dict(audit_context or {}),
@@ -2380,9 +2822,9 @@ async def resolve_stale_skill_llm(
 ) -> Dict[str, Any]:
     user = (
         "## Stale Downstream Artifact\n"
-        f"{_json_block(_artifact_prompt_block(artifact))}\n\n"
+        f"{_role_json_block(_artifact_prompt_block(artifact))}\n\n"
         "## Upstream Update Context\n"
-        f"{_json_block(upstream_context)}\n"
+        f"{_role_json_block(upstream_context)}\n"
     )
     return await _ask_json(
         system=STALE_SYSTEM,

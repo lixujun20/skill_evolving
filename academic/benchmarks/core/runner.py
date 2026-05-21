@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import copy
+import hashlib
 import json
 import os
 import time
@@ -46,8 +47,10 @@ from academic.benchmarks.core.cost_accounting import cost_events_from_runs, summ
 from academic.benchmarks.core.maintenance_adapter import MaintenanceRunConfig
 from academic.benchmarks.spreadsheet.adapter import (
     SpreadsheetMaintenanceAdapter,
+    load_spreadsheet_task_pool,
     load_spreadsheet_tasks,
     run_spreadsheet_task,
+    run_spreadsheet_task_bash_react,
     run_spreadsheet_task_notebook,
 )
 from academic.benchmarks.skillsbench.adapter import (
@@ -95,6 +98,8 @@ async def main_async() -> None:
     )
     parser.add_argument("--n-runs", type=int, default=1)
     parser.add_argument("--n-train-runs", type=int, default=1)
+    parser.add_argument("--train-concurrency", type=int, default=1)
+    parser.add_argument("--micro-maintenance-concurrency", type=int, default=1)
     parser.add_argument("--test-concurrency", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--tag", default="smoke")
@@ -134,9 +139,9 @@ async def main_async() -> None:
     )
     parser.add_argument(
         "--spreadsheet-execution-mode",
-        choices=["single", "notebook"],
+        choices=["single", "notebook", "bash_react"],
         default="single",
-        help="Spreadsheet executor mode: single runs one code block; notebook allows persistent multi-turn Python cells.",
+        help="Spreadsheet executor mode: single runs one code block; notebook keeps Python state; bash_react keeps file-system state via shell commands.",
     )
     parser.add_argument(
         "--spreadsheet-max-turns",
@@ -144,7 +149,59 @@ async def main_async() -> None:
         default=5,
         help="Maximum notebook turns for --spreadsheet-execution-mode notebook.",
     )
+    parser.add_argument(
+        "--spreadsheet-callable-disclosure-mode",
+        choices=["full", "progressive"],
+        default="full",
+        help="How Spreadsheet callable skills are described to the executor.",
+    )
+    parser.add_argument(
+        "--spreadsheet-test-callable-disclosure-mode",
+        choices=["full", "progressive"],
+        default=None,
+        help="Optional heldout-test-only override for Spreadsheet callable disclosure in evolve mode.",
+    )
+    parser.add_argument(
+        "--spreadsheet-pending-skill-fraction",
+        type=float,
+        default=0.0,
+        help="Fraction of retrieved Spreadsheet skills reserved for pending candidates; default disables pending exposure.",
+    )
+    parser.add_argument(
+        "--spreadsheet-skill-format",
+        choices=["auto", "function", "folder"],
+        default="auto",
+        help="Spreadsheet extraction format: auto allows both; function forces executable_tool; folder forces skill_package.",
+    )
+    parser.add_argument(
+        "--spreadsheet-test-pending-skill-fraction",
+        type=float,
+        default=None,
+        help="Optional heldout-test-only pending retrieval fraction for Spreadsheet evolve mode.",
+    )
     parser.add_argument("--bfcl-explicit-skill-tool", action="store_true")
+    parser.add_argument(
+        "--bfcl-disable-trial-skills",
+        action="store_true",
+        help="Filter trial candidate skills from BFCL retrieval for this run.",
+    )
+    parser.add_argument(
+        "--bfcl-disable-candidate-skills",
+        action="store_true",
+        help="Filter BFCL candidate artifacts from retrieval for this run, including promoted candidate winners.",
+    )
+    parser.add_argument(
+        "--bfcl-trial-supplement-k",
+        type=int,
+        default=int(os.environ.get("BFCL_TRIAL_SUPPLEMENT_K", "0") or "0"),
+        help="Add up to this many low-trust trial BFCL skills after normal active retrieval.",
+    )
+    parser.add_argument(
+        "--bfcl-include-pending-supplement",
+        action="store_true",
+        default=os.environ.get("BFCL_INCLUDE_PENDING_SUPPLEMENT", "").strip().lower() in {"1", "true", "yes", "on"},
+        help="Allow pending BFCL skills in the low-trust supplement lane.",
+    )
     parser.add_argument("--save-skills", type=Path, default=None)
     parser.add_argument(
         "--macro-snapshot-dir",
@@ -161,6 +218,7 @@ async def main_async() -> None:
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--partial-output", type=Path, default=None, help="Write completed BFCL task results incrementally")
     parser.add_argument("--max-task-seconds", type=float, default=None, help="Optional wall-clock timeout per BFCL task run")
+    parser.add_argument("--llm-request-timeout-s", type=float, default=None, help="Optional per-LLM-call timeout without imposing a whole-task wall-clock timeout")
     parser.add_argument("--cache-dir", type=Path, default=ACADEMIC_ROOT.parent / "data" / "benchmarks")
     parser.add_argument("--skillsbench-root", type=Path, default=DEFAULT_SKILLSBENCH_ROOT)
     parser.add_argument(
@@ -345,19 +403,49 @@ async def main_async() -> None:
             explicit_skill_tool=args.bfcl_explicit_skill_tool,
             skill_injector_mode=args.skill_injector_mode,
             skill_context_budget_chars=args.skill_context_budget_chars,
+            allow_trial_skills=not args.bfcl_disable_trial_skills,
+            allow_candidate_skills=not args.bfcl_disable_candidate_skills,
+            trial_supplement_k=args.bfcl_trial_supplement_k,
+            include_pending_supplement=args.bfcl_include_pending_supplement,
         )
     elif args.benchmark == "spreadsheet":
         n_train = args.n_train if args.n_train is not None else 200
         n_test = args.n_test if args.n_test is not None else 5
-        train, test = load_spreadsheet_tasks(
-            cache_dir=args.cache_dir / "spreadsheet",
-            split_seed=args.seed,
-            n_train=n_train + max(args.train_offset, 0),
-            n_test=n_test + max(args.test_offset, 0),
-            refresh=args.refresh_data,
-        )
+        requested_train_ids = _load_task_id_list(args.train_task_ids) if args.train_task_ids else []
+        requested_test_ids = _load_task_id_list(args.test_task_ids) if args.test_task_ids else []
+        if requested_train_ids or requested_test_ids:
+            pool = load_spreadsheet_task_pool(
+                cache_dir=args.cache_dir / "spreadsheet",
+                split_seed=args.seed,
+                refresh=args.refresh_data,
+            )
+            if requested_train_ids:
+                train = _select_tasks_by_id(pool, args.train_task_ids)
+            else:
+                train = pool[: n_train + max(args.train_offset, 0)]
+            if requested_test_ids:
+                test = _select_tasks_by_id(pool, args.test_task_ids)
+            else:
+                test = pool[n_train : n_train + n_test + max(args.test_offset, 0)]
+        else:
+            train, test = load_spreadsheet_tasks(
+                cache_dir=args.cache_dir / "spreadsheet",
+                split_seed=args.seed,
+                n_train=n_train + max(args.train_offset, 0),
+                n_test=n_test + max(args.test_offset, 0),
+                refresh=args.refresh_data,
+            )
         train = train[max(args.train_offset, 0): max(args.train_offset, 0) + n_train]
         test = test[max(args.test_offset, 0): max(args.test_offset, 0) + n_test]
+        split_metadata = {
+            "split_seed": args.seed,
+            "train_task_ids_file": str(args.train_task_ids) if args.train_task_ids else None,
+            "test_task_ids_file": str(args.test_task_ids) if args.test_task_ids else None,
+            "train_offset": max(args.train_offset, 0),
+            "test_offset": max(args.test_offset, 0),
+            "train_task_ids_hash": _task_ids_hash(str(task.task_id) for task in train) if train else "",
+            "test_task_ids_hash": _task_ids_hash(str(task.task_id) for task in test) if test else "",
+        }
         if args.mode == "evolve":
             runner = OnlineSkillEvolutionRunner(
                 adapter=SpreadsheetMaintenanceAdapter(),
@@ -369,6 +457,8 @@ async def main_async() -> None:
                     n_test_runs=args.n_runs,
                     micro_maintenance_step=1,
                     macro_maintenance_step=10,
+                    train_concurrency=args.train_concurrency,
+                    micro_maintenance_concurrency=args.micro_maintenance_concurrency,
                     test_concurrency=args.test_concurrency,
                     max_task_seconds=args.max_task_seconds,
                     top_k_skills=args.top_k_skills,
@@ -377,7 +467,27 @@ async def main_async() -> None:
                         "skill_context_budget_chars": args.skill_context_budget_chars,
                         "spreadsheet_execution_mode": args.spreadsheet_execution_mode,
                         "spreadsheet_max_turns": args.spreadsheet_max_turns,
+                        "spreadsheet_callable_disclosure_mode": args.spreadsheet_callable_disclosure_mode,
+                        "spreadsheet_pending_skill_fraction": args.spreadsheet_pending_skill_fraction,
+                        "spreadsheet_skill_format": args.spreadsheet_skill_format,
+                        "min_skill_score": args.min_skill_score,
                         "macro_snapshot_dir": str(args.macro_snapshot_dir) if args.macro_snapshot_dir else "",
+                        "partial_output": str(args.partial_output) if args.partial_output else "",
+                        "llm_request_timeout_s": args.llm_request_timeout_s,
+                        "disable_task_wall_timeout": True,
+                        "split_metadata": split_metadata,
+                        "test_extra": {
+                            **(
+                                {"spreadsheet_callable_disclosure_mode": args.spreadsheet_test_callable_disclosure_mode}
+                                if args.spreadsheet_test_callable_disclosure_mode
+                                else {}
+                            ),
+                            **(
+                                {"spreadsheet_pending_skill_fraction": args.spreadsheet_test_pending_skill_fraction}
+                                if args.spreadsheet_test_pending_skill_fraction is not None
+                                else {}
+                            ),
+                        },
                     },
                 ),
             )
@@ -390,6 +500,7 @@ async def main_async() -> None:
             summary["elapsed_s"] = round(time.monotonic() - t0, 3)
             summary["spreadsheet_execution_mode"] = args.spreadsheet_execution_mode
             summary["spreadsheet_max_turns"] = args.spreadsheet_max_turns
+            summary["split_metadata"] = split_metadata
             if args.save_skills:
                 args.save_skills.parent.mkdir(parents=True, exist_ok=True)
                 args.save_skills.write_text(json.dumps(summary.get("skills") or [], ensure_ascii=False, indent=2))
@@ -412,11 +523,16 @@ async def main_async() -> None:
             model_name=args.model_name,
             concurrency=args.test_concurrency,
             max_task_seconds=args.max_task_seconds,
+            llm_request_timeout_s=args.llm_request_timeout_s,
             top_k_skills=args.top_k_skills,
+            min_skill_score=args.min_skill_score,
             skill_injector_mode=args.skill_injector_mode,
             skill_context_budget_chars=args.skill_context_budget_chars,
             execution_mode=args.spreadsheet_execution_mode,
             max_turns=args.spreadsheet_max_turns,
+            callable_disclosure_mode=args.spreadsheet_callable_disclosure_mode,
+            pending_skill_fraction=args.spreadsheet_pending_skill_fraction,
+            partial_output=args.partial_output,
         )
     elif args.benchmark == "skillsbench":
         if args.mode != "baseline":
@@ -473,6 +589,7 @@ async def main_async() -> None:
     if args.benchmark == "spreadsheet":
         summary["spreadsheet_execution_mode"] = args.spreadsheet_execution_mode
         summary["spreadsheet_max_turns"] = args.spreadsheet_max_turns
+        summary["split_metadata"] = split_metadata
     if args.benchmark == "skillsbench":
         summary["diagnostic_only"] = True
         summary["official_pass_rate"] = None
@@ -514,6 +631,10 @@ async def _run_bfcl_baseline(
     debug_sink: DebugEventSink | None = None,
     phase: str = "",
     concurrency: int = 1,
+    allow_trial_skills: bool = True,
+    allow_candidate_skills: bool = True,
+    trial_supplement_k: int = 0,
+    include_pending_supplement: bool = False,
 ) -> List[Dict[str, Any]]:
     details: List[Dict[str, Any]] = []
     completed_task_ids: set[str] = set()
@@ -564,6 +685,10 @@ async def _run_bfcl_baseline(
                         synthetic_continue=synthetic_continue,
                         debug_sink=run_sink,
                         max_task_seconds=max_task_seconds,
+                        allow_trial_skills=allow_trial_skills,
+                        allow_candidate_skills=allow_candidate_skills,
+                        trial_supplement_k=trial_supplement_k,
+                        include_pending_supplement=include_pending_supplement,
                     ),
                     timeout=max_task_seconds,
                 ) if max_task_seconds else await run_bfcl_task(
@@ -587,6 +712,10 @@ async def _run_bfcl_baseline(
                     synthetic_continue=synthetic_continue,
                     debug_sink=run_sink,
                     max_task_seconds=max_task_seconds,
+                    allow_trial_skills=allow_trial_skills,
+                    allow_candidate_skills=allow_candidate_skills,
+                    trial_supplement_k=trial_supplement_k,
+                    include_pending_supplement=include_pending_supplement,
                 )
             except asyncio.TimeoutError:
                 result = BenchmarkResult(
@@ -694,6 +823,10 @@ async def _run_bfcl_baseline(
                         synthetic_continue=synthetic_continue,
                         debug_sink=run_sink,
                         max_task_seconds=max_task_seconds,
+                        allow_trial_skills=allow_trial_skills,
+                        allow_candidate_skills=allow_candidate_skills,
+                        trial_supplement_k=trial_supplement_k,
+                        include_pending_supplement=include_pending_supplement,
                     ),
                     timeout=max_task_seconds,
                 ) if max_task_seconds else await run_bfcl_task(
@@ -717,6 +850,10 @@ async def _run_bfcl_baseline(
                     synthetic_continue=synthetic_continue,
                     debug_sink=run_sink,
                     max_task_seconds=max_task_seconds,
+                    allow_trial_skills=allow_trial_skills,
+                    allow_candidate_skills=allow_candidate_skills,
+                    trial_supplement_k=trial_supplement_k,
+                    include_pending_supplement=include_pending_supplement,
                 )
             except asyncio.TimeoutError:
                 result = BenchmarkResult(
@@ -784,40 +921,151 @@ async def _run_spreadsheet_baseline(
     model_name: str | None = None,
     concurrency: int = 1,
     max_task_seconds: float | None = None,
+    llm_request_timeout_s: float | None = None,
     top_k_skills: int = 5,
+    min_skill_score: float = 0.01,
     skill_injector_mode: str | None = None,
     skill_context_budget_chars: int | None = None,
     execution_mode: str = "single",
     max_turns: int = 5,
+    callable_disclosure_mode: str | None = None,
+    pending_skill_fraction: float = 0.0,
+    partial_output: Path | None = None,
 ) -> List[Dict[str, Any]]:
     concurrency = max(1, int(concurrency or 1))
+    details: List[Dict[str, Any]] = []
+    if partial_output and partial_output.exists():
+        try:
+            payload = json.loads(partial_output.read_text())
+            existing = payload.get("details", [])
+            if isinstance(existing, list):
+                details = [
+                    item
+                    for item in existing
+                    if isinstance(item, dict) and item.get("task_id")
+                ]
+        except Exception:
+            details = []
+    detail_by_task_id = {str(item.get("task_id")): item for item in details}
+    remaining = [
+        (task_index, task)
+        for task_index, task in enumerate(tasks)
+        if str(getattr(task, "task_id", "")) not in detail_by_task_id
+    ]
+
+    def write_partial() -> None:
+        if not partial_output:
+            return
+        ordered_details = [
+            detail_by_task_id[task_id]
+            for task_id in [str(getattr(task, "task_id", "")) for task in tasks]
+            if task_id in detail_by_task_id
+        ]
+        partial_output.parent.mkdir(parents=True, exist_ok=True)
+        partial_output.write_text(
+            json.dumps(
+                {
+                    "benchmark": "spreadsheet",
+                    "completed_tasks": len(ordered_details),
+                    "total_tasks": len(tasks),
+                    "details": ordered_details,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
 
     async def run_one(task: Any, task_index: int) -> Tuple[int, Dict[str, Any]]:
         runs = []
         task_store = copy.deepcopy(store) if concurrency > 1 else store
         for run_idx in range(n_runs):
-            if execution_mode == "notebook":
-                coro = run_spreadsheet_task_notebook(
-                    task,
-                    llm_config=llm_config,
-                    model_name=model_name,
-                    artifact_store=task_store,
-                    top_k_skills=top_k_skills,
-                    skill_injector_mode=skill_injector_mode,
-                    skill_context_budget_chars=skill_context_budget_chars,
-                    max_turns=max_turns,
+            try:
+                if execution_mode == "notebook":
+                    result = await run_spreadsheet_task_notebook(
+                        task,
+                        llm_config=llm_config,
+                        model_name=model_name,
+                        artifact_store=task_store,
+                        top_k_skills=top_k_skills,
+                        min_skill_score=min_skill_score,
+                        skill_injector_mode=skill_injector_mode,
+                        skill_context_budget_chars=skill_context_budget_chars,
+                        max_turns=max_turns,
+                        callable_disclosure_mode=callable_disclosure_mode,
+                        pending_skill_fraction=pending_skill_fraction,
+                        llm_request_timeout_s=llm_request_timeout_s,
+                    )
+                elif execution_mode == "bash_react":
+                    coro = run_spreadsheet_task_bash_react(
+                        task,
+                        llm_config=llm_config,
+                        model_name=model_name,
+                        artifact_store=task_store,
+                        top_k_skills=top_k_skills,
+                        min_skill_score=min_skill_score,
+                        skill_injector_mode=skill_injector_mode,
+                        skill_context_budget_chars=skill_context_budget_chars,
+                        max_turns=max_turns,
+                        callable_disclosure_mode=callable_disclosure_mode,
+                        pending_skill_fraction=pending_skill_fraction,
+                        llm_request_timeout_s=llm_request_timeout_s,
+                    )
+                    result = await asyncio.wait_for(
+                        coro,
+                        timeout=max_task_seconds,
+                    ) if max_task_seconds else await coro
+                else:
+                    coro = run_spreadsheet_task(
+                        task,
+                        llm_config=llm_config,
+                        model_name=model_name,
+                        artifact_store=task_store,
+                        top_k_skills=top_k_skills,
+                        min_skill_score=min_skill_score,
+                        skill_injector_mode=skill_injector_mode,
+                        skill_context_budget_chars=skill_context_budget_chars,
+                        callable_disclosure_mode=callable_disclosure_mode,
+                        pending_skill_fraction=pending_skill_fraction,
+                        llm_request_timeout_s=llm_request_timeout_s,
+                    )
+                    result = await asyncio.wait_for(
+                        coro,
+                        timeout=max_task_seconds,
+                    ) if max_task_seconds else await coro
+            except asyncio.TimeoutError:
+                result = BenchmarkResult(
+                    benchmark="spreadsheet",
+                    task_id=getattr(task, "task_id", ""),
+                    success=False,
+                    score=0.0,
+                    metrics={
+                        "exception": "TaskTimeout",
+                        "max_task_seconds": max_task_seconds,
+                        "execution_mode": execution_mode,
+                    },
+                    trace={
+                        "task_id": getattr(task, "task_id", ""),
+                        "timed_out": True,
+                        "execution_mode": execution_mode,
+                    },
+                    error=f"Task exceeded {max_task_seconds} seconds",
                 )
-            else:
-                coro = run_spreadsheet_task(
-                    task,
-                    llm_config=llm_config,
-                    model_name=model_name,
-                    artifact_store=task_store,
-                    top_k_skills=top_k_skills,
-                    skill_injector_mode=skill_injector_mode,
-                    skill_context_budget_chars=skill_context_budget_chars,
+            except Exception as exc:
+                result = BenchmarkResult(
+                    benchmark="spreadsheet",
+                    task_id=getattr(task, "task_id", ""),
+                    success=False,
+                    score=0.0,
+                    metrics={
+                        "exception": type(exc).__name__,
+                        "execution_mode": execution_mode,
+                    },
+                    trace={
+                        "task_id": getattr(task, "task_id", ""),
+                        "execution_mode": execution_mode,
+                    },
+                    error=str(exc),
                 )
-            result = await asyncio.wait_for(coro, timeout=max_task_seconds) if max_task_seconds else await coro
             item = result.as_dict()
             item["run_idx"] = run_idx
             runs.append(item)
@@ -842,8 +1090,23 @@ async def _run_spreadsheet_baseline(
             )
         return task_index, _task_runs(task, runs)
 
+    if not remaining:
+        return [
+            detail_by_task_id[task_id]
+            for task_id in [str(getattr(task, "task_id", "")) for task in tasks]
+            if task_id in detail_by_task_id
+        ]
+
     if concurrency <= 1 or len(tasks) <= 1:
-        return [(await run_one(task, task_index))[1] for task_index, task in enumerate(tasks)]
+        for task_index, task in remaining:
+            _idx, detail = await run_one(task, task_index)
+            detail_by_task_id[str(detail.get("task_id"))] = detail
+            write_partial()
+        return [
+            detail_by_task_id[task_id]
+            for task_id in [str(getattr(task, "task_id", "")) for task in tasks]
+            if task_id in detail_by_task_id
+        ]
 
     sem = asyncio.Semaphore(concurrency)
 
@@ -851,10 +1114,19 @@ async def _run_spreadsheet_baseline(
         async with sem:
             return await run_one(task, task_index)
 
-    completed = await asyncio.gather(
-        *[guarded(task, task_index) for task_index, task in enumerate(tasks)]
-    )
-    return [detail for _idx, detail in sorted(completed, key=lambda item: item[0])]
+    pending = [
+        asyncio.create_task(guarded(task, task_index))
+        for task_index, task in remaining
+    ]
+    for completed_task in asyncio.as_completed(pending):
+        _idx, detail = await completed_task
+        detail_by_task_id[str(detail.get("task_id"))] = detail
+        write_partial()
+    return [
+        detail_by_task_id[task_id]
+        for task_id in [str(getattr(task, "task_id", "")) for task in tasks]
+        if task_id in detail_by_task_id
+    ]
 
 
 async def _run_skillsbench_baseline(
@@ -2023,6 +2295,10 @@ def _load_task_id_list(path: Path | None) -> List[str]:
     else:
         ids = raw
     return [str(item).strip() for item in ids if str(item).strip()]
+
+
+def _task_ids_hash(ids: Iterable[str]) -> str:
+    return hashlib.sha256("\n".join(str(item) for item in ids).encode("utf-8")).hexdigest()[:16]
 
 
 def _select_tasks_by_id(tasks: List[Any], path: Path) -> List[Any]:

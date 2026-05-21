@@ -151,6 +151,26 @@ comment:
 看来pending不怎么会贡献到refactor？这是为什么？按照概率不合理，trace只是pending的几倍，不应该一个pending都没有贡献到active（即便是shared，对应的pending candidate也应该被promote）。算法实现有没有问题？
 ```
 
+```
+回复：
+是的，这里更像算法实现/接口设计有问题，不应该解释成正常概率现象。pending candidate 如果已经来自相同 trace evidence，那么 refactor 即便最终创建 shared skill，也应该能把对应 pending candidate 标记为 contributed / superseded / promoted，而不是完全没有关系。
+
+当前问题在于 pending 和 refactor shared skill 之间缺少显式 lineage matching：
+
+- refactor LLM 只被要求输出 `shared_skill`，没有被强制对输入 clique 里已有 pending candidate 做逐个归因。
+- promotion 代码只看 committed payload 里的 pending name 字段；如果 LLM 没填 `affected_skill_updates`，代码就认为没有 pending 贡献。
+- 系统没有用 `source_task_ids`、trace segment ids、evidence span、tool/domain overlap 去自动匹配 pending candidate 和新 shared skill。
+
+所以这不是“pending 没贡献”，而是“pending 的贡献没有被记录，也没有驱动 promotion”。正确修复应该是：
+
+1. macro refactor 输入中显式列出与 clique segments 相关的 pending candidates。
+2. refactor 输出必须为每个相关 pending candidate 选择 `promote / supersede_by_shared / refine / discard / unrelated`。
+3. 代码侧做 deterministic fallback：如果 shared skill 的 source segments 与 pending skill 的 source segments 高度重合，即使 LLM 没填 affected update，也要记录 lineage，并至少把 pending 标成 superseded，而不是静默丢失。
+4. promotion 不应只依赖名字字段；还应依赖 source segment overlap 和 evidence equivalence。
+
+因此这个点需要作为 bug 修：pending-to-refactor lineage 现在不完整，导致 pending skill 在统计上看起来没有进入 active。
+```
+
 ## 3. 为什么 pending 没有贡献到 active？
 
 根因有三层：
@@ -181,6 +201,26 @@ comment:
 comment:
 现在的skill injector不会管这个嘛？为什么会被注入到其他domain？injector的实现是否还有待改进？
 我觉得应该宽松一些，对于产生过帮助的skill，比如Positive credit超过一定值（2？），无论是否有harm都应该保留，如果对其他skill产生harm，可以做refine、反馈给extractor和skill injector（如果开启TRL）
+```
+
+```
+回复：
+injector 理论上应该管，但当前实现显然不够强。`tradingbot_direct_ticker_binding` 被注入到 VehicleControlAPI task，说明至少有一个环节没有把 domain/tool scope 当成硬约束：
+
+- retrieval 可能先把跨 domain skill 召回了。
+- injector 对召回结果没有执行足够严格的 domain mismatch rejection。
+- skill metadata 的 `allowed_tools/domains` 可能只是提示或 rerank 信号，没有作为正式 hard gate。
+
+这需要改。对于 BFCL 这种工具域很清晰的 benchmark，跨 domain 注入默认应该禁止，除非 skill 是明确 benchmark-general/meta skill。否则 TradingBot skill 出现在 VehicleControl task prompt 里，本身就会污染 executor。
+
+关于保留策略，我同意不能因为有 harm 就立刻丢掉所有曾经有帮助的 skill。更合理的是把“skill 是否有价值”和“当前 scope 是否过宽”分开：
+
+- 如果 positive credit >= 2 且有明确 correctness gain，不应直接 disable。
+- 如果 harmful credit 主要来自 domain mismatch / retrieval mismatch，优先 refine scope 或加 injector guard。
+- 如果 harmful credit 来自 skill 本体逻辑错误，才考虑 disable 或重写。
+- 如果 helpful 和 harmful 都高，应该进入 quarantine / scoped-active 状态：只允许在 proven domain、proven intent 下暴露。
+
+因此改进方向是：credit assigner 输出 harm type 后，maintenance 不应只做全局 disable，而应先尝试 `narrow_scope`、`add_non_applicability`、`restrict_retrieval_domain`，并把这些失败案例反馈给 injector / extractor TRL。
 ```
 
 当前 retrieval/injection 统计显示只有 refactor-created active skill 曾被注入：
@@ -247,6 +287,20 @@ Top maintenance targets：
 ```
 comment:
 refiner的prompt不对？仔细检查，应该是个bug。有harm的情况refiner不能轻易给keep（当然可能credit给的有问题）
+```
+
+```
+回复：
+同意，这是 bug，不只是 prompt wording 小问题。已有 harmful credit 或 negative bundle suggestion 时，refiner 不能轻易输出 `keep`，更不能说 “No harmful credit attribution provided”。这说明传给 refiner 的 evidence projection、prompt 强约束、或 action gate 至少有一处断了。
+
+应按下面几层修：
+
+1. evidence projection：refiner 输入必须显式包含 harmful credit summary、harm type、失败 task、失败原因、negative bundle contract。不能只给 skill 正面描述和少量 bundle case。
+2. prompt contract：如果存在 high-confidence harmful credit，允许的动作应限制为 `narrow_scope / refine / disable / request_credit_review`，默认不允许 `keep`。
+3. code gate：即使 LLM 返回 `keep`，如果 unresolved harmful credit 或 strict negative bundle failure 仍存在，代码应把结果转成 `invalid_keep`，并触发 fallback action，而不是只标记 `strict_failure_kept` 后结束。
+4. credit sanity：如果 refiner 认为 harmful credit 不成立，必须显式指出是哪条 credit 错、为什么错，并产出 `request_credit_review`，不能无证据忽略。
+
+所以这里应记录为 refiner 链路 bug：harmful evidence 没有被强制进入决策，且 keep 没有被 hard gate 拦住。
 ```
 
 ## 5. Case Study A: `tradingbot_direct_ticker_binding`
@@ -566,4 +620,3 @@ Q4：refiner 为什么给 keep？
 
    - 每个 macro 输出 feedback rows count。
    - 如果 0，记录原因：disabled by flag、low usage、no candidate groups、or no qualifying comparisons。
-

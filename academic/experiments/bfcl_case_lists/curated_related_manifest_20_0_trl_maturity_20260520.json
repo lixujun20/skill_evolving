@@ -1,0 +1,701 @@
+{
+  "manifest_version": 1,
+  "benchmark": "bfcl_v3",
+  "selection_method": "{'type': 'deterministic_relatedness_ranking', 'description': 'Rank all 200 BFCL tasks by repeated tool-family / lookup-action / multi-turn workflow signals, then freeze the top 100 as the related-task pool.', 'criteria': ['shared tool families', 'repeated identifier/lookup/ordering/argument failure families', 'multi-turn workflow similarity'], 'split_seed': 42, 'data_source': 'bfcl_eval_bundle'}; prefix_train20_for_trl_debug; train20_only_for_trl_maturity_case_review_before_heldout_test",
+  "train_task_ids": [
+    "multi_turn_base_120",
+    "multi_turn_base_130",
+    "multi_turn_base_116",
+    "multi_turn_base_117",
+    "multi_turn_base_121",
+    "multi_turn_base_142",
+    "multi_turn_base_123",
+    "multi_turn_base_135",
+    "multi_turn_base_107",
+    "multi_turn_base_128",
+    "multi_turn_base_118",
+    "multi_turn_base_132",
+    "multi_turn_base_122",
+    "multi_turn_base_146",
+    "multi_turn_base_126",
+    "multi_turn_base_115",
+    "multi_turn_base_127",
+    "multi_turn_base_93",
+    "multi_turn_base_70",
+    "multi_turn_base_82"
+  ],
+  "test_task_ids": [],
+  "train_tasks": [
+    {
+      "task_id": "multi_turn_base_120",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/3; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 232.3
+    },
+    {
+      "task_id": "multi_turn_base_130",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "place",
+        "get",
+        "cancel",
+        "get",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/4; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 231.7
+    },
+    {
+      "task_id": "multi_turn_base_116",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "remove",
+        "get",
+        "get",
+        "get",
+        "place",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_117",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "remove",
+        "get",
+        "get",
+        "get",
+        "place",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_121",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get",
+        "make"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_available_stocks",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "TradingBot.make_transaction"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_142",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "get",
+        "get",
+        "place",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_123",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get",
+        "make",
+        "logout"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "TradingBot.make_transaction",
+          "TradingBot.logout"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.8
+    },
+    {
+      "task_id": "multi_turn_base_135",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "get",
+        "get",
+        "place",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=5/1; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.7
+    },
+    {
+      "task_id": "multi_turn_base_107",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.6
+    },
+    {
+      "task_id": "multi_turn_base_128",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.get_available_stocks",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.6
+    },
+    {
+      "task_id": "multi_turn_base_118",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "remove",
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 224.8
+    },
+    {
+      "task_id": "multi_turn_base_132",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "get",
+        "add",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.get_stock_info",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 224.8
+    },
+    {
+      "task_id": "multi_turn_base_122",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "place",
+        "get",
+        "cancel",
+        "logout"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=2/3; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.logout"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 224.2
+    },
+    {
+      "task_id": "multi_turn_base_146",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "remove",
+        "get",
+        "get",
+        "place",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/1; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 222.9
+    },
+    {
+      "task_id": "multi_turn_base_126",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 222.8
+    },
+    {
+      "task_id": "multi_turn_base_115",
+      "domain": "TradingBot",
+      "failure_family": "multi_turn_argument_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "get",
+        "add",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/1; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.get_stock_info",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 219.1
+    },
+    {
+      "task_id": "multi_turn_base_127",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "remove",
+        "get",
+        "get",
+        "place",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/1; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 219.1
+    },
+    {
+      "task_id": "multi_turn_base_93",
+      "domain": "VehicleControlAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "display",
+        "fill",
+        "start",
+        "check",
+        "find",
+        "set"
+      ],
+      "why_related": "tool_families=['VehicleControlAPI']; repeated lookup/action mix=3/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.displayCarStatus",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation"
+        ],
+        "involved_classes": [
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 218.5
+    },
+    {
+      "task_id": "multi_turn_base_70",
+      "domain": "VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "liter",
+        "fill",
+        "start",
+        "check",
+        "find",
+        "set"
+      ],
+      "why_related": "tool_families=['VehicleControlAPI']; repeated lookup/action mix=2/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.liter_to_gallon",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation"
+        ],
+        "involved_classes": [
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 214.2
+    },
+    {
+      "task_id": "multi_turn_base_82",
+      "domain": "VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "gallon",
+        "fill",
+        "start",
+        "check",
+        "find",
+        "set"
+      ],
+      "why_related": "tool_families=['VehicleControlAPI']; repeated lookup/action mix=2/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.gallon_to_liter",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation"
+        ],
+        "involved_classes": [
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 214.2
+    }
+  ],
+  "test_tasks": []
+}

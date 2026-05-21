@@ -36,6 +36,20 @@ def load_spreadsheet_tasks(
     split_seed: int = 42,
     refresh: bool = False,
 ) -> Tuple[List[BenchmarkTask], List[BenchmarkTask]]:
+    shuffled = load_spreadsheet_task_pool(
+        cache_dir=cache_dir,
+        split_seed=split_seed,
+        refresh=refresh,
+    )
+    return shuffled[:n_train], shuffled[n_train : n_train + n_test]
+
+
+def load_spreadsheet_task_pool(
+    *,
+    cache_dir: Path,
+    split_seed: int = 42,
+    refresh: bool = False,
+) -> List[BenchmarkTask]:
     root = ensure_spreadsheetbench(cache_dir, refresh=refresh)
     dataset_path = root / "dataset.json"
     raw = json.loads(dataset_path.read_text())
@@ -71,4 +85,4 @@ def load_spreadsheet_tasks(
 
     shuffled = list(tasks)
     random.Random(split_seed).shuffle(shuffled)
-    return shuffled[:n_train], shuffled[n_train : n_train + n_test]
+    return shuffled

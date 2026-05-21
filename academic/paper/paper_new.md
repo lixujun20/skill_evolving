@@ -1,9 +1,8 @@
-# You Live More than Once: A Software Engineering's Perspective for Test-time Skill System Evolution
+# You Live More Than Onve: Improving Reusability with Text-based Meta Evolution for Skill System Evolution
 
-Test-time Skill Evolution被视为agentic system部署后不断积累新经验的一种全新范式。随着agentic system project不断复杂化，对大规模skill系统的构建和维护成为一个非常重要的需求。已有工作基本聚焦孤立skill的evolution方法论，而鲜有讨论skill作为软件工程单元的可复用性、可维护性问题。本篇工作将Skill Evolution建模为一个闭环的软件工程问题。将skill建模为可复用逻辑单元，从skill提取到迭代维护流程，都通过整合软件工程原则进行精细设计；通过基于Shapley Value的独立测试、集成测试对提取的Skill进行后验检验和筛选。在多样化的agentic任务场景下的测试结果表明，我们的方法在提升端到端性能的同时，显著降低了推理开销，提升了生成稳定性，且每个工具都得到了充分高效复用。
+Test-time Skill Evolution被视为agentic system部署后不断积累新经验的一种全新范式。已有工作基本聚焦孤立skill的evolution方法论，而鲜有讨论skill作为软件工程单元的可复用性、可维护性问题。本文指出『复用性』是skill的核心属性和skill提取、维护的首要指导原则，且对复用性的评判和反馈应该在测试时发生。鉴于此，我们将skill建模为原子操作序列的最优压缩，将Skill Evolution建模为一个闭环的Meta演化算法，在多样化的agentic任务场景下的测试结果表明，我们的方法能够在提升端到端性能的同时，每个工具都得到了充分高效复用。
 
-```
-Test-time Skill Evolution is a novel paradigm for agentic systems to continuously accumulate new experiences after deployment. Despite many preliminary attempts, the focus has been primarily on isolated skill evolving effects for single tasks. The feasibility and specific approaches for cross-task skill reuse have been underexplored. In this work, we model Skill Evolution as a closed-loop software engineering problem. By modeling skills as reusable logical units, we design the entire process from skill extraction to iterative maintenance with fine-grained integration of software engineering principles. By using Shapley-Value-based unit tests and integrated tests as post-hoc validation criterion, we perform in-depth analysis and selection of the extracted skills. Testing results across diverse agentic task scenarios show that our method significantly reduces inference overhead and improves generation stability while enhancing end-to-end performance, with each tool being fully and efficiently reused.
+
 ```
 
 ## 1. Introduction
@@ -81,41 +80,7 @@ Test-time Skill Evolution is a novel paradigm for agentic systems to continuousl
 
 ## 2. Related Work
 
-### 2.1 Skill as an External, Evolving Policy Layer
 
-Recent work increasingly treats skills not as prompt patches, but as explicit external capability assets. Anthropic-style agent skills are file-system based modular capabilities centered on a `SKILL.md` file and optional scripts, references, templates, and other resources. This format is important because it separates skill discovery metadata from the heavier artifacts that should only be loaded or executed when needed. In the same spirit, Memento-Skills stores reusable skills as structured markdown memory and uses a read-write-reflect loop to adapt them across interactions. EvoSkill materializes skills as structured reusable folders that can contain workflows and code, while CoEvoSkills targets complex multi-file skill packages rather than single tools. Together, these works indicate that the right abstraction is not a single generated function, but a versioned, retrievable, editable, and governable external policy layer.
-
-This trend directly affects our formulation. A code function is only one possible skill format. Many reusable capabilities are better represented as strategies, workflow cards, tool-use rules, domain references, or document-plus-script modules. Therefore, in our later experimental design, code-function skills should be treated as one ablation rather than the only valid representation.
-
-### 2.2 Trajectory-to-Skill Distillation
-
-Trace2Skill and SkillX study how to distill broad execution experience into transferable skills. Trace2Skill argues against purely sequential per-trajectory updates: it analyzes a diverse pool of executions in parallel and hierarchically merges trajectory-local lessons into a conflict-free skill directory. SkillX similarly constructs a plug-and-play skill knowledge base through multi-level skill design, iterative refinement, and exploratory expansion, organizing experience into strategic plans, functional skills, and atomic skills.
-
-These works strongly overlap with generic claims about "extracting skills from trajectories." Our remaining gap is narrower: rather than claiming first-mover novelty in trajectory-to-skill distillation, we focus on when such distilled skills are actually reusable across tasks, how to refactor an accumulated skill repository without breaking correctness, and how to evaluate skill value by downstream answer, token, and usage effects.
-
-### 2.3 Verification-Driven Skill Evolution
-
-A second line emphasizes verification, diagnosis, and conservative updates. CoEvoSkills couples a skill generator with a surrogate verifier that evolves to provide actionable feedback for complex skill packages. SkillForge studies cloud technical support, where historical tickets, domain knowledge, and expert reference answers enable a creation-evaluation-refinement loop. EvoSkill uses failure analysis to propose new skills or edits to existing skills, then retains candidates only when they improve held-out validation performance. Memento-Skills evaluates and routes skills by task success rather than purely semantic similarity.
-
-The shared lesson is that the bottleneck is not generation but credit assignment: did the skill help, was it called correctly, should we edit it or create a new one, and does the local improvement introduce global repository noise? This motivates our planned Shapley-style skill value evaluation, where a skill's utility is estimated from marginal answer improvement, token reduction, and realized usage under controlled with-skill versus without-skill comparisons.
-
-### 2.4 Skill Governance, Refactoring, and Population Optimization
-
-SkillClaw, EvoSkill, SkillX, PSN, and SkillMOO move from single-agent skill creation to repository-level governance. SkillClaw aggregates multi-user trajectories and synchronizes validated skill updates through a shared repository. EvoSkill distinguishes create and edit operations and uses capacity-limited selection to control repository growth. SkillX adds refinement and expansion to improve coverage while avoiding redundant rediscovery. PSN organizes executable skills into a programmatic skill network and performs fault localization, maturity-aware update gating, and rollback-validated structural refactoring. SkillMOO optimizes agent skill bundles with LLM-proposed edits and NSGA-II selection over pass rate and cost.
-
-This repository-level perspective is close to software engineering, but it also narrows our novelty claim. Long-term refactoring and cost-aware bundle optimization are already present in concurrent work. Our distinct emphasis is test-grounded population selection for a general skill repository: every candidate skill is evaluated by with/without unit utility, integration-derived tests, token cost, retrieval noise, redundancy, and dependency risk before it is retained. Under this framing, refactor_lab is one maintenance backend for discovering shared sub-computations and validating rewrites, while repository selection decides which candidates, merged skills, or legacy versions should survive under a fixed budget.
-
-### 2.5 Policy-Skill Co-Evolution and Model Preconditions
-
-AgentOptimizer, SkillRL, D2Skill, XSkill, and OpenClaw-RL highlight that skill use depends on the policy or execution scaffold. AgentOptimizer treats callable functions as learnable agent weights, showing early evidence that external function sets can be optimized without modifying the base LLM. SkillRL distills skills from experience and lets the skill library co-evolve with the agent policy during reinforcement learning. D2Skill introduces task-level and step-level skills, and computes hindsight utility from paired skill-injected and baseline rollouts. XSkill separates high-level skills from local action-level experiences in multimodal agents. OpenClaw-RL is not an external-skill method in the narrow sense, but it shows that next-state signals can be recovered as online learning feedback.
-
-These works warn against assuming that a frozen model will automatically use code pasted into a prompt. Our own preliminary observations align with this warning: GLM often retrieves but does not call prompt-injected code skills, while Claude-style settings show more reliable skill use. Thus, before evaluating any extraction algorithm, we must first diagnose model and interface preconditions: whether the selected model, skill exposure format, and runtime scaffold actually convert retrieved skills into used skills.
-
-### 2.6 Positioning of This Work
-
-The recent literature already covers broad skill generation, trajectory distillation, verification loops, programmatic skill networks, multi-objective bundle optimization, and RL-based policy-skill co-evolution. Our work should therefore not claim novelty at the level of "self-evolving skills" in general. Instead, we position the project around a narrower software-engineering thesis: test-time skill evolution only becomes meaningful when the environment has reusable structure, the model can use external skills, and the skill format matches the task. Under those preconditions, the central problem becomes maintaining a growing skill repository: extracting reusable structure after execution, validating correctness, estimating marginal skill value, refactoring cross-trace commonalities, and selecting a compact skill population under utility, token, retrieval-noise, redundancy, and maintenance budgets.
-
-This positioning leaves four concrete differentiators: first, peripheral-condition diagnostics for environment, model, and skill format; second, test-grounded repository population selection rather than append-all accumulation or independent single-skill filtering; third, correctness-preserving skill rewrite as a repository maintenance operation; and fourth, frozen-model skill value estimation based on answer, token, retrieval, and usage signals rather than policy training alone.
 
 ## 3. Methodology
 
@@ -960,169 +925,73 @@ def main(S, MS, G, T, N, micro_maintenance_step, marco_maintenance_step):
                 
 ```
 
+### 3.4. 重构版
+
+* 
+
 
 ## 4. Experiments
 
-### 4.0 Skill Refactoring
+### 4.0 实验计划
+1. 全量实验
+2. Public Baselines:
+    1. ReAct(No Skill)
+    2. SkillX
+    3. 每个task开环提取一个skill
+3. Private Baseline：
+    1. BFCL
+    2. Spreadsheet
+        1. Human-writte skills
+    3. MineDojo
+        1. PSN
+    4. SkillsBench
+        1. Human Written Skill
+4.  Ablations
+    1. w/o TRL
+        1. 选中的+淘汰的指标
+    2. w/o Unittest
+    3. w/o Refactorization
+    4. w/o Refinement & version control
+7. version control graph analyses
+    1. 依赖关系
+    
+### 4.1. Experimental Setup
 
-We study skill refactoring as a maintenance problem over an accumulated skill
-library. The goal is not to extract a brand-new skill from a single execution
-trace, but to identify shared sub-computations across historically evolved
-skills, factor them into reusable helpers, and preserve downstream correctness.
+#### 榜单和数据集
+* 榜单介绍
+* 运行方式
+* train/test区分
 
-#### Experimental setup
-
-We use two refactoring benchmarks. The first is a synthetic math corpus built
-for controlled analysis of shared computational motifs, including geometry,
-number theory, modular arithmetic, linear algebra, and statistics. The second
-is a small manually curated `skillsbench_manual` corpus derived from the
-SkillsBench task style, which stresses non-math procedural skills. In both
-cases, the original skill collections are correct before refactoring, so the
-main evaluation questions are: whether correctness is preserved, whether token
-footprint decreases, and whether the recovered graph structure matches the
-expected reusable decomposition.
-
-Separately, we also report a `skillsbench_fixture` retrieval benchmark built
-from 24 selected tasks in the external SkillsBench repository. This fixture is
-used only to evaluate semantic retrieval quality of the embedding + pgvector
-stack; it is not a refactoring benchmark and not the official end-to-end
-SkillsBench runner.
-
-Between the lab-only refactoring benchmarks and the full integrated online
-experiment, we also define an offline `planning_replay_benchmark`. This
-benchmark is intended to evaluate the planner-aware formulation more directly:
-given the same current query, retrieved historical skills, and optional prior
-query/plan/trace context, does the planner recover the expected shared
-abstraction and emit a workflow plan that explicitly calls it? This benchmark
-is meant to evaluate planner structure rather than executor end-to-end task
-success.
-
-We compare four variants: `naive` literal deduplication, `v1` free-text cluster
-keys, `v2` union-find clustering over pairwise positive edges, and `v3`
-clique-growth clustering with execution validation. The lab setting is
-post-hoc: a set of existing skills is refactored after the fact. In the main
-system, this mechanism is now treated as a post-execute repository maintenance
-step rather than a pre-execute planner requirement: once the current trace is
-available, it can be compared against similar historical traces and skills to
-decide whether to create, edit, merge, split, or reject a skill.
-
-#### Main results
-
-On the math corpus, the final `v3` method extracts exactly five shared
-sub-functions, preserves correctness at 100%, and reduces total code tokens
-from 1530 to 1258, a 17.8% reduction. Earlier variants fail for different
-reasons: `v1` fragments clusters and duplicates helper code, increasing tokens
-by 113.3%; `v2` over-merges distinct motifs into one connected component and
-breaks correctness under corpus-level evaluation. On the `skillsbench_manual`
-corpus, the corrected direct-harness protocol shows that refactoring preserves
-100% accuracy while reducing average tokens from 670 to 516, a 23.0%
-reduction. On the separate `skillsbench_fixture` retrieval benchmark, the
-current retrieval stack achieves 95.8% Recall@1 and 100% Recall@5 over 24
-external-style tasks, with 161 ms average latency and about $1.13e-5 embedding
-cost per query. Together, these results show that the system has both a
-correctness-preserving refactoring mechanism and a strong retrieval substrate
-for external-style tasks, while keeping the two claims explicitly separated.
-
-#### Graph analysis
-
-The decisive change is the clustering primitive. Free-text keying in `v1`
-creates semantic fragmentation because equivalent sub-tasks are named
-differently across pairwise alignment calls. Union-find in `v2` is too coarse:
-a single false-positive edge can connect two otherwise independent dense
-regions, forcing one extraction call to explain multiple unrelated motifs.
-Clique-growth in `v3` is more robust because a node is added only when it is
-connected to every current cluster member. Empirically, this removes the
-catastrophic over-merge mode while preserving all true math clusters.
-
-The main over-merge example is `power_of_point`, which superficially resembles
-the geometry cross-product group because it manipulates planar coordinates.
-The alignment stage can still attach it to the geometry region, but the
-extraction stage omits it from the rewrite set and the execution gate prevents
-incorrect propagation. The main under-merge example is `expected_value`, which
-uses a weighted reduction and is therefore not unified with plain sum-based
-reductions. This suggests a richer reduction taxonomy as future work rather
-than a failure of the current correctness-first design.
-
-#### Implications for the online system
-
-The lab setting validates graph discovery and correctness-preserving rewrite,
-but it should not be directly promoted into a costly pre-execute planner. The
-current mainline moves refactoring back to the post-execute extraction stage:
-after a query has produced a full trace, the system compares the new trace with
-historically similar traces and skills, then decides whether to create, edit,
-merge, split, or reject a skill. This change accepts higher training-time cost
-in exchange for better test-time skill quality, and avoids asking the planner
-to guess reusable abstractions before seeing the current trace.
-
-The offline replay benchmark remains useful, but its role is diagnostic rather
-than central. It can test whether a planner notices possible historical
-workflow reuse, yet the main algorithmic evidence should come from
-post-execute skill quality, downstream reuse, token reduction, and
-correctness-preserving repository maintenance.
-
-#### Appendix material
-
-The appendix should include: the exact extracted shared helper texts for the
-accepted runs, representative positive and negative pairwise alignment outputs,
-the rejected `v1` and `v2` failure cases, rewritten skill bodies, and the full
-debug log for the `skillsbench_manual` protocol correction. For the
-SkillsBench-derived retrieval fixture, the appendix should additionally include
-the full per-query ranking table, the single rank-1 miss case, and the fixture
-category/difficulty summary. Figure-ready artifacts include: a cluster graph
-schematic, a token-vs-correctness bar chart, a retrieval metrics table for the
-fixture benchmark, and a pipeline diagram covering alignment, clique growth,
-extraction, validation, and planner-time invocation.
+#### 实现细节
+* 模型，参数
+* 最大步数，生成长度
+* 大小维护次数
+* 检索topk
+* candidate group size
+* 其他细节放附录
+    - 每个部分的截断长度
+    - 每个role的prompt格式
+    - 输出skill字段
+    - bundle字段
+    - 失败重试轮数
+    - 检索分数硬约束
 
 
-### 4.1. Main Results
+### 4.2. Main Results
 
-Table 1 reports the current reproducible pilot results. BFCL uses the curated
-50/50 related-task split, with one online evolution epoch over 50 training
-tasks and a frozen skill-store snapshot evaluated on the 50 held-out tasks.
-SpreadsheetBench currently reports a baseline-only 50-task smoke run; its
-evolution result is left blank until the benchmark-specific skill maintenance
-path is enabled. MineDojo and AIME are not included in this pilot table.
 
-For BFCL we report three complementary metrics because exact task success is
-too strict to summarize multi-turn tool behavior alone: exact success,
-official-valid rate from the official runner, and call-level average score. We
-also report average total tokens per held-out task. The first interrupted BFCL
-evolve evaluation suffered a network/proxy failure and timed out on 30/50
-held-out tasks; the table uses the subsequent held-out-only rerun with the same
-frozen evolved skill snapshot.
+### 4.3. Ablation Studies
 
-| Benchmark | Model | Setting | Exact success | Official valid | Avg score | Avg tokens / task | Timeout |
-|---|---|---|---:|---:|---:|---:|---:|
-| BFCL v3 related 50/50 | Claude Sonnet 4.5 proxy | baseline, no skills | 0.06 | 0.44 | 0.7312 | 70,323.8 | 0.00 |
-| BFCL v3 related 50/50 | Claude Sonnet 4.5 proxy | evolve, 1 epoch, frozen skill-store rerun | 0.08 | 0.74 | 0.7991 | 86,813.3 | 0.00 |
-| SpreadsheetBench-Verified | Claude Sonnet 4.5 proxy | baseline, test 50 | 0.22 | N/A | 0.2564 | 1,552.1 | 0.00 |
 
-The BFCL pilot shows a clear gain in official-valid rate and call-level score:
-official-valid improves from 0.44 to 0.74, and average score improves from
-0.7312 to 0.7991. Exact success improves only slightly, from 0.06 to 0.08,
-indicating that the current skill layer primarily fixes workflow and contract
-structure, while strict end-state and exact-argument failures remain. The
-held-out token cost increases by 23.5% because prompt-only skill injection adds
-context and does not yet replace enough model/tool steps. This is a current
-limitation rather than a claimed efficiency result for the BFCL pilot.
+### 4.4. 过程评价：
+随着演化进行，每个step的skill做test的效果
+1. 端到端表现
+2. skill数（active, pending, disabled）
+3. 检索次数
+4. 使用次数
+5. credit变化（正-负）
 
-The online maintenance phase for the BFCL run used 106 maintenance LLM calls
-and 744,385 maintenance tokens. The largest cost component is extraction
-(391,031 tokens), followed by refinement (139,262), credit assignment
-(100,248), refactoring (62,382), bundle construction (46,351), and extractor
-feedback (5,111). These costs are not included in the held-out inference-token
-columns and should be reported separately as training-time maintenance cost.
-
-### 4.2. Ablation Studies
-Ablation 1: skill format (code function vs. workflow card vs. tool-use rule)
-
-Ablation 2: refactoring (with vs. without)
-
-Ablation 3: testing (test case from real trace, synthetic test case, no test)
-
-Ablation 4: refinement (with vs. without)
-
-### 4.3. Version control and maintenance analysis
+### 4.5. Version control and maintenance analysis
 
 希望研究版本控制在skill库维护中的作用，特别是当skill库不断增长和演化时，版本控制如何帮助我们管理技能的变更、回滚和依赖关系。可能的分析包括：
 
@@ -1132,10 +1001,16 @@ Ablation 4: refinement (with vs. without)
 
 * case study
 
-### 4.4. Trajectory analyses
+### 4.6. case study
+1. Trajectory analyses with / without
 
-希望详细调研skill evolving对于trace带来的改变究竟体现在什么方面。
+同一个题目加skill前后的变化
 
+2. skill evolving lineage
+
+一个skill的版本演进过程。
+
+## 5. Conclusions
 
 
 ## Appendix A. Benchmark Details

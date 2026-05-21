@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 from academic.config import EXTRACT_MODEL
-from academic.skill_repository.llm_maintenance import _ask_json, _json_block, _trim_text
+from academic.skill_repository.llm_maintenance import _ask_json, _json_block, _refactorer_rule_suffix, _role_json_block, _trim_text
 from academic.skill_repository.types import (
     DependencyPin,
     SkillArtifact,
@@ -1208,6 +1208,7 @@ async def llm_refactor_clique(
     model_name: str | None = None,
     audit_context: Dict[str, Any] | None = None,
     repair_context: Dict[str, Any] | None = None,
+    refactorer_rules: Sequence[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     seg_by_id = {segment.segment_id: segment for segment in graph.segments}
     selected_segments = [seg_by_id[seg_id] for seg_id in clique.segment_ids if seg_id in seg_by_id]
@@ -1235,24 +1236,24 @@ async def llm_refactor_clique(
     if repair_context:
         repair_section = (
             "## Previous Refactor Attempt Failed Gate\n"
-            f"{_json_block(repair_context)}\n\n"
+            f"{_role_json_block(repair_context)}\n\n"
             "Revise the refactor proposal so every new or rewritten skill can pass its bundle gate. "
             "Preserve the old skills' semantics; do not hide failures by weakening old bundles.\n\n"
         )
     user = (
         "## Candidate Refactor Clique\n"
-        f"{_json_block(clique.as_dict())}\n\n"
+        f"{_role_json_block(clique.as_dict())}\n\n"
         "## Candidate Segments\n"
-        f"{_json_block([_segment_for_llm(segment) for segment in selected_segments])}\n\n"
+        f"{_role_json_block([_segment_for_llm(segment) for segment in selected_segments])}\n\n"
         "## Involved Skill Node Summaries\n"
-        f"{_json_block(skill_summaries)}\n\n"
+        f"{_role_json_block(skill_summaries)}\n\n"
         f"{repair_section}"
         "## Task\n"
         "Decide whether the segments instantiate one latent reusable skill. "
         "If yes, extract the shared skill and list affected old-skill updates.\n"
     )
     return await _ask_json(
-        system=REFACTOR_SYSTEM,
+        system=REFACTOR_SYSTEM + _refactorer_rule_suffix(refactorer_rules),
         user=_trim_text(user, limit=16000),
         llm_config=llm_config,
         model_name=model_name,
@@ -1260,6 +1261,7 @@ async def llm_refactor_clique(
         metadata={
             "clique_id": clique.clique_id,
             "segment_ids": list(clique.segment_ids),
+            "n_refactorer_rules": len(list(refactorer_rules or [])),
             **dict(audit_context or {}),
         },
     )

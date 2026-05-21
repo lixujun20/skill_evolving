@@ -1,0 +1,2471 @@
+{
+  "manifest_version": 1,
+  "benchmark": "bfcl_v3",
+  "selection_method": "{'type': 'deterministic_relatedness_ranking', 'description': 'Rank all 200 BFCL tasks by repeated tool-family / lookup-action / multi-turn workflow signals, then freeze the top 100 as the related-task pool.', 'criteria': ['shared tool families', 'repeated identifier/lookup/ordering/argument failure families', 'multi-turn workflow similarity'], 'split_seed': 42, 'data_source': 'bfcl_eval_bundle'}; prefix_train20_for_trl_debug",
+  "train_task_ids": [
+    "multi_turn_base_120",
+    "multi_turn_base_130",
+    "multi_turn_base_116",
+    "multi_turn_base_117",
+    "multi_turn_base_121",
+    "multi_turn_base_142",
+    "multi_turn_base_123",
+    "multi_turn_base_135",
+    "multi_turn_base_107",
+    "multi_turn_base_128",
+    "multi_turn_base_118",
+    "multi_turn_base_132",
+    "multi_turn_base_122",
+    "multi_turn_base_146",
+    "multi_turn_base_126",
+    "multi_turn_base_115",
+    "multi_turn_base_127",
+    "multi_turn_base_93",
+    "multi_turn_base_70",
+    "multi_turn_base_82"
+  ],
+  "test_task_ids": [
+    "multi_turn_base_68",
+    "multi_turn_base_152",
+    "multi_turn_base_173",
+    "multi_turn_base_52",
+    "multi_turn_base_176",
+    "multi_turn_base_65",
+    "multi_turn_base_86",
+    "multi_turn_base_88",
+    "multi_turn_base_108",
+    "multi_turn_base_131",
+    "multi_turn_base_75",
+    "multi_turn_base_58",
+    "multi_turn_base_90",
+    "multi_turn_base_54",
+    "multi_turn_base_76",
+    "multi_turn_base_160",
+    "multi_turn_base_69",
+    "multi_turn_base_103",
+    "multi_turn_base_114",
+    "multi_turn_base_101",
+    "multi_turn_base_138",
+    "multi_turn_base_53",
+    "multi_turn_base_77",
+    "multi_turn_base_167",
+    "multi_turn_base_113",
+    "multi_turn_base_141",
+    "multi_turn_base_143",
+    "multi_turn_base_149",
+    "multi_turn_base_194",
+    "multi_turn_base_145",
+    "multi_turn_base_78",
+    "multi_turn_base_153",
+    "multi_turn_base_179",
+    "multi_turn_base_164",
+    "multi_turn_base_192",
+    "multi_turn_base_25",
+    "multi_turn_base_111",
+    "multi_turn_base_137",
+    "multi_turn_base_191",
+    "multi_turn_base_10",
+    "multi_turn_base_158",
+    "multi_turn_base_12",
+    "multi_turn_base_29",
+    "multi_turn_base_38",
+    "multi_turn_base_35",
+    "multi_turn_base_5",
+    "multi_turn_base_9",
+    "multi_turn_base_1",
+    "multi_turn_base_0",
+    "multi_turn_base_28"
+  ],
+  "train_tasks": [
+    {
+      "task_id": "multi_turn_base_120",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/3; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 232.3
+    },
+    {
+      "task_id": "multi_turn_base_130",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "place",
+        "get",
+        "cancel",
+        "get",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/4; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 231.7
+    },
+    {
+      "task_id": "multi_turn_base_116",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "remove",
+        "get",
+        "get",
+        "get",
+        "place",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_117",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "remove",
+        "get",
+        "get",
+        "get",
+        "place",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_121",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get",
+        "make"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_available_stocks",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "TradingBot.make_transaction"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_142",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "get",
+        "get",
+        "place",
+        "fund"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.fund_account"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 228.6
+    },
+    {
+      "task_id": "multi_turn_base_123",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get",
+        "make",
+        "logout"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "TradingBot.make_transaction",
+          "TradingBot.logout"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.8
+    },
+    {
+      "task_id": "multi_turn_base_135",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "get",
+        "get",
+        "place",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=5/1; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.get_available_stocks",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.7
+    },
+    {
+      "task_id": "multi_turn_base_107",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.6
+    },
+    {
+      "task_id": "multi_turn_base_128",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.get_available_stocks",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 226.6
+    },
+    {
+      "task_id": "multi_turn_base_118",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "remove",
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 224.8
+    },
+    {
+      "task_id": "multi_turn_base_132",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "get",
+        "add",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.get_stock_info",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 224.8
+    },
+    {
+      "task_id": "multi_turn_base_122",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "place",
+        "get",
+        "cancel",
+        "logout"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=2/3; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.logout"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 224.2
+    },
+    {
+      "task_id": "multi_turn_base_146",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "remove",
+        "get",
+        "get",
+        "place",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=4/1; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 222.9
+    },
+    {
+      "task_id": "multi_turn_base_126",
+      "domain": "TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/2; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 222.8
+    },
+    {
+      "task_id": "multi_turn_base_115",
+      "domain": "TradingBot",
+      "failure_family": "multi_turn_argument_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "get",
+        "add",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/1; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.get_stock_info",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 219.1
+    },
+    {
+      "task_id": "multi_turn_base_127",
+      "domain": "TradingBot",
+      "failure_family": "trading_identifier_or_order_binding",
+      "tool_families": [
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "remove",
+        "get",
+        "get",
+        "place",
+        "get"
+      ],
+      "why_related": "tool_families=['TradingBot']; repeated lookup/action mix=3/1; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details"
+        ],
+        "involved_classes": [
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 219.1
+    },
+    {
+      "task_id": "multi_turn_base_93",
+      "domain": "VehicleControlAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "display",
+        "fill",
+        "start",
+        "check",
+        "find",
+        "set"
+      ],
+      "why_related": "tool_families=['VehicleControlAPI']; repeated lookup/action mix=3/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.displayCarStatus",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation"
+        ],
+        "involved_classes": [
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 218.5
+    },
+    {
+      "task_id": "multi_turn_base_70",
+      "domain": "VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "liter",
+        "fill",
+        "start",
+        "check",
+        "find",
+        "set"
+      ],
+      "why_related": "tool_families=['VehicleControlAPI']; repeated lookup/action mix=2/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.liter_to_gallon",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation"
+        ],
+        "involved_classes": [
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 214.2
+    },
+    {
+      "task_id": "multi_turn_base_82",
+      "domain": "VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "gallon",
+        "fill",
+        "start",
+        "check",
+        "find",
+        "set"
+      ],
+      "why_related": "tool_families=['VehicleControlAPI']; repeated lookup/action mix=2/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.gallon_to_liter",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation"
+        ],
+        "involved_classes": [
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 214.2
+    }
+  ],
+  "test_tasks": [
+    {
+      "task_id": "multi_turn_base_68",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "display",
+        "fill",
+        "start",
+        "check",
+        "find",
+        "set",
+        "post"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=3/4; path_len=7",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.displayCarStatus",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation",
+          "TwitterAPI.post_tweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 175.7
+    },
+    {
+      "task_id": "multi_turn_base_152",
+      "domain": "TicketAPI+TravelAPI",
+      "failure_family": "ordering_or_stateful_transaction",
+      "tool_families": [
+        "TicketAPI",
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "compute",
+        "get",
+        "book",
+        "cancel",
+        "create",
+        "resolve"
+      ],
+      "why_related": "tool_families=['TicketAPI', 'TravelAPI']; repeated lookup/action mix=1/3; path_len=6",
+      "metadata": {
+        "path": [
+          "TravelAPI.compute_exchange_rate",
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.book_flight",
+          "TravelAPI.cancel_booking",
+          "TicketAPI.create_ticket",
+          "TicketAPI.resolve_ticket"
+        ],
+        "involved_classes": [
+          "TicketAPI",
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 173.9
+    },
+    {
+      "task_id": "multi_turn_base_173",
+      "domain": "TicketAPI+TravelAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TicketAPI",
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "get",
+        "compute",
+        "set",
+        "book",
+        "close"
+      ],
+      "why_related": "tool_families=['TicketAPI', 'TravelAPI']; repeated lookup/action mix=1/2; path_len=5",
+      "metadata": {
+        "path": [
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.compute_exchange_rate",
+          "TravelAPI.set_budget_limit",
+          "TravelAPI.book_flight",
+          "TicketAPI.close_ticket"
+        ],
+        "involved_classes": [
+          "TicketAPI",
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 170.7
+    },
+    {
+      "task_id": "multi_turn_base_52",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "start",
+        "check",
+        "find",
+        "set",
+        "post",
+        "comment"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=2/4; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.comment"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 169.4
+    },
+    {
+      "task_id": "multi_turn_base_176",
+      "domain": "TicketAPI+TravelAPI",
+      "failure_family": "ordering_or_stateful_transaction",
+      "tool_families": [
+        "TicketAPI",
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "register",
+        "book",
+        "cancel",
+        "create",
+        "close"
+      ],
+      "why_related": "tool_families=['TicketAPI', 'TravelAPI']; repeated lookup/action mix=0/4; path_len=5",
+      "metadata": {
+        "path": [
+          "TravelAPI.register_credit_card",
+          "TravelAPI.book_flight",
+          "TravelAPI.cancel_booking",
+          "TicketAPI.create_ticket",
+          "TicketAPI.close_ticket"
+        ],
+        "involved_classes": [
+          "TicketAPI",
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 168.8
+    },
+    {
+      "task_id": "multi_turn_base_65",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "liter",
+        "fill",
+        "start",
+        "check",
+        "post",
+        "retweet",
+        "comment"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/5; path_len=7",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.liter_to_gallon",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.retweet",
+          "TwitterAPI.comment"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 168.3
+    },
+    {
+      "task_id": "multi_turn_base_86",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "start",
+        "check",
+        "find",
+        "set",
+        "post",
+        "mention"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=2/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.mention"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 168.2
+    },
+    {
+      "task_id": "multi_turn_base_88",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "gallon",
+        "fill",
+        "start",
+        "get",
+        "estimate",
+        "post",
+        "comment"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/4; path_len=7",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.gallon_to_liter",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.get_zipcode_based_on_city",
+          "VehicleControlAPI.estimate_distance",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.comment"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 167.1
+    },
+    {
+      "task_id": "multi_turn_base_108",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "cancel",
+        "get",
+        "send"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=4/3; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "MessageAPI.send_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 166.3
+    },
+    {
+      "task_id": "multi_turn_base_131",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "get",
+        "place",
+        "get",
+        "send",
+        "delete"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=4/3; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.get_available_stocks",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "MessageAPI.send_message",
+          "MessageAPI.delete_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 166.3
+    },
+    {
+      "task_id": "multi_turn_base_75",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "fill",
+        "start",
+        "check",
+        "post",
+        "retweet",
+        "comment"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/5; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.retweet",
+          "TwitterAPI.comment"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 166.3
+    },
+    {
+      "task_id": "multi_turn_base_58",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "gallon",
+        "fill",
+        "start",
+        "get",
+        "estimate",
+        "post",
+        "mention"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/3; path_len=7",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.gallon_to_liter",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.get_zipcode_based_on_city",
+          "VehicleControlAPI.estimate_distance",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.mention"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 165.9
+    },
+    {
+      "task_id": "multi_turn_base_90",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "liter",
+        "fill",
+        "start",
+        "get",
+        "estimate",
+        "post",
+        "mention"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/3; path_len=7",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.liter_to_gallon",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.get_zipcode_based_on_city",
+          "VehicleControlAPI.estimate_distance",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.mention"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 165.9
+    },
+    {
+      "task_id": "multi_turn_base_54",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "liter",
+        "fill",
+        "start",
+        "check",
+        "post",
+        "retweet"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/4; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.liter_to_gallon",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.retweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 165.1
+    },
+    {
+      "task_id": "multi_turn_base_76",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "display",
+        "lock",
+        "start",
+        "check",
+        "post"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=2/2; path_len=5",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.displayCarStatus",
+          "VehicleControlAPI.lockDoors",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "TwitterAPI.post_tweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 165.0
+    },
+    {
+      "task_id": "multi_turn_base_160",
+      "domain": "TicketAPI+TravelAPI",
+      "failure_family": "multi_turn_argument_binding",
+      "tool_families": [
+        "TicketAPI",
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "compute",
+        "set",
+        "book",
+        "close"
+      ],
+      "why_related": "tool_families=['TicketAPI', 'TravelAPI']; repeated lookup/action mix=0/2; path_len=4",
+      "metadata": {
+        "path": [
+          "TravelAPI.compute_exchange_rate",
+          "TravelAPI.set_budget_limit",
+          "TravelAPI.book_flight",
+          "TicketAPI.close_ticket"
+        ],
+        "involved_classes": [
+          "TicketAPI",
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 164.4
+    },
+    {
+      "task_id": "multi_turn_base_69",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "liter",
+        "fill",
+        "start",
+        "get",
+        "estimate",
+        "post"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/3; path_len=6",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.liter_to_gallon",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.get_zipcode_based_on_city",
+          "VehicleControlAPI.estimate_distance",
+          "TwitterAPI.post_tweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 163.9
+    },
+    {
+      "task_id": "multi_turn_base_103",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "get",
+        "place",
+        "get",
+        "send"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "MessageAPI.send_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 162.6
+    },
+    {
+      "task_id": "multi_turn_base_114",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "add",
+        "get",
+        "send",
+        "view",
+        "delete"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=4/2; path_len=7",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.get_stock_info",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "MessageAPI.send_message",
+          "MessageAPI.view_messages_received",
+          "MessageAPI.delete_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 162.6
+    },
+    {
+      "task_id": "multi_turn_base_101",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "update",
+        "get",
+        "send",
+        "view",
+        "delete"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/3; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_current_time",
+          "TradingBot.update_market_status",
+          "TradingBot.get_stock_info",
+          "MessageAPI.send_message",
+          "MessageAPI.view_messages_received",
+          "MessageAPI.delete_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 162.5
+    },
+    {
+      "task_id": "multi_turn_base_138",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "place",
+        "get",
+        "send",
+        "delete"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/3; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "MessageAPI.send_message",
+          "MessageAPI.delete_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 162.5
+    },
+    {
+      "task_id": "multi_turn_base_53",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "gallon",
+        "fill",
+        "start",
+        "check",
+        "post"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/3; path_len=5",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.gallon_to_liter",
+          "VehicleControlAPI.fillFuelTank",
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.check_tire_pressure",
+          "TwitterAPI.post_tweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 161.9
+    },
+    {
+      "task_id": "multi_turn_base_77",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "start",
+        "get",
+        "estimate",
+        "post",
+        "retweet"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/3; path_len=5",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.startEngine",
+          "VehicleControlAPI.get_zipcode_based_on_city",
+          "VehicleControlAPI.estimate_distance",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.retweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 161.9
+    },
+    {
+      "task_id": "multi_turn_base_167",
+      "domain": "TravelAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "compute",
+        "set",
+        "book",
+        "cancel",
+        "retrieve"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=3/3; path_len=7",
+      "metadata": {
+        "path": [
+          "TravelAPI.get_nearest_airport_by_city",
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.compute_exchange_rate",
+          "TravelAPI.set_budget_limit",
+          "TravelAPI.book_flight",
+          "TravelAPI.cancel_booking",
+          "TravelAPI.retrieve_invoice"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 160.5
+    },
+    {
+      "task_id": "multi_turn_base_113",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "get",
+        "send",
+        "delete"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "MessageAPI.send_message",
+          "MessageAPI.delete_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 158.8
+    },
+    {
+      "task_id": "multi_turn_base_141",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "remove",
+        "get",
+        "get",
+        "place",
+        "get",
+        "send"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "TradingBot.place_order",
+          "TradingBot.get_order_details",
+          "MessageAPI.send_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 158.8
+    },
+    {
+      "task_id": "multi_turn_base_143",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "cancel",
+        "get",
+        "send"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_order_details",
+          "TradingBot.cancel_order",
+          "TradingBot.get_account_info",
+          "MessageAPI.send_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 158.8
+    },
+    {
+      "task_id": "multi_turn_base_149",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "remove",
+        "get",
+        "send",
+        "view",
+        "delete"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.remove_stock_from_watchlist",
+          "TradingBot.get_watchlist",
+          "MessageAPI.send_message",
+          "MessageAPI.view_messages_received",
+          "MessageAPI.delete_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 158.8
+    },
+    {
+      "task_id": "multi_turn_base_194",
+      "domain": "TravelAPI",
+      "failure_family": "ordering_or_stateful_transaction",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "list",
+        "get",
+        "book",
+        "purchase",
+        "retrieve",
+        "contact",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=2/4; path_len=7",
+      "metadata": {
+        "path": [
+          "TravelAPI.list_all_airports",
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.book_flight",
+          "TravelAPI.purchase_insurance",
+          "TravelAPI.retrieve_invoice",
+          "TravelAPI.contact_customer_support",
+          "TravelAPI.cancel_booking"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 157.4
+    },
+    {
+      "task_id": "multi_turn_base_145",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "multi_turn_argument_binding",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "add",
+        "get",
+        "send",
+        "view"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=4/1; path_len=6",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.get_stock_info",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_order_details",
+          "MessageAPI.send_message",
+          "MessageAPI.view_messages_received"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 156.9
+    },
+    {
+      "task_id": "multi_turn_base_78",
+      "domain": "TwitterAPI+VehicleControlAPI",
+      "failure_family": "precondition_then_action",
+      "tool_families": [
+        "TwitterAPI",
+        "VehicleControlAPI"
+      ],
+      "tool_verbs": [
+        "find",
+        "set",
+        "post"
+      ],
+      "why_related": "tool_families=['TwitterAPI', 'VehicleControlAPI']; repeated lookup/action mix=1/2; path_len=3",
+      "metadata": {
+        "path": [
+          "VehicleControlAPI.find_nearest_tire_shop",
+          "VehicleControlAPI.set_navigation",
+          "TwitterAPI.post_tweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "VehicleControlAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 156.7
+    },
+    {
+      "task_id": "multi_turn_base_153",
+      "domain": "TravelAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "verify",
+        "get",
+        "get",
+        "set",
+        "book",
+        "retrieve"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=4/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TravelAPI.verify_traveler_information",
+          "TravelAPI.get_nearest_airport_by_city",
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.set_budget_limit",
+          "TravelAPI.book_flight",
+          "TravelAPI.retrieve_invoice"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 156.6
+    },
+    {
+      "task_id": "multi_turn_base_179",
+      "domain": "TravelAPI",
+      "failure_family": "ordering_or_stateful_transaction",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "get",
+        "book",
+        "purchase",
+        "retrieve",
+        "contact",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=2/4; path_len=6",
+      "metadata": {
+        "path": [
+          "TravelAPI.get_nearest_airport_by_city",
+          "TravelAPI.book_flight",
+          "TravelAPI.purchase_insurance",
+          "TravelAPI.retrieve_invoice",
+          "TravelAPI.contact_customer_support",
+          "TravelAPI.cancel_booking"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 155.4
+    },
+    {
+      "task_id": "multi_turn_base_164",
+      "domain": "TravelAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "get",
+        "get",
+        "compute",
+        "set",
+        "book",
+        "retrieve"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TravelAPI.get_nearest_airport_by_city",
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.compute_exchange_rate",
+          "TravelAPI.set_budget_limit",
+          "TravelAPI.book_flight",
+          "TravelAPI.retrieve_invoice"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 154.8
+    },
+    {
+      "task_id": "multi_turn_base_192",
+      "domain": "TravelAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "list",
+        "get",
+        "get",
+        "set",
+        "book",
+        "retrieve"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=3/2; path_len=6",
+      "metadata": {
+        "path": [
+          "TravelAPI.list_all_airports",
+          "TravelAPI.get_nearest_airport_by_city",
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.set_budget_limit",
+          "TravelAPI.book_flight",
+          "TravelAPI.retrieve_invoice"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 154.8
+    },
+    {
+      "task_id": "multi_turn_base_25",
+      "domain": "GorillaFileSystem",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem"
+      ],
+      "tool_verbs": [
+        "mkdir",
+        "find",
+        "cp",
+        "mv",
+        "cat",
+        "sort",
+        "wc"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem']; repeated lookup/action mix=1/4; path_len=7",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.mkdir",
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.cp",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.cat",
+          "GorillaFileSystem.sort",
+          "GorillaFileSystem.wc"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 153.1
+    },
+    {
+      "task_id": "multi_turn_base_111",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "multi_turn_argument_binding",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "send",
+        "view"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/1; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_order_details",
+          "MessageAPI.send_message",
+          "MessageAPI.view_messages_received"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 153.1
+    },
+    {
+      "task_id": "multi_turn_base_137",
+      "domain": "MessageAPI+TradingBot",
+      "failure_family": "multi_turn_argument_binding",
+      "tool_families": [
+        "MessageAPI",
+        "TradingBot"
+      ],
+      "tool_verbs": [
+        "get",
+        "add",
+        "get",
+        "get",
+        "send"
+      ],
+      "why_related": "tool_families=['MessageAPI', 'TradingBot']; repeated lookup/action mix=3/1; path_len=5",
+      "metadata": {
+        "path": [
+          "TradingBot.get_symbol_by_name",
+          "TradingBot.add_stock_to_watchlist",
+          "TradingBot.get_watchlist",
+          "TradingBot.get_stock_info",
+          "MessageAPI.send_message"
+        ],
+        "involved_classes": [
+          "MessageAPI",
+          "TradingBot"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 153.1
+    },
+    {
+      "task_id": "multi_turn_base_191",
+      "domain": "TravelAPI",
+      "failure_family": "identifier_lookup_then_action",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "verify",
+        "get",
+        "get",
+        "book",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=3/2; path_len=5",
+      "metadata": {
+        "path": [
+          "TravelAPI.verify_traveler_information",
+          "TravelAPI.get_nearest_airport_by_city",
+          "TravelAPI.get_flight_cost",
+          "TravelAPI.book_flight",
+          "TravelAPI.cancel_booking"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 152.8
+    },
+    {
+      "task_id": "multi_turn_base_10",
+      "domain": "GorillaFileSystem",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem"
+      ],
+      "tool_verbs": [
+        "mkdir",
+        "touch",
+        "diff",
+        "cp",
+        "mv",
+        "cat",
+        "wc"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem']; repeated lookup/action mix=0/5; path_len=7",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.mkdir",
+          "GorillaFileSystem.touch",
+          "GorillaFileSystem.diff",
+          "GorillaFileSystem.cp",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.cat",
+          "GorillaFileSystem.wc"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 150.0
+    },
+    {
+      "task_id": "multi_turn_base_158",
+      "domain": "TravelAPI",
+      "failure_family": "ordering_or_stateful_transaction",
+      "tool_families": [
+        "TravelAPI"
+      ],
+      "tool_verbs": [
+        "verify",
+        "get",
+        "book",
+        "cancel"
+      ],
+      "why_related": "tool_families=['TravelAPI']; repeated lookup/action mix=2/2; path_len=4",
+      "metadata": {
+        "path": [
+          "TravelAPI.verify_traveler_information",
+          "TravelAPI.get_nearest_airport_by_city",
+          "TravelAPI.book_flight",
+          "TravelAPI.cancel_booking"
+        ],
+        "involved_classes": [
+          "TravelAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 149.0
+    },
+    {
+      "task_id": "multi_turn_base_12",
+      "domain": "GorillaFileSystem",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem"
+      ],
+      "tool_verbs": [
+        "ls",
+        "cd",
+        "touch",
+        "echo",
+        "grep",
+        "sort",
+        "wc"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem']; repeated lookup/action mix=0/4; path_len=7",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.ls",
+          "GorillaFileSystem.cd",
+          "GorillaFileSystem.touch",
+          "GorillaFileSystem.echo",
+          "GorillaFileSystem.grep",
+          "GorillaFileSystem.sort",
+          "GorillaFileSystem.wc"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 148.8
+    },
+    {
+      "task_id": "multi_turn_base_29",
+      "domain": "GorillaFileSystem",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem"
+      ],
+      "tool_verbs": [
+        "mkdir",
+        "find",
+        "cp",
+        "mv",
+        "grep"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem']; repeated lookup/action mix=1/3; path_len=5",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.mkdir",
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.cp",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.grep"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 147.9
+    },
+    {
+      "task_id": "multi_turn_base_38",
+      "domain": "GorillaFileSystem",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem"
+      ],
+      "tool_verbs": [
+        "mkdir",
+        "find",
+        "grep",
+        "sort",
+        "wc"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem']; repeated lookup/action mix=1/3; path_len=5",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.mkdir",
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.grep",
+          "GorillaFileSystem.sort",
+          "GorillaFileSystem.wc"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 147.9
+    },
+    {
+      "task_id": "multi_turn_base_35",
+      "domain": "GorillaFileSystem+MathAPI",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem",
+        "MathAPI"
+      ],
+      "tool_verbs": [
+        "find",
+        "mv",
+        "cat",
+        "grep",
+        "sort",
+        "wc",
+        "logarithm"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem', 'MathAPI']; repeated lookup/action mix=1/4; path_len=7",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.cat",
+          "GorillaFileSystem.grep",
+          "GorillaFileSystem.sort",
+          "GorillaFileSystem.wc",
+          "MathAPI.logarithm"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem",
+          "MathAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 147.1
+    },
+    {
+      "task_id": "multi_turn_base_5",
+      "domain": "GorillaFileSystem+TwitterAPI",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem",
+        "TwitterAPI"
+      ],
+      "tool_verbs": [
+        "cd",
+        "find",
+        "mv",
+        "cat",
+        "sort",
+        "post",
+        "comment"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem', 'TwitterAPI']; repeated lookup/action mix=1/4; path_len=7",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.cd",
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.cat",
+          "GorillaFileSystem.sort",
+          "TwitterAPI.post_tweet",
+          "TwitterAPI.comment"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 147.1
+    },
+    {
+      "task_id": "multi_turn_base_9",
+      "domain": "GorillaFileSystem",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem"
+      ],
+      "tool_verbs": [
+        "cd",
+        "touch",
+        "cp",
+        "mv",
+        "cat",
+        "sort"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem']; repeated lookup/action mix=0/4; path_len=6",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.cd",
+          "GorillaFileSystem.touch",
+          "GorillaFileSystem.cp",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.cat",
+          "GorillaFileSystem.sort"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 146.8
+    },
+    {
+      "task_id": "multi_turn_base_1",
+      "domain": "GorillaFileSystem",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem"
+      ],
+      "tool_verbs": [
+        "ls",
+        "find",
+        "mv",
+        "grep",
+        "tail"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem']; repeated lookup/action mix=1/2; path_len=5",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.ls",
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.grep",
+          "GorillaFileSystem.tail"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 146.7
+    },
+    {
+      "task_id": "multi_turn_base_0",
+      "domain": "GorillaFileSystem+TwitterAPI",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem",
+        "TwitterAPI"
+      ],
+      "tool_verbs": [
+        "find",
+        "mv",
+        "grep",
+        "sort",
+        "diff",
+        "post"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem', 'TwitterAPI']; repeated lookup/action mix=1/5; path_len=6",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.mv",
+          "GorillaFileSystem.grep",
+          "GorillaFileSystem.sort",
+          "GorillaFileSystem.diff",
+          "TwitterAPI.post_tweet"
+        ],
+        "involved_classes": [
+          "TwitterAPI",
+          "GorillaFileSystem"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 146.3
+    },
+    {
+      "task_id": "multi_turn_base_28",
+      "domain": "GorillaFileSystem+MathAPI",
+      "failure_family": "filesystem_argument_binding",
+      "tool_families": [
+        "GorillaFileSystem",
+        "MathAPI"
+      ],
+      "tool_verbs": [
+        "mkdir",
+        "find",
+        "grep",
+        "sort",
+        "tail",
+        "wc",
+        "logarithm"
+      ],
+      "why_related": "tool_families=['GorillaFileSystem', 'MathAPI']; repeated lookup/action mix=1/3; path_len=7",
+      "metadata": {
+        "path": [
+          "GorillaFileSystem.mkdir",
+          "GorillaFileSystem.find",
+          "GorillaFileSystem.grep",
+          "GorillaFileSystem.sort",
+          "GorillaFileSystem.tail",
+          "GorillaFileSystem.wc",
+          "MathAPI.logarithm"
+        ],
+        "involved_classes": [
+          "GorillaFileSystem",
+          "MathAPI"
+        ],
+        "bfcl_data_source": "bfcl_eval_bundle",
+        "bfcl_data_version": "BFCL_v4_bundle"
+      },
+      "score": 145.9
+    }
+  ]
+}

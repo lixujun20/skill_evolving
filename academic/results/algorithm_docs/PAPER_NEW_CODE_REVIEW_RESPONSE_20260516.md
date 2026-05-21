@@ -43,7 +43,7 @@ comment:
 ```
 
 ```
-response to comment:
+回复：
 同意。这里不应该只局部重构 `bfcl.py`，否则会把复杂度从一个大函数搬到一堆同样混乱的小文件里。建议后续做一次 package-level 整理：
 
 - `academic/benchmarks/bfcl/adapter.py`：BFCL task/tool/schema/official backend adapter。
@@ -97,7 +97,7 @@ comment:
 ```
 
 ```
-response to comment:
+回复：
 你的表述更准确。现在代码里叫 “tool_error_retry retrieval”，看起来像同一个 step 里额外检索一次；算法上应统一成：
 
 `Ret(q, previous_observation, S, MS)`
@@ -141,7 +141,7 @@ comment：
 ```
 
 ```
-response to comment:
+回复：
 明确结论：当前 BFCL official executable backend 不提供“本 turn / 本 task 已完成”的在线完成信号。
 
 我复查了当前 wrapper：`BFCLOfficialEnvironment.call()` 调用 official `execute_multi_turn_func_call`，每次只返回该 tool call 的 output 和 error。它不会返回 `done/is_complete/task_finished` 这类字段。当前 executor 的 turn 结束主要依赖模型停止继续发 tool call；official validity 是事后 checker，对完整 tool-call trace 做最终判定。
@@ -187,7 +187,7 @@ comment:
 ```
 
 ```
-response to comment:
+回复：
 建议先复用 overlap 那套 embedding 服务和维度配置，但 skill retrieval 使用单独的 skill index。也就是“同一个 embedding model，不同的 index/table 和不同的文本投影”。
 
 最小可行策略：
@@ -233,7 +233,7 @@ comment:
 ```
 
 ```
-response to comment:
+回复：
 这里后续实现时我会把 audit 字段命名改清楚：`retrieval_candidates`、`retrieved_candidates`、`injected_skills` 分开记录，避免把 store 层候选误认为最终注入。
 ```
 
@@ -282,7 +282,7 @@ comment:
 ```
 
 ```
-response to comment:
+回复：
 同意。更干净的设计是：prior extractor 不看现有 store，只根据当前 trace 和 meta-skills 产出 candidate operations，而不是直接决定写库。
 
 我会把计划改成两阶段：
@@ -301,7 +301,7 @@ response to comment:
 ```
 
 ```
-response to comment:
+回复：
 同意。这里不应该做全库 arbitration，也不应该在每次 prior extraction 后做语义去重。
 
 修正后的计划：
@@ -346,7 +346,7 @@ comment:
 ```
 
 ```
-response to comment:
+回复：
 你指出的是关键问题。严格说，`allowed_tools` 更准确应叫 `skill_tool_scope` 或 `tool_provenance`：它表示“这个 skill 的规则来自或适用于哪些工具 schema / tool family”，不是 benchmark expected answer，也不是执行权限。
 
 关于是否泄露：当前代码里确实有 non-debug 泄露风险，不应保留。
@@ -369,6 +369,28 @@ response to comment:
 comment:
 这是严重的bug，这影响到baseline了嘛？如果每一轮都给他看了expected tool call，结果就不可信。evolve应该肯定是受影响了？
 你说的这个含义，我觉得只适用于知识类的skill，而且只适用于针对某个工具调用的提醒？我感觉这个字段不太普适，似乎应该去掉。现在事实上这个字段对于效果的作用大吗？
+```
+
+```
+回复：
+是严重 bug，需要分两层判断影响范围。
+
+第一，普通 baseline 是否受影响，取决于 baseline runner 是否走了这些 BFCL skill executor / adapter 逻辑。如果 baseline 是纯官方 BFCL executor、没有 skill retrieval、没有 skill prompt、没有 debug_hints，那么它不应该看到 expected tool calls；但如果 baseline 复用了同一个 `filter_bfcl_tools_for_task(..., include_expected_tools=True)`、`_turn_skill_constraints()` 或 watchdog expected coverage 路径，那结果就不可信，需要重跑。就当前代码形态看，`adapter_mode == "debug_hints"` 时会显式把 expected tool names 写入 user message；这类结果只能作为 debug，不应进主表。非 debug baseline 必须加测试证明 prompt 里没有 `Likely required tool names`、`Expected tool focus` 或 expected call names。
+
+第二，evolve 肯定存在受影响风险，而且影响比 baseline 更复杂。即使 executor prompt 不直接暴露 expected calls，maintenance / extraction / credit 链路里也出现了 expected tool names，例如 `llm_maintenance.py` 里会从 expected calls 构造 `expected_tool_names` 和 `focus_rule_hint`。这会让 extractor/refiner 学到带答案痕迹的 skill 或 meta-skill。因此之前依赖这些路径的 evolve 结果不能当作严格无泄露结果，需要标注为 contaminated / diagnostic，并在移除 expected-tool 依赖后重跑。
+
+关于 `allowed_tools`，你的判断也对：这个字段不应该是普适的核心字段，更不应该参与“和 expected tools 匹配”的正式筛选。它最多适用于两类情况：
+
+- function/interface contract skill：这个 skill 明确约束某几个工具的参数、调用顺序或返回值复用。
+- knowledge skill 中非常局部的工具提醒：例如“某工具返回的 id 后续要复用”，此时它是 provenance/scope，不是答案提示。
+
+对 workflow skill、general rule skill、meta-skill，`allowed_tools` 往往会误导，因为它把一个跨工具流程硬压成工具列表。更好的字段应拆成：
+
+- `source_tools`：这个 skill 从哪些工具调用证据中归纳出来，只用于 provenance/debug/credit。
+- `governed_tools`：这个 skill 真正约束哪些工具的用法，可选字段，只对 function contract 类 skill 有意义。
+- `domain` / `intent` / `applicability` / `non_applicability`：正式 retrieval 更应该依赖这些语义范围。
+
+现在这个字段对效果的作用不小，因为它参与 tags、retrieval/rerank、prompt metadata 和 debug report；在 BFCL 里尤其容易把工具名信号放大。因此计划应该改为：正式链路先停止把 `allowed_tools` 当硬过滤或强 rerank 依据，只保留为弱 metadata / audit；同时彻底禁止它和 expected answer 匹配。后续如果 ablation 证明去掉后召回显著下降，再只为 function contract skill 引入更窄的 `governed_tools`。
 ```
 
 ### 3. `EXTRACT_SYSTEM` 太 general 且像 debug patch，应重写为软件工程原则并给 one-shot
@@ -435,7 +457,7 @@ comment:
 ```
 
 ```
-response to comment:
+回复：
 同意。base extractor prompt 应该保持原则化、稳定，不应该堆历史 bug patch。历史 patch 应迁移到两类动态机制：
 
 - TRL/meta-skill：从运行反馈中总结出来的 extractor rule of thumb。
@@ -516,7 +538,7 @@ online是每个task之后的，round是一批结束之后的？我觉得留round
 ```
 
 ```
-response to comment:
+回复：
 同意，而且你这个设计比我之前说的“近似 clique 去重”更可控。相近 clique 不一定重复，硬去重会误杀；更合理的是维护 trace-to-skill coverage map。
 
 建议改成：

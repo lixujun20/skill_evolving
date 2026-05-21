@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import copy
 import json
+import math
 import os
 import re
 import contextlib
@@ -84,9 +85,11 @@ from academic.config import PROJECT_ROOT, RESULTS_DIR
 from academic.skill_repository.llm_maintenance import (
     assign_skill_credit_llm,
     maintenance_token_event_count,
+    propose_group_refiner_actions_llm,
     reset_maintenance_token_stats,
     snapshot_maintenance_token_stats,
     update_extractor_rules_from_feedback_llm,
+    update_role_rules_from_feedback_llm,
 )
 from academic.skill_repository.refactor_overlap import (
     OverlapGraphState,
@@ -110,11 +113,31 @@ def _env_int(name: str, default: int) -> int:
         return int(default)
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)) or str(default))
+    except Exception:
+        return float(default)
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name)
     if raw is None:
         return bool(default)
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _extractor_existing_artifacts_mode() -> str:
+    mode = str(os.environ.get("BFCL_EXTRACTOR_EXISTING_ARTIFACTS") or "none").strip().lower()
+    if mode in {"full", "full_store", "store", "legacy"}:
+        return "full_store"
+    return "none"
+
+
+def _extractor_existing_artifacts_for_mode(store: ArtifactStore) -> List[SkillArtifact]:
+    if _extractor_existing_artifacts_mode() == "full_store":
+        return list(store.all())
+    return []
 
 
 class _AsyncRWLock:
@@ -202,51 +225,87 @@ def _first_run(detail: Dict[str, Any]) -> Dict[str, Any]:
 
 def _normalize_role_feedback_memory(role_feedback: Dict[str, Any] | None) -> Dict[str, Any]:
     payload = copy.deepcopy(role_feedback or {})
-    extractor = dict(payload.get("extractor") or {})
-    rules: List[Dict[str, Any]] = []
-    seen: set[str] = set()
-    for item in extractor.get("rules") or []:
-        row = dict(item or {})
-        text = str(row.get("text") or "").strip()
-        if not text:
-            continue
-        dedupe = re.sub(r"\s+", " ", text).strip().lower()
-        if dedupe in seen:
-            continue
-        seen.add(dedupe)
-        rules.append(
-            {
-                "rule_id": str(row.get("rule_id") or f"extractor_rule_{len(rules) + 1}"),
-                "text": text,
-                "focus": str(row.get("focus") or "evidence").strip().lower() or "evidence",
-            }
-        )
-        if len(rules) >= _ROLE_FEEDBACK_RULE_LIMIT:
-            break
-    for idx, row in enumerate(rules, start=1):
-        row["rule_id"] = f"extractor_rule_{idx}"
-    history = [dict(item or {}) for item in (extractor.get("history") or []) if isinstance(item, dict)][-12:]
-    payload["extractor"] = {
-        "rules": rules,
-        "history": history,
-        "last_update_summary": str(extractor.get("last_update_summary") or ""),
-        "updated_at": extractor.get("updated_at"),
-    }
+    for role in ("extractor", "refactorer"):
+        source = dict(payload.get(role) or {})
+        rules: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in source.get("rules") or []:
+            row = dict(item or {})
+            text = str(row.get("text") or "").strip()
+            if not text:
+                continue
+            dedupe = re.sub(r"\s+", " ", text).strip().lower()
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            rules.append(
+                {
+                    "rule_id": str(row.get("rule_id") or f"{role}_rule_{len(rules) + 1}"),
+                    "text": text,
+                    "focus": str(row.get("focus") or "evidence").strip().lower() or "evidence",
+                }
+            )
+            if len(rules) >= _ROLE_FEEDBACK_RULE_LIMIT:
+                break
+        for idx, row in enumerate(rules, start=1):
+            row["rule_id"] = f"{role}_rule_{idx}"
+        history = [dict(item or {}) for item in (source.get("history") or []) if isinstance(item, dict)][-12:]
+        payload[role] = {
+            "rules": rules,
+            "history": history,
+            "last_update_summary": str(source.get("last_update_summary") or ""),
+            "updated_at": source.get("updated_at"),
+        }
+    payload.pop("refiner", None)
     return payload
 
 
 def _role_feedback_projection(role_feedback: Dict[str, Any] | None) -> Dict[str, Any]:
     normalized = _normalize_role_feedback_memory(role_feedback)
-    extractor = dict(normalized.get("extractor") or {})
-    return {
-        "extractor": {
-            "rules": copy.deepcopy(extractor.get("rules") or []),
-            "n_rules": len(extractor.get("rules") or []),
-            "history": copy.deepcopy(extractor.get("history") or []),
-            "last_update_summary": extractor.get("last_update_summary") or "",
-            "updated_at": extractor.get("updated_at"),
+    out: Dict[str, Any] = {}
+    for role in ("extractor", "refactorer"):
+        payload = dict(normalized.get(role) or {})
+        out[role] = {
+            "rules": copy.deepcopy(payload.get("rules") or []),
+            "n_rules": len(payload.get("rules") or []),
+            "history": copy.deepcopy(payload.get("history") or []),
+            "last_update_summary": payload.get("last_update_summary") or "",
+            "updated_at": payload.get("updated_at"),
         }
+    return out
+
+
+def _merge_role_feedback_update(
+    role_feedback: Dict[str, Any],
+    *,
+    role_name: str,
+    update: Dict[str, Any],
+    round_index: int,
+    macro_index: int | None,
+    n_feedback_rows: int,
+    feedback_scope: str,
+    trl_enabled: bool,
+) -> Dict[str, Any]:
+    normalized = _normalize_role_feedback_memory(role_feedback)
+    current = dict(normalized.get(role_name) or {})
+    history_row = {
+        "round_index": round_index,
+        "macro_index": macro_index,
+        "summary": update.get("summary") or "",
+        "rules": copy.deepcopy(update.get("rules") or []),
+        "n_feedback_rows": n_feedback_rows,
+        "n_candidate_group_feedback_rows": n_feedback_rows,
+        "trl_enabled": bool(trl_enabled),
+        "feedback_scope": feedback_scope,
     }
+    normalized[role_name] = {
+        **current,
+        "rules": update.get("rules") or [],
+        "last_update_summary": update.get("summary") or "",
+        "updated_at": update.get("updated_at"),
+        "history": [*list(current.get("history") or []), history_row][-12:],
+    }
+    return _normalize_role_feedback_memory(normalized)
 
 
 def _token_breakdown_delta(start_index: int) -> Dict[str, Any]:
@@ -1133,6 +1192,205 @@ def _pending_skill_summary(store: ArtifactStore) -> Dict[str, Any]:
     }
 
 
+def _source_role_for_candidate_group(row: Dict[str, Any]) -> str:
+    raw = str(row.get("source_role") or row.get("group_source_role") or row.get("candidate_group_source_role") or "").strip().lower()
+    if raw in {"extractor", "refactorer", "refiner_revision"}:
+        return raw
+    group_id = str(row.get("candidate_group_id") or "")
+    if group_id.startswith("refactor:"):
+        return "refactorer"
+    if group_id.startswith("refiner:"):
+        return "refiner_revision"
+    return "extractor"
+
+
+def _sample_replay_rows_for_role(
+    replay_buffer: Dict[str, List[Dict[str, Any]]],
+    role_name: str,
+    *,
+    max_rows: int = 8,
+) -> List[Dict[str, Any]]:
+    source_role = str(role_name or "").strip().lower()
+    if source_role not in {"extractor", "refactorer", "refiner_revision"}:
+        return []
+    return copy.deepcopy(list(replay_buffer.get(source_role) or [])[-max_rows:])
+
+
+def _group_refiner_source_task_id(row: Dict[str, Any], *, window_details: Sequence[Dict[str, Any]] | None = None) -> str:
+    source_task_ids = [
+        str(item).strip()
+        for item in (row.get("source_task_ids") or [])
+        if str(item).strip()
+    ]
+    if source_task_ids:
+        return source_task_ids[0]
+    created_index = row.get("created_task_index")
+    if created_index is not None and str(created_index).lstrip("-").isdigit():
+        idx = int(created_index)
+        if window_details and 0 <= idx < len(window_details):
+            return str((window_details[idx] or {}).get("task_id") or "").strip()
+    return ""
+
+
+def _append_candidate_group_replay_rows(
+    replay_buffer: Dict[str, List[Dict[str, Any]]],
+    rows: Sequence[Dict[str, Any]],
+    *,
+    max_per_source: int = 64,
+) -> None:
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        source_role = _source_role_for_candidate_group(row)
+        payload = copy.deepcopy(row)
+        payload["source_role"] = source_role
+        replay_buffer.setdefault(source_role, []).append(payload)
+        replay_buffer[source_role] = replay_buffer[source_role][-max_per_source:]
+
+
+def _member_by_skill_from_feedback_rows(group_feedback_rows: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for group in group_feedback_rows:
+        if not isinstance(group, dict):
+            continue
+        for member in group.get("members") or []:
+            if not isinstance(member, dict):
+                continue
+            name = str(member.get("skill_name") or "").strip()
+            if name:
+                out[name] = dict(member)
+    return out
+
+
+def _apply_group_refiner_actions(
+    *,
+    store: ArtifactStore,
+    group_feedback_rows: Sequence[Dict[str, Any]],
+    actions: Sequence[Dict[str, Any]],
+    source: str,
+) -> List[Dict[str, Any]]:
+    member_by_skill = _member_by_skill_from_feedback_rows(group_feedback_rows)
+    valid_actions = {"keep", "refine", "archive", "backup"}
+    applied: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in actions:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("skill_name") or "").strip()
+        action = str(item.get("action") or "").strip().lower()
+        if not name or name in seen or action not in valid_actions:
+            continue
+        seen.add(name)
+        member = member_by_skill.get(name, {})
+        helpful = int(member.get("helpful_count") or item.get("helpful_count") or 0)
+        harmful = int(member.get("harmful_count") or item.get("harmful_count") or 0)
+        exposure_count = int(member.get("exposure_count") or item.get("exposure_count") or 0)
+        strict_harmful = int(member.get("strict_harmful_count") or item.get("strict_harmful_count") or 0)
+        bundle_failures = int(member.get("bundle_failures") or item.get("bundle_failures") or 0)
+        if action == "archive" and (helpful > 0 or harmful <= 0 or exposure_count <= 0):
+            action = "backup"
+        if action == "refine" and exposure_count <= 0:
+            action = "backup"
+        reason = str(item.get("reason") or "").strip()
+        if not reason:
+            reason = f"{source}_group_refiner_{action}"
+        artifact = store.get(name)
+        if artifact is not None:
+            artifact.metadata["group_refiner_last_action"] = action
+            artifact.metadata["group_refiner_last_reason"] = reason
+            artifact.metadata["group_refiner_action_source"] = source
+            if item.get("patch_intent"):
+                artifact.metadata["group_refiner_patch_intent"] = str(item.get("patch_intent") or "")
+            if action == "archive":
+                artifact.status = "archived"
+                artifact.metadata["archived_reason"] = "group_refiner_explicit_harmful_evidence"
+            elif action == "backup":
+                artifact.metadata["competition_backup_state"] = artifact.metadata.get("competition_backup_state") or "group_refiner_backup"
+            elif action == "refine":
+                artifact.metadata["group_refiner_refine_required"] = True
+        applied.append(
+            {
+                "candidate_group_id": str(item.get("candidate_group_id") or "").strip(),
+                "source_task_id": str(item.get("source_task_id") or "").strip(),
+                "skill_name": name,
+                "action": action,
+                "reason": reason,
+                "source": source,
+                "source_role": str(item.get("source_role") or "").strip() or _source_role_for_candidate_group(item),
+                "exposure_count": exposure_count,
+                "helpful_count": helpful,
+                "harmful_count": harmful,
+                "strict_harmful_count": strict_harmful,
+                "bundle_failures": bundle_failures,
+                **({"patch_intent": str(item.get("patch_intent") or "")} if item.get("patch_intent") else {}),
+            }
+        )
+    return applied
+
+
+def _group_refiner_actions_from_feedback_rows(
+    *,
+    store: ArtifactStore,
+    group_feedback_rows: Sequence[Dict[str, Any]],
+    window_details: Sequence[Dict[str, Any]] | None = None,
+) -> List[Dict[str, Any]]:
+    actions: List[Dict[str, Any]] = []
+    for group in group_feedback_rows:
+        if not isinstance(group, dict):
+            continue
+        group_id = str(group.get("candidate_group_id") or "").strip()
+        source_task_id = _group_refiner_source_task_id(group, window_details=window_details)
+        for member in (group.get("members") or []):
+            if not isinstance(member, dict):
+                continue
+            name = str(member.get("skill_name") or "").strip()
+            if not name:
+                continue
+            artifact = store.get(name)
+            exposure_count = int(member.get("exposure_count") or 0)
+            helpful = int(member.get("helpful_count") or 0)
+            harmful = int(member.get("harmful_count") or 0)
+            strict_harmful = int(member.get("strict_harmful_count") or 0)
+            bundle_failures = int(member.get("bundle_failures") or 0)
+            net_credit = int(member.get("net_credit") or (helpful - harmful))
+            if exposure_count <= 0:
+                action = "backup"
+                reason = "zero_exposure_candidate"
+            elif harmful > 0 and helpful <= 0 and (strict_harmful > 0 or net_credit < 0 or bundle_failures > 0):
+                action = "archive"
+                reason = "explicit_harmful_evidence"
+            elif helpful > 0 and harmful > 0:
+                action = "refine"
+                reason = "mixed_helpful_and_harmful_evidence"
+            elif helpful > 0:
+                action = "keep"
+                reason = "helpful_evidence"
+            else:
+                action = "backup"
+                reason = "neutral_or_low_signal_candidate"
+            actions.append(
+                {
+                    "candidate_group_id": group_id,
+                    "source_task_id": source_task_id,
+                    "skill_name": name,
+                    "action": action,
+                    "reason": reason,
+                    "source_role": _source_role_for_candidate_group(group),
+                    "exposure_count": exposure_count,
+                    "helpful_count": helpful,
+                    "harmful_count": harmful,
+                    "strict_harmful_count": strict_harmful,
+                    "bundle_failures": bundle_failures,
+                }
+            )
+    return _apply_group_refiner_actions(
+        store=store,
+        group_feedback_rows=group_feedback_rows,
+        actions=actions,
+        source="heuristic",
+    )
+
+
 def _build_extractor_feedback_rows(
     *,
     extraction_events: Sequence[Dict[str, Any]],
@@ -1268,12 +1526,15 @@ def _build_candidate_group_feedback_rows(
                 "feedback_type": "candidate_group",
                 "candidate_group_id": group_id,
                 "source_task_ids": [],
+                "source_task_indices": [],
                 "members": {},
             },
         )
         source_task_id = str(event.get("source_task_id") or "").strip()
         if source_task_id and source_task_id not in group["source_task_ids"]:
             group["source_task_ids"].append(source_task_id)
+        if event.get("task_index") is not None:
+            group["source_task_indices"].append(int(event.get("task_index") or 0))
         member = group["members"].setdefault(
             name,
             {
@@ -1289,10 +1550,16 @@ def _build_candidate_group_feedback_rows(
                 "harmful_count": 0,
                 "neutral_count": 0,
                 "uncertain_count": 0,
+                "strict_helpful_count": 0,
+                "strict_harmful_count": 0,
+                "official_helpful_count": 0,
+                "official_harmful_count": 0,
                 "bundle_failures": 0,
                 "bundle_passes": 0,
                 "task_ids": [],
-                "notes": [],
+                "exposure_records": [],
+                "credit_records": [],
+                "bundle_test_records": [],
             },
         )
         member_to_group[name] = group_id
@@ -1335,6 +1602,19 @@ def _build_candidate_group_feedback_rows(
                 present = True
             if present and task_id and task_id not in member["task_ids"]:
                 member["task_ids"].append(task_id)
+            if present:
+                member["exposure_records"].append(
+                    {
+                        "task_id": task_id,
+                        "retrieved": name in retrieved,
+                        "injected": name in injected,
+                        "used": name in used,
+                        "official_valid": metrics.get("official_valid"),
+                        "score": run.get("score"),
+                        "n_model_steps": metrics.get("n_model_steps"),
+                        "total_tokens": metrics.get("total_tokens"),
+                    }
+                )
     for event in credit_events:
         name = str(event.get("skill_name") or "").strip()
         group_id = member_to_group.get(name)
@@ -1348,11 +1628,38 @@ def _build_candidate_group_feedback_rows(
             member[f"{judgment}_count"] += 1
         else:
             member["uncertain_count"] += 1
-        reason = str(event.get("reason") or "").strip()
-        if reason:
-            note = f"{judgment}:{reason}"
-            if note not in member["notes"]:
-                member["notes"].append(note)
+        official_valid = event.get("official_valid")
+        strict_success = event.get("success")
+        if strict_success is None:
+            strict_success = event.get("strict_success")
+        if judgment == "helpful":
+            if official_valid is True:
+                member["official_helpful_count"] += 1
+            if strict_success is True:
+                member["strict_helpful_count"] += 1
+        elif judgment == "harmful":
+            if official_valid is False:
+                member["official_harmful_count"] += 1
+            if strict_success is False:
+                member["strict_harmful_count"] += 1
+        member["credit_records"].append(
+            {
+                "task_id": event.get("task_id"),
+                "task_index": event.get("task_index"),
+                "judgment": judgment,
+                "effect_type": event.get("effect_type"),
+                "confidence": event.get("confidence"),
+                "reason": event.get("reason"),
+                "retrieved": event.get("retrieved"),
+                "injected": event.get("injected"),
+                "used": event.get("used"),
+                "official_valid": event.get("official_valid"),
+                "strict_success": strict_success,
+                "score": event.get("score"),
+                "evidence_strength": event.get("evidence_strength"),
+                "attribution_scope": event.get("attribution_scope"),
+            }
+        )
     for result in maintenance_test_results or []:
         name = str(result.get("skill_name") or "").strip()
         group_id = member_to_group.get(name)
@@ -1367,6 +1674,7 @@ def _build_candidate_group_feedback_rows(
             member["bundle_passes"] += 1
         elif passed is False:
             member["bundle_failures"] += 1
+        member["bundle_test_records"].append(copy.deepcopy(result))
     rows: List[Dict[str, Any]] = []
     for group in groups.values():
         members = []
@@ -1380,23 +1688,53 @@ def _build_candidate_group_feedback_rows(
                 - int(member["bundle_failures"]) * 2
             )
             row = {**member, "winner_score": score}
+            exposure_count = max(
+                int(row.get("retrieved_count") or 0),
+                int(row.get("injected_count") or 0),
+                len(row.get("exposure_records") or []),
+            )
+            row["exposure_count"] = exposure_count
+            if exposure_count > 0:
+                row["helpful_per_exposure"] = round(float(row.get("helpful_count") or 0) / exposure_count, 6)
+                row["harmful_per_exposure"] = round(float(row.get("harmful_count") or 0) / exposure_count, 6)
+                row["strict_helpful_per_exposure"] = round(float(row.get("strict_helpful_count") or 0) / exposure_count, 6)
+                row["strict_harmful_per_exposure"] = round(float(row.get("strict_harmful_count") or 0) / exposure_count, 6)
+                row["official_helpful_per_exposure"] = round(float(row.get("official_helpful_count") or 0) / exposure_count, 6)
+                row["official_harmful_per_exposure"] = round(float(row.get("official_harmful_count") or 0) / exposure_count, 6)
+            else:
+                row["helpful_per_exposure"] = None
+                row["harmful_per_exposure"] = None
+                row["strict_helpful_per_exposure"] = None
+                row["strict_harmful_per_exposure"] = None
+                row["official_helpful_per_exposure"] = None
+                row["official_harmful_per_exposure"] = None
+            row["net_credit"] = int(row.get("helpful_count") or 0) - int(row.get("harmful_count") or 0)
+            row["strict_net_credit"] = int(row.get("strict_helpful_count") or 0) - int(row.get("strict_harmful_count") or 0)
             row["task_ids"] = sorted(str(item) for item in row.get("task_ids") or [] if str(item))
-            row["notes"] = list(row.get("notes") or [])[:4]
+            row["exposure_records"] = list(row.get("exposure_records") or [])
+            row["credit_records"] = list(row.get("credit_records") or [])
+            row["bundle_test_records"] = list(row.get("bundle_test_records") or [])
             members.append(row)
         members.sort(key=lambda item: (-int(item.get("winner_score") or 0), str(item.get("skill_name") or "")))
         winner = members[0]["skill_name"] if members else ""
+        source_indices = [
+            int(item)
+            for item in group.get("source_task_indices") or []
+            if str(item).lstrip("-").isdigit()
+        ]
+        created_task_index = min(source_indices) if source_indices else None
         rows.append(
             {
                 "feedback_type": "candidate_group",
                 "candidate_group_id": group["candidate_group_id"],
                 "source_task_ids": sorted(str(item) for item in group.get("source_task_ids") or [] if str(item)),
+                "created_task_index": created_task_index,
                 "winner": winner,
                 "losers": [item["skill_name"] for item in members[1:]],
                 "members": members,
-                "comparison_summary": (
-                    "winner selected by higher helpful/use/bundle signal minus harmful/failure signal"
-                    if winner
-                    else "no winner"
+                "objective_record_schema": (
+                    "members contain raw exposure_records, credit_records, and bundle_test_records; "
+                    "winner_score is only a deterministic sorting field, not a standalone TRL conclusion"
                 ),
             }
         )
@@ -1422,13 +1760,29 @@ def _candidate_group_member_names(row: Dict[str, Any]) -> List[str]:
     )
 
 
+def _candidate_group_created_task_index(row: Dict[str, Any]) -> int | None:
+    if row.get("created_task_index") is not None:
+        try:
+            return int(row.get("created_task_index"))
+        except Exception:
+            pass
+    group_id = str(row.get("candidate_group_id") or "")
+    match = re.search(r":t(\d+):", group_id)
+    if match:
+        return int(match.group(1))
+    return None
+
+
 def _select_macro_candidate_group_feedback_rows(
     *,
     raw_rows: Sequence[Dict[str, Any]],
     state: Dict[str, Dict[str, Any]],
     macro_index: int,
+    current_task_index: int,
     min_usage: int,
+    min_age_tasks: int,
     low_usage_patience: int,
+    allow_low_usage_feedback: bool = False,
 ) -> List[Dict[str, Any]]:
     selected: List[Dict[str, Any]] = []
     seen_groups = {str(row.get("candidate_group_id") or "").strip() for row in raw_rows if isinstance(row, dict)}
@@ -1439,6 +1793,11 @@ def _select_macro_candidate_group_feedback_rows(
         if not group_id:
             continue
         usage = _candidate_group_total_usage(row)
+        created_task_index = _candidate_group_created_task_index(row)
+        if created_task_index is None:
+            created_task_index = max(0, int(current_task_index) - max(0, int(min_age_tasks or 0)))
+        age_tasks = max(0, int(current_task_index) - int(created_task_index))
+        member_names = _candidate_group_member_names(row)
         group_state = state.setdefault(
             group_id,
             {
@@ -1459,7 +1818,18 @@ def _select_macro_candidate_group_feedback_rows(
         group_state["last_seen_macro_index"] = macro_index
         group_state["last_usage_count"] = usage
         group_state["min_usage_threshold"] = max(1, int(min_usage or 1))
-        group_state["members"] = _candidate_group_member_names(row)
+        group_state["created_task_index"] = created_task_index
+        group_state["last_current_task_index"] = int(current_task_index)
+        group_state["age_tasks"] = age_tasks
+        group_state["min_age_tasks"] = max(0, int(min_age_tasks or 0))
+        group_state["members"] = member_names
+        group_state["n_members"] = len(member_names)
+        if len(member_names) < 2:
+            group_state["last_skip_reason"] = "not_candidate_group_comparison"
+            continue
+        if age_tasks < max(0, int(min_age_tasks or 0)):
+            group_state["last_skip_reason"] = "candidate_group_not_mature"
+            continue
         if usage >= max(1, int(min_usage or 1)):
             group_state["consecutive_low_usage_macros"] = 0
             group_state["n_usage_feedback"] = int(group_state.get("n_usage_feedback") or 0) + 1
@@ -1469,12 +1839,16 @@ def _select_macro_candidate_group_feedback_rows(
                     **copy.deepcopy(row),
                     "feedback_reason": "sufficient_macro_usage",
                     "macro_usage_count": usage,
+                    "created_task_index": created_task_index,
+                    "age_tasks": age_tasks,
+                    "min_age_tasks": max(0, int(min_age_tasks or 0)),
                     "macro_index": macro_index,
                 }
             )
             continue
         group_state["consecutive_low_usage_macros"] = int(group_state.get("consecutive_low_usage_macros") or 0) + 1
-        if int(group_state["consecutive_low_usage_macros"]) >= max(1, int(low_usage_patience or 1)):
+        group_state["last_skip_reason"] = "below_usage_threshold"
+        if allow_low_usage_feedback and int(group_state["consecutive_low_usage_macros"]) >= max(1, int(low_usage_patience or 1)):
             if group_state.get("last_low_usage_feedback_macro_index") != macro_index:
                 group_state["n_low_usage_feedback"] = int(group_state.get("n_low_usage_feedback") or 0) + 1
                 group_state["last_low_usage_feedback_macro_index"] = macro_index
@@ -1487,11 +1861,14 @@ def _select_macro_candidate_group_feedback_rows(
                         "feedback_reason": "low_reuse_below_usage_threshold",
                         "macro_usage_count": usage,
                         "min_usage_threshold": max(1, int(min_usage or 1)),
+                        "created_task_index": created_task_index,
+                        "age_tasks": age_tasks,
+                        "min_age_tasks": max(0, int(min_age_tasks or 0)),
                         "consecutive_low_usage_macros": int(group_state["consecutive_low_usage_macros"]),
                         "macro_index": macro_index,
-                        "comparison_summary": (
-                            "This candidate group stayed below the required macro usage threshold for several "
-                            "macro windows; treat this as weak low-reusability evidence for the extractor."
+                        "objective_record_schema": (
+                            "low-usage feedback is emitted only after maturity/patience gates; "
+                            "use objective member exposure_records and credit_records, not this text, for judgment"
                         ),
                     }
                 )
@@ -1507,16 +1884,39 @@ def _apply_candidate_group_competition_decisions(
     group_feedback_rows: Sequence[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     decisions: List[Dict[str, Any]] = []
+    min_promote_score = _env_int("BFCL_CANDIDATE_PROMOTION_MIN_SCORE", 4)
+    min_promote_helpful = _env_int("BFCL_CANDIDATE_PROMOTION_MIN_HELPFUL", 1)
+    require_positive_margin = _env_bool("BFCL_CANDIDATE_PROMOTION_REQUIRE_POSITIVE_MARGIN", True)
+    soft_group_promotion = _env_bool("BFCL_CANDIDATE_SOFT_GROUP_PROMOTION", True)
+    runner_up_limit = max(0, _env_int("BFCL_CANDIDATE_GROUP_RUNNER_UP_LIMIT", 1))
     for group in group_feedback_rows:
         winner = str(group.get("winner") or "").strip()
         members = [dict(item or {}) for item in (group.get("members") or []) if isinstance(item, dict)]
         if not winner or len(members) < 2:
             continue
-        winner_score = max(
-            int(item.get("winner_score") or 0)
+        winner_rows = [
+            item
             for item in members
             if str(item.get("skill_name") or "").strip() == winner
+        ]
+        if not winner_rows:
+            continue
+        winner_row = winner_rows[0]
+        winner_score = int(winner_row.get("winner_score") or 0)
+        winner_helpful = int(winner_row.get("helpful_count") or 0)
+        winner_harmful = int(winner_row.get("harmful_count") or 0)
+        winner_strict_harmful = int(winner_row.get("strict_harmful_count") or 0)
+        promote_winner = (
+            winner_score >= min_promote_score
+            and winner_helpful >= min_promote_helpful
+            and (not require_positive_margin or winner_helpful > winner_harmful)
+            and winner_strict_harmful == 0
         )
+        runner_up_names = [
+            str(member.get("skill_name") or "").strip()
+            for member in members
+            if str(member.get("skill_name") or "").strip() and str(member.get("skill_name") or "").strip() != winner
+        ][:runner_up_limit]
         for member in members:
             name = str(member.get("skill_name") or "").strip()
             artifact = store.get(name)
@@ -1525,20 +1925,88 @@ def _apply_candidate_group_competition_decisions(
             score = int(member.get("winner_score") or 0)
             if name == winner:
                 artifact.metadata["competition_status"] = "winner"
-                artifact.metadata["promotion_state"] = "competition_winner"
-                artifact.metadata["is_promoted"] = True
-                if artifact.status == "trial":
+                artifact.metadata["candidate_promotion_score"] = score
+                artifact.metadata["candidate_promotion_min_score"] = min_promote_score
+                artifact.metadata["candidate_promotion_min_helpful"] = min_promote_helpful
+                artifact.metadata["candidate_promotion_require_positive_margin"] = require_positive_margin
+                artifact.metadata["candidate_promotion_helpful_count"] = winner_helpful
+                artifact.metadata["candidate_promotion_harmful_count"] = winner_harmful
+                artifact.metadata["candidate_promotion_strict_harmful_count"] = winner_strict_harmful
+                artifact.metadata["candidate_group_runner_ups"] = list(runner_up_names)
+                if promote_winner:
+                    artifact.metadata["promotion_state"] = "competition_winner"
+                    artifact.metadata["is_promoted"] = True
+                    if artifact.status == "trial":
+                        artifact.status = "active"
+                    decisions.append(
+                        {
+                            "skill_name": name,
+                            "candidate_group_id": group.get("candidate_group_id"),
+                            "action": "winner_promoted",
+                            "winner_score": score,
+                            "helpful_count": winner_helpful,
+                            "harmful_count": winner_harmful,
+                            "strict_harmful_count": winner_strict_harmful,
+                            "min_promote_score": min_promote_score,
+                        }
+                    )
+                    continue
+                artifact.metadata["promotion_state"] = "winner_below_promotion_threshold"
+                artifact.metadata["is_promoted"] = False
+                if artifact.status == "active":
                     artifact.status = "active"
-                decisions.append({"skill_name": name, "candidate_group_id": group.get("candidate_group_id"), "action": "winner", "winner_score": score})
+                decisions.append(
+                    {
+                        "skill_name": name,
+                        "candidate_group_id": group.get("candidate_group_id"),
+                        "action": "winner_not_promoted",
+                        "winner_score": score,
+                        "helpful_count": winner_helpful,
+                        "harmful_count": winner_harmful,
+                        "strict_harmful_count": winner_strict_harmful,
+                        "min_promote_score": min_promote_score,
+                        "min_promote_helpful": min_promote_helpful,
+                        "require_positive_margin": require_positive_margin,
+                    }
+                )
                 continue
             artifact.metadata["competition_status"] = "loser"
             artifact.metadata["competition_lost_to"] = winner
-            action = "marked_loser"
-            if winner_score - score >= 3 and int(member.get("harmful_count") or 0) >= int(member.get("helpful_count") or 0):
+            artifact.metadata["promotion_state"] = "competition_loser"
+            artifact.metadata["candidate_group_soft_promotion"] = soft_group_promotion
+            artifact.metadata["is_promoted"] = False
+            action = "marked_loser_backup"
+            member_harmful = int(member.get("harmful_count") or 0)
+            member_helpful = int(member.get("helpful_count") or 0)
+            member_strict_harmful = int(member.get("strict_harmful_count") or 0)
+            member_net = int(member.get("net_credit") or (member_helpful - member_harmful))
+            if name in runner_up_names:
+                artifact.metadata["competition_backup_state"] = "runner_up"
+                artifact.metadata["retrieval_group_backup_rank"] = runner_up_names.index(name) + 1
+            else:
+                artifact.metadata["competition_backup_state"] = "suppressed_alternative"
+            if (
+                winner_score - score >= 3
+                and member_harmful > 0
+                and member_harmful >= member_helpful
+                and (member_strict_harmful > 0 or member_net < 0)
+            ):
                 artifact.status = "archived"
                 artifact.metadata["archived_reason"] = "candidate_group_loser"
                 action = "archived_loser"
-            decisions.append({"skill_name": name, "candidate_group_id": group.get("candidate_group_id"), "action": action, "winner": winner, "winner_score": score})
+            decisions.append(
+                {
+                    "skill_name": name,
+                    "candidate_group_id": group.get("candidate_group_id"),
+                    "action": action,
+                    "winner": winner,
+                    "winner_score": score,
+                    "helpful_count": member_helpful,
+                    "harmful_count": member_harmful,
+                    "strict_harmful_count": member_strict_harmful,
+                    "net_credit": member_net,
+                }
+            )
     return decisions
 
 
@@ -1581,6 +2049,18 @@ def _current_round_segment_rows_path(checkpoint_path: Path | None) -> Path | Non
 
 def _current_round_overlap_state_path(checkpoint_path: Path | None) -> Path | None:
     return _phase_partial_path(checkpoint_path, "current_round_overlap_state")
+
+
+def _completed_round_details_path(checkpoint_path: Path | None, round_index: int) -> Path | None:
+    if checkpoint_path is None:
+        return None
+    return checkpoint_path.with_name(f"{checkpoint_path.stem}_completed_round_{round_index:02d}_details{checkpoint_path.suffix or '.json'}")
+
+
+def _completed_round_state_projection_path(checkpoint_path: Path | None, round_index: int) -> Path | None:
+    if checkpoint_path is None:
+        return None
+    return checkpoint_path.with_name(f"{checkpoint_path.stem}_completed_round_{round_index:02d}_state{checkpoint_path.suffix or '.json'}")
 
 
 def _load_saved_details(path: Path) -> List[Dict[str, Any]]:
@@ -1797,6 +2277,11 @@ def _current_round_state_projection(
         "seen_refactor_cliques": copy.deepcopy(current_round_state.get("seen_refactor_cliques") or []),
         "online_refactor_budget_remaining": current_round_state.get("online_refactor_budget_remaining"),
         "role_feedback": _role_feedback_projection(current_round_state.get("role_feedback")),
+        "replay_buffer_summary": {
+            role: len(rows)
+            for role, rows in (current_round_state.get("replay_buffer") or {}).items()
+            if isinstance(rows, list)
+        },
         "n_extraction_events": len(current_round_state.get("extraction_events") or []),
         "n_credit_events": len(current_round_state.get("credit_events") or []),
         "n_train_details": len(train_details),
@@ -1843,6 +2328,9 @@ def _checkpoint_payload(
     role_feedback: Dict[str, Any] | None,
     output_detail_level: str,
     checkpoint_path: Path | None,
+    replay_buffer: Dict[str, List[Dict[str, Any]]] | None = None,
+    completed_round_states: Sequence[Dict[str, Any]] | None = None,
+    manifest: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     return {
         "checkpoint_version": 1,
@@ -1857,6 +2345,10 @@ def _checkpoint_payload(
         },
         "segment_index_rows": [row.as_dict() for row in segment_index.rows],
         "role_feedback": _role_feedback_projection(role_feedback),
+        "replay_buffer": copy.deepcopy(replay_buffer or {}),
+        "completed_round_states": list(completed_round_states or []),
+        "train_task_ids": list((manifest or {}).get("train_task_ids") or []),
+        "test_task_ids": list((manifest or {}).get("test_task_ids") or []),
         "current_round_state": _current_round_state_projection(
             current_round_state,
             checkpoint_path=checkpoint_path,
@@ -1988,6 +2480,50 @@ def _write_current_round_sidecars(
         _write_json(overlap_state_path, overlap_state.as_dict())
 
 
+def _write_completed_round_sidecars(
+    *,
+    checkpoint_path: Path | None,
+    round_index: int,
+    current_round_state: Dict[str, Any],
+) -> Dict[str, Any]:
+    details_path = _completed_round_details_path(checkpoint_path, round_index)
+    state_path = _completed_round_state_projection_path(checkpoint_path, round_index)
+    if details_path is not None:
+        _write_json(
+            details_path,
+            {
+                "details": list(current_round_state.get("train_details") or []),
+                "window_train_details": list(current_round_state.get("window_train_details") or []),
+                "window_segments": list(current_round_state.get("window_segments") or []),
+                "micro_maintenance_reports": list(current_round_state.get("micro_maintenance_reports") or []),
+                "maintenance_windows": list(current_round_state.get("maintenance_windows") or []),
+                "extraction_events": list(current_round_state.get("extraction_events") or []),
+                "credit_events": list(current_round_state.get("credit_events") or []),
+                "prefetched_train_details": list(current_round_state.get("prefetched_train_details") or []),
+                "candidate_group_feedback_state": copy.deepcopy(current_round_state.get("candidate_group_feedback_state") or {}),
+            },
+        )
+    if state_path is not None:
+        state_projection = {
+            "round_index": int(current_round_state.get("round_index") or round_index),
+            "next_task_index": int(current_round_state.get("next_task_index") or len(current_round_state.get("train_details") or [])),
+            "seen_refactor_cliques": copy.deepcopy(current_round_state.get("seen_refactor_cliques") or []),
+            "online_refactor_budget_remaining": current_round_state.get("online_refactor_budget_remaining"),
+            "role_feedback": _role_feedback_projection(current_round_state.get("role_feedback")),
+            "online_refactor_attempts": list(current_round_state.get("online_refactor_attempts") or []),
+            "overlap_state": current_round_state.get("overlap_state").as_dict()
+            if isinstance(current_round_state.get("overlap_state"), OverlapGraphState)
+            else {},
+        }
+        _write_json(state_path, state_projection)
+    return {
+        "round_index": round_index,
+        "train_details_path": str(details_path) if details_path is not None else "",
+        "round_state_path": str(state_path) if state_path is not None else "",
+        "n_train_details": len(current_round_state.get("train_details") or []),
+    }
+
+
 def _restore_current_round_state(
     checkpoint_state: Dict[str, Any] | None,
 ) -> Dict[str, Any] | None:
@@ -2085,6 +2621,85 @@ def _restore_current_round_state(
         dict(item or {}) for item in (restored.get("maintenance_windows") or []) if isinstance(item, dict)
     ]
     return restored
+
+
+def _task_ids_from_details(details: Sequence[Dict[str, Any]]) -> List[str]:
+    return [str(item.get("task_id") or "") for item in details if isinstance(item, dict) and str(item.get("task_id") or "")]
+
+
+def _restore_completed_prefix_round_state(
+    *,
+    checkpoint_payload: Dict[str, Any],
+    manifest: Dict[str, Any],
+    rounds: int,
+) -> Dict[str, Any] | None:
+    if not _env_bool("BFCL_ALLOW_PREFIX_CHECKPOINT_EXTEND", False):
+        return None
+    if int(checkpoint_payload.get("next_round_index") or 0) < rounds:
+        return None
+    if checkpoint_payload.get("current_round_state"):
+        return None
+    round_reports = [dict(item or {}) for item in (checkpoint_payload.get("round_reports") or []) if isinstance(item, dict)]
+    if not round_reports:
+        return None
+    completed_round = round_reports[-1]
+    completed_state_rows = [
+        dict(item or {})
+        for item in (checkpoint_payload.get("completed_round_states") or [])
+        if isinstance(item, dict)
+    ]
+    completed_state_meta = completed_state_rows[-1] if completed_state_rows else {}
+    details_path = str(completed_state_meta.get("train_details_path") or "").strip()
+    details_payload: Dict[str, Any] = {}
+    if details_path:
+        path = Path(details_path)
+        if path.exists():
+            details_payload = json.loads(path.read_text())
+            train_details = _load_saved_details(path)
+        else:
+            train_details = []
+    else:
+        train_details = [
+            dict(item or {})
+            for item in (completed_round.get("train_details") or [])
+            if isinstance(item, dict)
+        ]
+    done_ids = _task_ids_from_details(train_details)
+    manifest_train_ids = [str(item) for item in (manifest.get("train_task_ids") or [])]
+    if not done_ids or manifest_train_ids[: len(done_ids)] != done_ids:
+        return None
+    if len(done_ids) >= len(manifest_train_ids):
+        return None
+    state_projection: Dict[str, Any] = {}
+    state_path = str(completed_state_meta.get("round_state_path") or "").strip()
+    if state_path and Path(state_path).exists():
+        state_projection = json.loads(Path(state_path).read_text())
+    overlap_state_payload = state_projection.get("overlap_state") or {}
+    overlap_state = OverlapGraphState.from_dict(overlap_state_payload) if overlap_state_payload else OverlapGraphState()
+    return {
+        "round_index": int(completed_round.get("round_index") or 0),
+        "next_task_index": len(train_details),
+        "train_details": train_details,
+        "window_train_details": list(details_payload.get("window_train_details") or []),
+        "window_segments": list(details_payload.get("window_segments") or []),
+        "micro_maintenance_reports": list(details_payload.get("micro_maintenance_reports") or completed_round.get("micro_maintenance_reports") or []),
+        "maintenance_windows": list(details_payload.get("maintenance_windows") or completed_round.get("maintenance_windows") or []),
+        "online_refactor_attempts": list(state_projection.get("online_refactor_attempts") or completed_round.get("online_refactor_attempts") or []),
+        "seen_refactor_cliques": list(state_projection.get("seen_refactor_cliques") or []),
+        "online_refactor_budget_remaining": state_projection.get("online_refactor_budget_remaining"),
+        "role_feedback": _normalize_role_feedback_memory(state_projection.get("role_feedback") or completed_round.get("role_feedback")),
+        "extraction_events": list(details_payload.get("extraction_events") or completed_round.get("extraction_events") or []),
+        "credit_events": list(details_payload.get("credit_events") or completed_round.get("credit_events") or []),
+        "candidate_group_feedback_state": copy.deepcopy(details_payload.get("candidate_group_feedback_state") or {}),
+        "prefetched_train_details": [],
+        "overlap_state": overlap_state,
+        "prefix_extend_from_completed_checkpoint": {
+            "completed_task_count": len(done_ids),
+            "target_task_count": len(manifest_train_ids),
+            "details_path": details_path,
+            "state_path": state_path,
+        },
+    }
 
 
 def rebuild_checkpoint_from_sidecars(
@@ -2564,10 +3179,12 @@ async def _run_round_refine_and_refactor(
     phase: str = "macro",
     artifact_names: List[str] | None = None,
     credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    refiner_rules: Sequence[Dict[str, Any]] | None = None,
     run_bundle_builder: bool = True,
     run_bundle_tests: bool = True,
     run_refine: bool = True,
     run_overlap_refactor: bool = True,
+    refactorer_rules: Sequence[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     token_start = maintenance_token_event_count()
     targets = _unique_ordered(artifact_names or select_bfcl_maintenance_targets(store, train_details=train_details))
@@ -2624,6 +3241,7 @@ async def _run_round_refine_and_refactor(
             model_name=model_name,
             artifact_names=targets,
             credit_context_by_skill=credit_context_by_skill,
+            refiner_rules=refiner_rules,
             audit_context={"phase": f"{phase}_refine", "round_index": round_index, "experiment": tag},
         )
     overlap_refactor: Dict[str, Any] = {"attempts": [], "refactor_segment_coverage": []}
@@ -2651,6 +3269,7 @@ async def _run_round_refine_and_refactor(
             explicit_skill_tool=explicit_skill_tool,
             max_case_seconds=max_task_seconds or 180.0,
             max_repair_rounds=int(os.environ.get("BFCL_REFACTOR_MAX_REPAIR_ROUNDS", "1") or "1"),
+            refactorer_rules=refactorer_rules,
             audit_context={"phase": f"{phase}_refactor_overlap", "round_index": round_index, "experiment": tag},
         )
     static_dependency_validation = validate_skill_static_dependencies(store, targets)
@@ -2692,6 +3311,7 @@ async def _run_bundle_test_and_refine_targets(
     phase: str,
     credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
     dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    refiner_rules: Sequence[Dict[str, Any]] | None = None,
     lock_manager: SkillMaintenanceLockManager | None = None,
     run_refine: bool = True,
     max_repair_rounds: int = 1,
@@ -2754,6 +3374,7 @@ async def _run_bundle_test_and_refine_targets(
             artifact_names=failed_targets,
             credit_context_by_skill=credit_context_by_skill,
             dependency_context_by_skill=dependency_context_by_skill,
+            refiner_rules=refiner_rules,
             audit_context={
                 "phase": f"{phase}_refine",
                 "round_index": round_index,
@@ -2905,6 +3526,7 @@ async def _run_credit_pre_refine_targets(
     task_index: int,
     tag: str,
     dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    refiner_rules: Sequence[Dict[str, Any]] | None = None,
 ) -> List[Dict[str, Any]]:
     pre_refine_targets = _credit_pre_refine_target_names(task_credit_events, target_names)
     if not pre_refine_targets:
@@ -2955,6 +3577,7 @@ async def _run_credit_pre_refine_targets(
         artifact_names=pre_refine_targets,
         credit_context_by_skill=credit_context_by_skill,
         dependency_context_by_skill=dependency_context_by_skill,
+        refiner_rules=refiner_rules,
         audit_context={
             "phase": "micro_credit_pre_refine",
             "round_index": round_index,
@@ -2986,6 +3609,7 @@ async def _run_window_overlap_refactor(
     round_index: int,
     tag: str,
     phase: str,
+    refactorer_rules: Sequence[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     return await run_bfcl_overlap_refactor_llm(
         store,
@@ -3010,6 +3634,7 @@ async def _run_window_overlap_refactor(
         explicit_skill_tool=explicit_skill_tool,
         max_case_seconds=max_task_seconds or 180.0,
         max_repair_rounds=int(os.environ.get("BFCL_REFACTOR_MAX_REPAIR_ROUNDS", "1") or "1"),
+        refactorer_rules=refactorer_rules,
         audit_context={"phase": f"{phase}_refactor_overlap", "round_index": round_index, "experiment": tag},
     )
 
@@ -3037,6 +3662,7 @@ async def _run_micro_maintenance(
     tag: str,
     credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
     dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    refiner_rules: Sequence[Dict[str, Any]] | None = None,
     lock_manager: SkillMaintenanceLockManager | None = None,
 ) -> Dict[str, Any]:
     token_start = maintenance_token_event_count()
@@ -3079,6 +3705,7 @@ async def _run_micro_maintenance(
         task_index=task_index,
         tag=tag,
         dependency_context_by_skill=dependency_context_by_skill,
+        refiner_rules=refiner_rules,
     )
     tested = await _run_bundle_test_and_refine_targets(
         store=store,
@@ -3099,6 +3726,7 @@ async def _run_micro_maintenance(
         phase="micro",
         credit_context_by_skill=credit_context_by_skill,
         dependency_context_by_skill=dependency_context_by_skill,
+        refiner_rules=refiner_rules,
         lock_manager=lock_manager,
         run_refine=True,
         max_repair_rounds=max_repair_rounds,
@@ -3107,6 +3735,142 @@ async def _run_micro_maintenance(
     report["pre_refine_decisions"] = copy.deepcopy(pre_refine_decisions)
     report["refine_decisions"] = [*pre_refine_decisions, *list(report.get("refine_decisions") or [])]
     report["static_dependency_validation"] = validate_skill_static_dependencies(store, targets)
+    report["token_breakdown"] = _token_breakdown_delta(token_start)
+    return report
+
+
+async def _run_group_maintenance(
+    *,
+    store: ArtifactStore,
+    group_feedback_rows: Sequence[Dict[str, Any]],
+    window_details: Sequence[Dict[str, Any]],
+    tools: List[Dict[str, Any]],
+    llm_config: str,
+    model_name: str | None,
+    execution_backend: str,
+    prompt_style: str,
+    tool_api_style: str,
+    max_steps_per_turn: int,
+    max_task_seconds: float | None,
+    temperature: float | None,
+    synthetic_continue: bool,
+    explicit_skill_tool: bool,
+    round_index: int,
+    tag: str,
+    credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    refiner_rules: Sequence[Dict[str, Any]] | None = None,
+    lock_manager: SkillMaintenanceLockManager | None = None,
+    group_refiner_actions: Sequence[Dict[str, Any]] | None = None,
+    group_refiner_action_payload: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    token_start = maintenance_token_event_count()
+    target_names = _unique_ordered(
+        member.get("skill_name", "")
+        for row in group_feedback_rows
+        for member in (row.get("members") or [])
+        if isinstance(member, dict)
+    )
+    report: Dict[str, Any] = {
+        "phase": "group",
+        "task_id": ",".join(str(row.get("candidate_group_id") or "") for row in group_feedback_rows if isinstance(row, dict)),
+        "task_index": None,
+        "maintenance_targets": target_names,
+        "relevant_skill_names": list(target_names),
+        "maintenance_test_results": [],
+        "refine_decisions": [],
+        "static_dependency_validation": [],
+        "group_refiner_actions": [],
+        "credit_bundle_cases": [],
+        "credit_negative_bundle_cases": [],
+        "run_overlap_refactor": False,
+        "run_extractor_trl": False,
+        "run_pending_revocation": False,
+        "run_full_store_bundle_rebuild": False,
+        "replay_buffer_summary": {},
+    }
+    if not target_names:
+        report["reason"] = "no candidate-group targets"
+        report["token_breakdown"] = _token_breakdown_delta(token_start)
+        return report
+
+    if group_refiner_actions is None:
+        group_refiner_actions = _group_refiner_actions_from_feedback_rows(
+            store=store,
+            group_feedback_rows=group_feedback_rows,
+            window_details=window_details,
+        )
+    else:
+        group_refiner_actions = list(group_refiner_actions)
+    report["group_refiner_actions"] = copy.deepcopy(group_refiner_actions)
+    if group_refiner_action_payload:
+        report["group_refiner_action_payload"] = copy.deepcopy(group_refiner_action_payload)
+    refine_targets = _unique_ordered(
+        row["skill_name"]
+        for row in group_refiner_actions
+        if row.get("action") == "refine"
+    )
+    report["maintenance_targets"] = refine_targets
+    report["relevant_skill_names"] = list(target_names)
+    report["replay_source_rows"] = copy.deepcopy(
+        [
+            {
+                "candidate_group_id": row.get("candidate_group_id"),
+                "source_task_id": row.get("source_task_id"),
+                "skill_name": row.get("skill_name"),
+                "action": row.get("action"),
+                "reason": row.get("reason"),
+            }
+            for row in group_refiner_actions
+        ]
+    )
+
+    if not refine_targets:
+        report["token_breakdown"] = _token_breakdown_delta(token_start)
+        report["static_dependency_validation"] = validate_skill_static_dependencies(store, target_names)
+        return report
+
+    credit_context = credit_context_by_skill or {}
+    dependency_context = dependency_context_by_skill or {}
+    credit_rows: List[Dict[str, Any]] = []
+    for row in group_feedback_rows:
+        if not isinstance(row, dict):
+            continue
+        for member in (row.get("members") or []):
+            if not isinstance(member, dict):
+                continue
+            if str(member.get("skill_name") or "").strip() in set(refine_targets):
+                for record in (member.get("credit_records") or []):
+                    if isinstance(record, dict):
+                        credit_rows.append(copy.deepcopy(record))
+
+    maintenance_results = await _run_bundle_test_and_refine_targets(
+        store=store,
+        targets=refine_targets,
+        tools=tools,
+        llm_config=llm_config,
+        model_name=model_name,
+        execution_backend=execution_backend,
+        prompt_style=prompt_style,
+        tool_api_style=tool_api_style,
+        max_steps_per_turn=max_steps_per_turn,
+        max_task_seconds=max_task_seconds,
+        temperature=temperature,
+        synthetic_continue=synthetic_continue,
+        explicit_skill_tool=explicit_skill_tool,
+        round_index=round_index,
+        tag=tag,
+        phase="group",
+        credit_context_by_skill=credit_context,
+        dependency_context_by_skill=dependency_context,
+        refiner_rules=refiner_rules,
+        lock_manager=lock_manager,
+        run_refine=True,
+        max_repair_rounds=max(1, int(os.environ.get("BFCL_GROUP_REPAIR_ROUNDS", "2") or "2")),
+    )
+    report.update(maintenance_results)
+    report["group_refiner_credit_rows"] = copy.deepcopy(credit_rows)
+    report["static_dependency_validation"] = validate_skill_static_dependencies(store, refine_targets)
     report["token_breakdown"] = _token_breakdown_delta(token_start)
     return report
 
@@ -3169,6 +3933,7 @@ async def _run_macro_maintenance(
     phase: str,
     credit_events: Sequence[Dict[str, Any]] | None = None,
     extractor_trl_enabled: bool = False,
+    refactorer_rules: Sequence[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     token_start = maintenance_token_event_count()
     legacy_hook = globals().get("_run_round_refine_and_refactor")
@@ -3199,6 +3964,7 @@ async def _run_macro_maintenance(
             run_bundle_tests=False,
             run_refine=False,
             run_overlap_refactor=True,
+            refactorer_rules=refactorer_rules,
         )
         report = dict(report or {})
         report.setdefault("run_bundle_builder", False)
@@ -3228,6 +3994,7 @@ async def _run_macro_maintenance(
         round_index=round_index,
         tag=tag,
         phase=phase,
+        refactorer_rules=refactorer_rules,
     )
     credit_filter_rows = [
         {
@@ -3302,6 +4069,10 @@ async def _run_related_evolve_experiment(
     candidate_competition_enabled: bool = False,
     candidate_sample_count: int = 1,
     candidate_trial_retrieval: bool = True,
+    heldout_allow_trial_skills: bool = False,
+    heldout_allow_candidate_skills: bool = True,
+    heldout_trial_supplement_k: int = 0,
+    heldout_include_pending_supplement: bool = False,
     macro_snapshot_dir: Path | None = None,
 ) -> Dict[str, Any]:
     reset_maintenance_token_stats()
@@ -3321,6 +4092,13 @@ async def _run_related_evolve_experiment(
         int(os.environ.get("BFCL_CANDIDATE_SAMPLE_COUNT", str(candidate_sample_count)) or candidate_sample_count),
     )
     candidate_trial_retrieval = bool(candidate_trial_retrieval and _env_bool("BFCL_CANDIDATE_TRIAL_RETRIEVAL", True))
+    heldout_allow_trial_skills = bool(heldout_allow_trial_skills)
+    heldout_allow_candidate_skills = bool(heldout_allow_candidate_skills)
+    heldout_trial_supplement_k = max(0, int(heldout_trial_supplement_k or _env_int("BFCL_HELDOUT_TRIAL_SUPPLEMENT_K", 0)))
+    heldout_include_pending_supplement = bool(
+        heldout_include_pending_supplement
+        or _env_bool("BFCL_HELDOUT_INCLUDE_PENDING_SUPPLEMENT", False)
+    )
     candidate_group_min_usage = max(1, _env_int("BFCL_CANDIDATE_GROUP_MIN_USAGE", 1))
     candidate_group_low_usage_patience = max(
         1,
@@ -3329,14 +4107,24 @@ async def _run_related_evolve_experiment(
             _env_int("BFCL_CANDIDATE_GROUP_NO_USAGE_MACROS", 3),
         ),
     )
+    trl_min_exposure_task_ratio = max(0.0, _env_float("BFCL_TRL_MIN_EXPOSURE_TASK_RATIO", 1.0))
+    candidate_group_min_age_tasks = max(0, int(math.ceil(macro_maintenance_step * trl_min_exposure_task_ratio)))
+    candidate_group_allow_low_usage_feedback = _env_bool("BFCL_TRL_ALLOW_LOW_USAGE_FEEDBACK", False)
+    extractor_existing_artifacts_mode = _extractor_existing_artifacts_mode()
     train_tasks, test_tasks = _tasks_from_manifest(manifest, cache_dir=cache_dir, data_source=data_source)
     strict_embeddings = os.environ.get("BFCL_STRICT_SEGMENT_EMBEDDINGS", "0").strip().lower() in {"1", "true", "yes"}
     segment_index = SegmentVectorIndex(strict_embeddings=strict_embeddings)
     round_reports: List[Dict[str, Any]] = []
+    completed_round_states: List[Dict[str, Any]] = []
     checkpoint = _phase_partial_path(output_path, "checkpoint") if checkpoint_path is None else checkpoint_path
     store = ArtifactStore()
     maintenance_locks = SkillMaintenanceLockManager(micro_concurrency=micro_concurrency)
     role_feedback = _normalize_role_feedback_memory(None)
+    replay_buffer: Dict[str, List[Dict[str, Any]]] = {
+        "extractor": [],
+        "refactorer": [],
+        "refiner_revision": [],
+    }
     if use_handwritten_skills:
         for artifact in default_bfcl_skill_store().all():
             store.add(copy.deepcopy(artifact))
@@ -3346,12 +4134,22 @@ async def _run_related_evolve_experiment(
     if checkpoint and checkpoint.exists():
         payload = json.loads(checkpoint.read_text())
         round_reports = list(payload.get("round_reports") or [])
+        completed_round_states = [
+            dict(item or {})
+            for item in (payload.get("completed_round_states") or [])
+            if isinstance(item, dict)
+        ]
         store = ArtifactStore(
             payload.get("store", {}).get("artifacts") or [],
             test_results=payload.get("store", {}).get("test_results") or [],
         )
         segment_index.load_rows(payload.get("segment_index_rows") or [])
         role_feedback = _normalize_role_feedback_memory(payload.get("role_feedback"))
+        replay_buffer = {
+            "extractor": list(((payload.get("replay_buffer") or {}).get("extractor") or [])),
+            "refactorer": list(((payload.get("replay_buffer") or {}).get("refactorer") or [])),
+            "refiner_revision": list(((payload.get("replay_buffer") or {}).get("refiner_revision") or [])),
+        }
         start_round_index = int(payload.get("next_round_index") or 0)
         resumed_round_state = _restore_current_round_state(dict(payload.get("current_round_state") or {}) or None)
         if resumed_round_state:
@@ -3371,6 +4169,17 @@ async def _run_related_evolve_experiment(
                         "Checkpoint resume is missing evolving store or segment-index state for an in-progress round. "
                         "This checkpoint cannot continue faithfully; restart from a clean run or rebuild from full sidecars."
                     )
+        if not resumed_round_state:
+            prefix_round_state = _restore_completed_prefix_round_state(
+                checkpoint_payload=payload,
+                manifest=manifest,
+                rounds=rounds,
+            )
+            if prefix_round_state:
+                resumed_round_state = prefix_round_state
+                start_round_index = int(prefix_round_state.get("round_index") or 0)
+                role_feedback = _normalize_role_feedback_memory(prefix_round_state.get("role_feedback") or role_feedback)
+                round_reports = []
     debug_sink = DebugEventSink.from_env(
         base_context={
             "experiment": tag,
@@ -3480,8 +4289,11 @@ async def _run_related_evolve_experiment(
                     raw_rows=raw_rows,
                     state=candidate_group_feedback_state,
                     macro_index=macro_index,
+                    current_task_index=int(macro_report.get("end_task_index") or len(train_details)),
                     min_usage=candidate_group_min_usage,
+                    min_age_tasks=candidate_group_min_age_tasks,
                     low_usage_patience=candidate_group_low_usage_patience,
+                    allow_low_usage_feedback=candidate_group_allow_low_usage_feedback,
                 )
                 decisions = _apply_candidate_group_competition_decisions(
                     store=store,
@@ -3489,55 +4301,160 @@ async def _run_related_evolve_experiment(
                 )
                 macro_report["candidate_group_feedback_rows"] = copy.deepcopy(feedback_rows)
                 macro_report["candidate_group_decisions"] = copy.deepcopy(decisions)
+                _append_candidate_group_replay_rows(replay_buffer, feedback_rows)
+                heuristic_group_refiner_actions = _group_refiner_actions_from_feedback_rows(
+                    store=store,
+                    group_feedback_rows=feedback_rows,
+                )
+                group_refiner_action_payload: Dict[str, Any] = {
+                    "source": "heuristic",
+                    "analysis": "",
+                    "actions": copy.deepcopy(heuristic_group_refiner_actions),
+                }
+                group_refiner_actions = heuristic_group_refiner_actions
+                if extractor_trl_enabled and feedback_rows:
+                    try:
+                        proposed_actions = await propose_group_refiner_actions_llm(
+                            group_feedback_rows=copy.deepcopy(feedback_rows),
+                            current_actions=copy.deepcopy(heuristic_group_refiner_actions),
+                            llm_config=llm_config,
+                            model_name=model_name,
+                            audit_context={
+                                "phase": "macro_group_refiner_actions",
+                                "experiment": tag,
+                                "round_index": round_index,
+                                "macro_index": macro_index,
+                            },
+                        )
+                    except Exception as exc:
+                        proposed_actions = {
+                            "analysis": f"group_refiner_llm_error:{type(exc).__name__}:{str(exc)[-500:]}",
+                            "actions": [],
+                            "error_type": type(exc).__name__,
+                            "error": str(exc)[-1000:],
+                        }
+                    llm_actions = _apply_group_refiner_actions(
+                        store=store,
+                        group_feedback_rows=feedback_rows,
+                        actions=proposed_actions.get("actions") or [],
+                        source="llm",
+                    )
+                    if llm_actions:
+                        group_refiner_actions = llm_actions
+                        group_refiner_action_payload = {
+                            "source": "llm",
+                            "analysis": proposed_actions.get("analysis") or "",
+                            "actions": copy.deepcopy(llm_actions),
+                            "fallback_actions": copy.deepcopy(heuristic_group_refiner_actions),
+                        }
+                    else:
+                        group_refiner_action_payload = {
+                            "source": "heuristic_fallback",
+                            "analysis": proposed_actions.get("analysis") or "",
+                            "actions": copy.deepcopy(heuristic_group_refiner_actions),
+                            "llm_raw_actions": copy.deepcopy(proposed_actions.get("actions") or []),
+                            **(
+                                {
+                                    "llm_error_type": proposed_actions.get("error_type"),
+                                    "llm_error": proposed_actions.get("error"),
+                                }
+                                if proposed_actions.get("error_type")
+                                else {}
+                            ),
+                        }
+                macro_report["group_refiner_actions"] = copy.deepcopy(group_refiner_actions)
+                macro_report["group_refiner_action_payload"] = copy.deepcopy(group_refiner_action_payload)
+                macro_report["replay_buffer_summary"] = {
+                    role: len(rows)
+                    for role, rows in replay_buffer.items()
+                }
+                group_refiner_maintenance = await _run_group_maintenance(
+                    store=store,
+                    group_feedback_rows=feedback_rows,
+                    window_details=window_details,
+                    tools=tools,
+                    llm_config=llm_config,
+                    model_name=model_name,
+                    execution_backend=execution_backend,
+                    prompt_style=prompt_style,
+                    tool_api_style=tool_api_style,
+                    max_steps_per_turn=max_steps_per_turn,
+                    max_task_seconds=max_task_seconds,
+                    temperature=temperature,
+                    synthetic_continue=synthetic_continue,
+                    explicit_skill_tool=explicit_skill_tool,
+                    round_index=round_index,
+                    tag=tag,
+                    credit_context_by_skill=_credit_context_by_skill(credit_events or []),
+                    dependency_context_by_skill=_dependency_context_projection(store, [
+                        str(member.get("skill_name") or "")
+                        for row in feedback_rows
+                        for member in (row.get("members") or [])
+                        if isinstance(member, dict)
+                    ]),
+                    refiner_rules=[],
+                    lock_manager=maintenance_locks,
+                    group_refiner_actions=group_refiner_actions,
+                    group_refiner_action_payload=group_refiner_action_payload,
+                )
+                macro_report["group_refiner_maintenance"] = copy.deepcopy(group_refiner_maintenance)
+                macro_report["group_refiner_test_results"] = copy.deepcopy(group_refiner_maintenance.get("maintenance_test_results") or [])
+                macro_report["group_refiner_refine_decisions"] = copy.deepcopy(group_refiner_maintenance.get("refine_decisions") or [])
                 macro_report["candidate_group_feedback_policy"] = {
                     "min_usage": candidate_group_min_usage,
+                    "min_age_tasks": candidate_group_min_age_tasks,
+                    "min_exposure_task_ratio": trl_min_exposure_task_ratio,
+                    "allow_low_usage_feedback": candidate_group_allow_low_usage_feedback,
                     "low_usage_macros": candidate_group_low_usage_patience,
                     "state_size": len(candidate_group_feedback_state),
                 }
                 if extractor_trl_enabled and feedback_rows:
-                    update = await update_extractor_rules_from_feedback_llm(
-                        current_rules=(role_feedback.get("extractor") or {}).get("rules"),
-                        feedback_rows=feedback_rows,
-                        llm_config=llm_config,
-                        model_name=model_name,
-                        max_rules=_ROLE_FEEDBACK_RULE_LIMIT,
-                        audit_context={
-                            "phase": "macro_candidate_group_feedback",
-                            "experiment": tag,
-                            "round_index": round_index,
-                            "macro_index": macro_index,
-                        },
-                    )
+                    role_updates: Dict[str, Dict[str, Any]] = {}
+                    for feedback_role in ("extractor", "refactorer"):
+                        role_rows = _sample_replay_rows_for_role(
+                            replay_buffer,
+                            feedback_role,
+                            max_rows=max(_ROLE_FEEDBACK_RULE_LIMIT, len(feedback_rows)),
+                        )
+                        role_updates[feedback_role] = await update_role_rules_from_feedback_llm(
+                            role_name=feedback_role,
+                            current_rules=(role_feedback.get(feedback_role) or {}).get("rules"),
+                            feedback_rows=role_rows,
+                            llm_config=llm_config,
+                            model_name=model_name,
+                            max_rules=_ROLE_FEEDBACK_RULE_LIMIT,
+                            audit_context={
+                                "phase": "macro_candidate_group_feedback",
+                                "experiment": tag,
+                                "round_index": round_index,
+                                "macro_index": macro_index,
+                                "replay_source_role": feedback_role,
+                            },
+                        )
                     macro_report["extractor_trl_update"] = {
                         "enabled": True,
                         "ran": True,
-                        "summary": update.get("summary") or "",
+                        "summary": (role_updates.get("extractor") or {}).get("summary") or "",
                         "n_candidate_group_feedback_rows": len(feedback_rows),
                     }
-                    role_feedback = _normalize_role_feedback_memory(
-                        {
-                            **role_feedback,
-                            "extractor": {
-                                **dict(role_feedback.get("extractor") or {}),
-                                "rules": update.get("rules") or [],
-                                "last_update_summary": update.get("summary") or "",
-                                "updated_at": update.get("updated_at"),
-                                "history": [
-                                    *list((role_feedback.get("extractor") or {}).get("history") or []),
-                                    {
-                                        "round_index": round_index,
-                                        "macro_index": macro_index,
-                                        "summary": update.get("summary") or "",
-                                        "rules": copy.deepcopy(update.get("rules") or []),
-                                        "n_feedback_rows": len(feedback_rows),
-                                        "n_candidate_group_feedback_rows": len(feedback_rows),
-                                        "trl_enabled": True,
-                                        "feedback_scope": "candidate_group_macro",
-                                    },
-                                ][-12:],
-                            },
+                    macro_report["role_trl_updates"] = {
+                        role: {
+                            "summary": update.get("summary") or "",
+                            "n_rules": len(update.get("rules") or []),
                         }
-                    )
+                        for role, update in role_updates.items()
+                    }
+                    for feedback_role, update in role_updates.items():
+                        role_feedback = _merge_role_feedback_update(
+                            role_feedback,
+                            role_name=feedback_role,
+                            update=update,
+                            round_index=round_index,
+                            macro_index=macro_index,
+                            n_feedback_rows=len(feedback_rows),
+                            feedback_scope="candidate_group_macro",
+                            trl_enabled=True,
+                        )
                 else:
                     macro_report["extractor_trl_update"] = {
                         "enabled": bool(extractor_trl_enabled),
@@ -3612,7 +4529,7 @@ async def _run_related_evolve_experiment(
                     extracted = await _extract_candidate_skill_samples(
                         results=results,
                         tool_schemas=tools,
-                        existing_artifacts=[],
+                        existing_artifacts=_extractor_existing_artifacts_for_mode(store),
                         extractor_rules=(role_feedback.get("extractor") or {}).get("rules") if extractor_trl_enabled else [],
                         llm_config=llm_config,
                         model_name=model_name,
@@ -3760,7 +4677,7 @@ async def _run_related_evolve_experiment(
                     new_artifacts = await _extract_candidate_skill_samples(
                         results=results,
                         tool_schemas=tools,
-                        existing_artifacts=[],
+                        existing_artifacts=_extractor_existing_artifacts_for_mode(store),
                         extractor_rules=(role_feedback.get("extractor") or {}).get("rules") if extractor_trl_enabled else [],
                         llm_config=llm_config,
                         model_name=model_name,
@@ -3870,6 +4787,7 @@ async def _run_related_evolve_experiment(
                         "task_index": task_index,
                         "tag": tag,
                         "credit_context_by_skill": current_credit_context,
+                        "refiner_rules": [],
                     }
                     if train_window_concurrency > 1 and micro_concurrency > 1:
                         pending_micro_jobs.append((task_index, list(micro_write_targets), micro_kwargs))
@@ -3913,6 +4831,7 @@ async def _run_related_evolve_experiment(
                         phase="macro",
                         credit_events=credit_events,
                         extractor_trl_enabled=extractor_trl_enabled,
+                        refactorer_rules=copy.deepcopy((role_feedback.get("refactorer") or {}).get("rules") or []),
                     )
                     macro_report.update(
                         {
@@ -3970,6 +4889,7 @@ async def _run_related_evolve_experiment(
                         for _idx, record in sorted(prefetched_train_details.items())
                     ],
                     "role_feedback": role_feedback,
+                    "replay_buffer": replay_buffer,
                     "seen_refactor_cliques": [list(item) for item in sorted(seen_refactor_cliques)],
                     "online_refactor_budget_remaining": online_refactor_budget,
                     "overlap_state": overlap_state,
@@ -3991,8 +4911,11 @@ async def _run_related_evolve_experiment(
                         next_round_index=round_index,
                         current_round_state=current_round_state,
                         role_feedback=role_feedback,
+                        replay_buffer=replay_buffer,
                         output_detail_level=output_detail_level,
                         checkpoint_path=checkpoint,
+                        completed_round_states=completed_round_states,
+                        manifest=manifest,
                     ),
                 )
             await flush_pending_micro_jobs()
@@ -4020,6 +4943,7 @@ async def _run_related_evolve_experiment(
                     phase="macro_final",
                     credit_events=credit_events,
                     extractor_trl_enabled=extractor_trl_enabled,
+                    refactorer_rules=copy.deepcopy((role_feedback.get("refactorer") or {}).get("rules") or []),
                 )
                 final_macro.update(
                     {
@@ -4092,35 +5016,26 @@ async def _run_related_evolve_experiment(
                 threshold=credit_filter_threshold,
             )
             if extractor_trl_enabled:
-                extractor_feedback_update = await update_extractor_rules_from_feedback_llm(
-                    current_rules=(role_feedback.get("extractor") or {}).get("rules"),
-                    feedback_rows=extractor_feedback_rows,
-                    llm_config=llm_config,
-                    model_name=model_name,
-                    max_rules=_ROLE_FEEDBACK_RULE_LIMIT,
-                    audit_context={
-                        "phase": "round_extractor_feedback",
-                        "experiment": tag,
-                        "round_index": round_index,
-                    },
-                )
+                existing_extractor_feedback = dict(role_feedback.get("extractor") or {})
                 role_feedback = _normalize_role_feedback_memory(
                     {
                         **role_feedback,
                         "extractor": {
-                            **dict(role_feedback.get("extractor") or {}),
-                            "rules": extractor_feedback_update.get("rules") or [],
-                            "last_update_summary": extractor_feedback_update.get("summary") or "",
-                            "updated_at": extractor_feedback_update.get("updated_at"),
+                            **existing_extractor_feedback,
+                            "last_update_summary": existing_extractor_feedback.get("last_update_summary")
+                            or "extractor_trl_candidate_group_only:round_single_skill_feedback_logged_not_used",
                             "history": [
-                                *list((role_feedback.get("extractor") or {}).get("history") or []),
+                                *list(existing_extractor_feedback.get("history") or []),
                                 {
                                     "round_index": round_index,
-                                    "summary": extractor_feedback_update.get("summary") or "",
-                                    "rules": copy.deepcopy(extractor_feedback_update.get("rules") or []),
+                                    "summary": "extractor_trl_candidate_group_only:round_single_skill_feedback_logged_not_used",
+                                    "rules": copy.deepcopy(existing_extractor_feedback.get("rules") or []),
                                     "n_feedback_rows": len(extractor_feedback_rows),
                                     "n_skill_feedback_rows": len(extractor_feedback_rows),
+                                    "n_candidate_group_feedback_rows": len(candidate_group_feedback_rows),
                                     "trl_enabled": True,
+                                    "rule_update_ran": False,
+                                    "reason": "TRL updates are restricted to mature candidate-group comparisons.",
                                 },
                             ][-12:],
                         },
@@ -4188,6 +5103,9 @@ async def _run_related_evolve_experiment(
                     "sample_count": int(candidate_sample_count),
                     "trial_retrieval": bool(candidate_trial_retrieval),
                     "group_min_usage": int(candidate_group_min_usage),
+                    "group_min_age_tasks": int(candidate_group_min_age_tasks),
+                    "group_min_exposure_task_ratio": float(trl_min_exposure_task_ratio),
+                    "group_allow_low_usage_feedback": bool(candidate_group_allow_low_usage_feedback),
                     "group_low_usage_macros": int(candidate_group_low_usage_patience),
                 },
                 "refactor_segment_coverage": copy.deepcopy(round_maintenance.get("refactor_segment_coverage") or []),
@@ -4207,6 +5125,33 @@ async def _run_related_evolve_experiment(
                 **(_project_round_maintenance(round_maintenance) if output_detail_level == "compact" else round_maintenance),
             }
             round_reports.append(round_report)
+            completed_state_meta = _write_completed_round_sidecars(
+                checkpoint_path=checkpoint,
+                round_index=round_index,
+                current_round_state={
+                    "round_index": round_index,
+                    "next_task_index": len(train_details),
+                    "train_details": train_details,
+                    "window_train_details": window_train_details,
+                    "window_segments": [segment.as_dict() for segment in window_segments],
+                    "micro_maintenance_reports": micro_maintenance_reports,
+                    "maintenance_windows": maintenance_windows,
+                    "online_refactor_attempts": online_refactor_attempts,
+                    "extraction_events": extraction_events,
+                    "credit_events": credit_events,
+                    "candidate_group_feedback_state": copy.deepcopy(candidate_group_feedback_state),
+                    "prefetched_train_details": [],
+                    "role_feedback": role_feedback,
+                    "replay_buffer": replay_buffer,
+                    "seen_refactor_cliques": [list(item) for item in sorted(seen_refactor_cliques)],
+                    "online_refactor_budget_remaining": online_refactor_budget,
+                    "overlap_state": overlap_state,
+                },
+            )
+            completed_round_states = [
+                *[row for row in completed_round_states if int(row.get("round_index") or -1) != round_index],
+                completed_state_meta,
+            ]
             _write_current_round_sidecars(
                 checkpoint_path=checkpoint,
                 current_round_state=None,
@@ -4224,8 +5169,11 @@ async def _run_related_evolve_experiment(
                     next_round_index=round_index + 1,
                     current_round_state=None,
                     role_feedback=role_feedback,
+                    replay_buffer=replay_buffer,
                     output_detail_level=output_detail_level,
                     checkpoint_path=checkpoint,
+                    completed_round_states=completed_round_states,
+                    manifest=manifest,
                 ),
             )
             if save_skills:
@@ -4252,6 +5200,10 @@ async def _run_related_evolve_experiment(
             explicit_skill_tool=explicit_skill_tool,
             phase="related_heldout_test",
             concurrency=test_concurrency,
+            allow_trial_skills=heldout_allow_trial_skills,
+            allow_candidate_skills=heldout_allow_candidate_skills,
+            trial_supplement_k=heldout_trial_supplement_k,
+            include_pending_supplement=heldout_include_pending_supplement,
         )
     finally:
         if trace_detail_level_before is None:
@@ -4284,8 +5236,16 @@ async def _run_related_evolve_experiment(
             "candidate_competition_enabled": bool(candidate_competition_enabled),
             "candidate_sample_count": int(candidate_sample_count),
             "candidate_trial_retrieval": bool(candidate_trial_retrieval),
+            "extractor_existing_artifacts": extractor_existing_artifacts_mode,
             "candidate_group_min_usage": int(candidate_group_min_usage),
+            "candidate_group_min_age_tasks": int(candidate_group_min_age_tasks),
+            "candidate_group_min_exposure_task_ratio": float(trl_min_exposure_task_ratio),
+            "candidate_group_allow_low_usage_feedback": bool(candidate_group_allow_low_usage_feedback),
             "candidate_group_low_usage_macros": int(candidate_group_low_usage_patience),
+            "heldout_allow_trial_skills": bool(heldout_allow_trial_skills),
+            "heldout_allow_candidate_skills": bool(heldout_allow_candidate_skills),
+            "heldout_trial_supplement_k": int(heldout_trial_supplement_k),
+            "heldout_include_pending_supplement": bool(heldout_include_pending_supplement),
             "top_k_skills": top_k_skills,
             "min_skill_score": min_skill_score,
             "skill_injection_mode": skill_injection_mode,
@@ -4303,7 +5263,11 @@ async def _run_related_evolve_experiment(
             "enabled": bool(candidate_competition_enabled),
             "sample_count": int(candidate_sample_count),
             "trial_retrieval": bool(candidate_trial_retrieval),
+            "extractor_existing_artifacts": extractor_existing_artifacts_mode,
             "group_min_usage": int(candidate_group_min_usage),
+            "group_min_age_tasks": int(candidate_group_min_age_tasks),
+            "group_min_exposure_task_ratio": float(trl_min_exposure_task_ratio),
+            "group_allow_low_usage_feedback": bool(candidate_group_allow_low_usage_feedback),
             "group_low_usage_macros": int(candidate_group_low_usage_patience),
         },
         "maintenance_windows": [
@@ -4323,6 +5287,8 @@ async def _run_related_evolve_experiment(
         "test_split_size": len(test_tasks),
         "segment_index_stats": segment_index.stats(),
         "segment_index": segment_index.as_projection(),
+        "replay_buffer": copy.deepcopy(replay_buffer),
+        "replay_buffer_summary": {role: len(rows) for role, rows in replay_buffer.items()},
         "token_breakdown": experiment_token_breakdown,
         "role_feedback": _role_feedback_projection(role_feedback),
         "pending_skill_summary": _pending_skill_summary(store),
@@ -4335,6 +5301,11 @@ async def _run_related_evolve_experiment(
             row
             for report in round_reports
             for row in (report.get("candidate_group_decisions") or [])
+        ],
+        "group_refiner_actions": [
+            row
+            for report in round_reports
+            for row in (report.get("group_refiner_actions") or [])
         ],
         "skill_credit_events": [
             item
@@ -4491,6 +5462,30 @@ async def main_async() -> None:
         action="store_true",
         help="Keep sampled candidate groups pending instead of exposing trial candidates to retrieval.",
     )
+    parser.add_argument(
+        "--heldout-allow-trial-skills",
+        action="store_true",
+        default=_env_bool("BFCL_HELDOUT_ALLOW_TRIAL_SKILLS", False),
+        help="Allow trial candidate skills to be retrieved during held-out test. Disabled by default.",
+    )
+    parser.add_argument(
+        "--heldout-allow-candidate-skills",
+        action="store_true",
+        default=_env_bool("BFCL_HELDOUT_ALLOW_CANDIDATE_SKILLS", True),
+        help="Allow candidate artifacts, including promoted candidate winners, during held-out test. Enabled by default; trial skills remain controlled separately.",
+    )
+    parser.add_argument(
+        "--heldout-trial-supplement-k",
+        type=int,
+        default=int(os.environ.get("BFCL_HELDOUT_TRIAL_SUPPLEMENT_K", "0") or "0"),
+        help="Add up to this many low-trust trial candidate skills after normal heldout retrieval.",
+    )
+    parser.add_argument(
+        "--heldout-include-pending-supplement",
+        action="store_true",
+        default=_env_bool("BFCL_HELDOUT_INCLUDE_PENDING_SUPPLEMENT", False),
+        help="Allow pending skills in the heldout low-trust supplement lane.",
+    )
     parser.add_argument("--execution-backend", choices=["official", "local_mock", "auto"], default="official")
     parser.add_argument("--prompt-style", choices=["native", "official", "academic"], default="native")
     parser.add_argument(
@@ -4645,6 +5640,10 @@ async def main_async() -> None:
             candidate_competition_enabled=args.enable_candidate_competition,
             candidate_sample_count=args.candidate_sample_count,
             candidate_trial_retrieval=not args.disable_candidate_trial_retrieval,
+            heldout_allow_trial_skills=args.heldout_allow_trial_skills,
+            heldout_allow_candidate_skills=args.heldout_allow_candidate_skills,
+            heldout_trial_supplement_k=args.heldout_trial_supplement_k,
+            heldout_include_pending_supplement=args.heldout_include_pending_supplement,
             macro_snapshot_dir=args.macro_snapshot_dir,
         )
         out = resolved_output

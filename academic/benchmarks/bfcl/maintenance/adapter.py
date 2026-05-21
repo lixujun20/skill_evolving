@@ -1474,14 +1474,31 @@ async def extract_bfcl_skill_artifacts_llm(
         artifact.metadata.setdefault("benchmark", "bfcl_v3")
         artifact.metadata.setdefault("source", "llm_trace_extraction")
         artifact.metadata.setdefault("injection_type", artifact.injection_type())
-        artifact.metadata["allowed_tools"] = list(sorted(set(
-            [str(item).strip() for item in (artifact.metadata.get("allowed_tools") or []) if str(item).strip()]
-            + list(relevant_tools)
-        )))
-        artifact.metadata["domains"] = list(sorted(set(
-            [str(item).strip() for item in (artifact.metadata.get("domains") or []) if str(item).strip()]
-            + list(inferred_domains or ["all"])
-        )))
+        metadata_quality: Dict[str, Any] = dict(artifact.metadata.get("metadata_quality") or {})
+        governed_tools = sorted(
+            {
+                str(item).strip()
+                for item in (artifact.metadata.get("allowed_tools") or [])
+                if str(item).strip()
+            }
+        )
+        governed_domains = sorted(
+            {
+                str(item).strip()
+                for item in (artifact.metadata.get("domains") or [])
+                if str(item).strip() and str(item).strip().lower() != "all"
+            }
+        )
+        artifact.metadata["allowed_tools"] = governed_tools
+        artifact.metadata["domains"] = governed_domains
+        if not governed_tools:
+            metadata_quality["missing_allowed_tools"] = True
+            metadata_quality["observed_task_tools"] = sorted(relevant_tools)
+        if not governed_domains:
+            metadata_quality["missing_domains"] = True
+            metadata_quality["observed_task_domains"] = list(inferred_domains)
+        if metadata_quality:
+            artifact.metadata["metadata_quality"] = metadata_quality
         artifact.metadata["intent_keywords"] = list(dict.fromkeys(
             [str(item).strip().lower() for item in (artifact.metadata.get("intent_keywords") or []) if str(item).strip()]
             + list(inferred_intents)
@@ -2311,6 +2328,7 @@ async def refine_bfcl_skill_store_llm(
     artifact_names: Sequence[str] | None = None,
     credit_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
     dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
+    refiner_rules: Sequence[Dict[str, Any]] | None = None,
     audit_context: Dict[str, Any] | None = None,
 ) -> List[Dict[str, Any]]:
     results_by_name = {item.skill_name: item for item in maintenance_test_results}
@@ -2388,6 +2406,7 @@ async def refine_bfcl_skill_store_llm(
                 refinement_history=refinement_history,
                 dependency_summaries=dependency_context,
                 credit_context=credit_context,
+                refiner_rules=refiner_rules,
                 llm_config=llm_config,
                 model_name=model_name,
                 audit_context={
@@ -2531,6 +2550,7 @@ async def run_bfcl_overlap_refactor_llm(
     explicit_skill_tool: bool,
     max_case_seconds: float = 180.0,
     max_repair_rounds: int = 1,
+    refactorer_rules: Sequence[Dict[str, Any]] | None = None,
     debug_sink: DebugEventSink | None = None,
     audit_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
@@ -2648,6 +2668,7 @@ async def run_bfcl_overlap_refactor_llm(
                     model_name=model_name,
                     audit_context={**dict(audit_context or {}), "refactor_group_id": group_id, "repair_round": repair_round},
                     repair_context=repair_context,
+                    refactorer_rules=refactorer_rules,
                 )
             except Exception as exc:
                 attempt = {

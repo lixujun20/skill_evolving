@@ -155,7 +155,7 @@ async def test_spreadsheet_facade_monkeypatches_still_route_into_maintenance_ada
     credit = await adapter.assign_credit(
         detail=detail,
         store=store,
-        config=MaintenanceRunConfig(llm_config="mock"),
+        config=MaintenanceRunConfig(llm_config="mock", extra={"disable_spreadsheet_heuristic_extraction": True}),
         round_index=0,
         task_index=0,
     )
@@ -222,6 +222,12 @@ async def test_spreadsheet_credit_bundle_and_micro_use_common_flow_with_benchmar
             aggregate={"passed": True, "n_cases": len(artifact.bundle.all_cases())},
         )
 
+    async def fake_ask_json(**kwargs: Any) -> Dict[str, Any]:
+        if kwargs.get("role") == "spreadsheet_extractor":
+            return {"artifacts": []}
+        return {"skill_judgments": []}
+
+    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter._ask_json", fake_ask_json)
     monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter.refine_skill_artifact_llm", fake_refine_skill_artifact_llm)
     monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter._execute_spreadsheet_bundle_tests", fake_bundle_tests)
 
@@ -229,7 +235,7 @@ async def test_spreadsheet_credit_bundle_and_micro_use_common_flow_with_benchmar
         detail=detail,
         credit_events=credit_events,
         store=store,
-        config=MaintenanceRunConfig(llm_config="mock"),
+        config=MaintenanceRunConfig(llm_config="mock", extra={"disable_spreadsheet_heuristic_extraction": True}),
         round_index=0,
         task_index=0,
     )
@@ -240,7 +246,7 @@ async def test_spreadsheet_credit_bundle_and_micro_use_common_flow_with_benchmar
         credit_events=credit_events,
         credit_bundle_cases=created,
         store=store,
-        config=MaintenanceRunConfig(llm_config="mock"),
+        config=MaintenanceRunConfig(llm_config="mock", extra={"disable_spreadsheet_heuristic_extraction": True}),
         round_index=0,
         task_index=0,
     )
@@ -289,6 +295,12 @@ async def test_spreadsheet_micro_skips_when_credit_is_not_actionable(monkeypatch
             aggregate={"passed": True},
         )
 
+    async def fake_ask_json(**kwargs: Any) -> Dict[str, Any]:
+        if kwargs.get("role") == "spreadsheet_extractor":
+            return {"artifacts": []}
+        return {"skill_judgments": []}
+
+    monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter._ask_json", fake_ask_json)
     monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter.refine_skill_artifact_llm", fake_refine_skill_artifact_llm)
     monkeypatch.setattr("academic.benchmarks.spreadsheet.adapter._execute_spreadsheet_bundle_tests", fake_bundle_tests)
 
@@ -304,7 +316,7 @@ async def test_spreadsheet_micro_skips_when_credit_is_not_actionable(monkeypatch
         ],
         credit_bundle_cases=[],
         store=store,
-        config=MaintenanceRunConfig(llm_config="mock"),
+        config=MaintenanceRunConfig(llm_config="mock", extra={"disable_spreadsheet_heuristic_extraction": True}),
         round_index=0,
         task_index=0,
     )

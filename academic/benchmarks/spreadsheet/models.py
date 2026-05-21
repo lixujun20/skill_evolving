@@ -16,7 +16,10 @@ class SpreadsheetTrace:
     retrieved_skills: List[str] = field(default_factory=list)
     prompt_injected_skills: List[str] = field(default_factory=list)
     called_skill_functions: List[str] = field(default_factory=list)
+    skill_code_reads: List[Dict[str, Any]] = field(default_factory=list)
     callable_skills: List[Dict[str, Any]] = field(default_factory=list)
+    package_skills: List[Dict[str, Any]] = field(default_factory=list)
+    prompt_context_updates: List[Dict[str, Any]] = field(default_factory=list)
     filtered_skills: List[Dict[str, Any]] = field(default_factory=list)
     injector_events: List[Dict[str, Any]] = field(default_factory=list)
     cost_events: List[Dict[str, Any]] = field(default_factory=list)
@@ -38,7 +41,10 @@ class SpreadsheetTrace:
             "retrieved_skills": self.retrieved_skills,
             "prompt_injected_skills": self.prompt_injected_skills,
             "called_skill_functions": self.called_skill_functions,
+            "skill_code_reads": self.skill_code_reads,
             "callable_skills": self.callable_skills,
+            "package_skills": self.package_skills,
+            "prompt_context_updates": self.prompt_context_updates,
             "filtered_skills": self.filtered_skills,
             "injector_events": self.injector_events,
             "cost_events": self.cost_events,

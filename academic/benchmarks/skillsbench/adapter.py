@@ -17,8 +17,9 @@ from typing import Any, Dict, Iterable, List, Sequence
 from academic.benchmarks.core.artifacts import ArtifactStore
 from academic.benchmarks.core.cost_accounting import make_cost_event
 from academic.benchmarks.core.llm_text import TextLLMResponse, ask_text_llm
-from academic.benchmarks.core.skill_injector import BudgetSkillInjector
+from academic.benchmarks.core.skill_injector import select_skill_context_with_llm
 from academic.benchmarks.core.types import BenchmarkResult, BenchmarkTask, SkillArtifact, SkillInterface
+from academic.skill_repository.llm_maintenance import _role_json_block, _trim_text
 from academic.refactoring_lab.skillsbench_fixture import SkillsBenchFixtureTask, load_skillsbench_fixture
 
 
@@ -219,13 +220,20 @@ async def run_skillsbench_task(
         for row in retrieval_audit.get("selected", [])
     ]
     retrieved_artifacts = [artifact for artifact in retrieved if artifact is not None]
-    injector = BudgetSkillInjector(
-        mode=skill_injector_mode or "compact",
+    presentation_mode = (skill_injector_mode or "compact").strip().lower()
+    injection = await select_skill_context_with_llm(
+        retrieved_artifacts,
+        query=query,
+        llm_config=llm_config,
+        model_name=model_name,
+        presentation_mode=presentation_mode,
+        max_selected=top_k_skills,
         budget_chars=skill_context_budget_chars or 2200,
-        max_full_skills=1,
-        max_summary_skills=max(0, top_k_skills),
+        compact_chars_per_skill=900,
+        benchmark="skillsbench",
+        task_id=task.task_id,
+        phase="selector",
     )
-    injection = injector.select(retrieved_artifacts, query=query)
     response = await _ask_or_mock_skillsbench_llm(
         llm_config=llm_config,
         model_name=model_name,
@@ -507,9 +515,16 @@ async def _ask_or_mock_skillsbench_llm(
             model_name=model_name or "mock-skillsbench-selector",
             api_style="mock",
         )
-    prompt = (
-        f"Task instruction:\n{instruction}\n\n"
-        f"Retrieved skill cards:\n{injected_skills}\n"
+    prompt = _role_json_block(
+        {
+            "task": {
+                "task_id": task.task_id,
+                "category": task.metadata.get("category", ""),
+                "tags": task.metadata.get("tags") or [],
+                "instruction": _trim_text(instruction, limit=1400),
+            },
+            "retrieved_skill_cards": _trim_text(injected_skills, limit=2600),
+        }
     )
     return await ask_text_llm(
         llm_config=llm_config,

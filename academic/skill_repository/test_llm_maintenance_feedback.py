@@ -6,8 +6,35 @@ from academic.extractor import EXTRACT_SYSTEM as TIR_EXTRACT_SYSTEM
 from academic.benchmarks.bfcl.related.experiment import _build_extractor_feedback_rows
 from academic.skill_repository.llm_maintenance import (
     EXTRACT_SYSTEM,
+    JsonRoleClient,
+    _ask_json,
+    _role_json_block,
+    propose_group_refiner_actions_llm,
     update_extractor_rules_from_feedback_llm,
 )
+
+
+def test_role_json_block_preserves_code_and_skill_body_verbatim() -> None:
+    long_code = "def skill_impl():\n" + "\n".join(f"    step_{idx} = {idx}" for idx in range(500))
+    long_body = "Applicability: full implementation.\n```python\n" + long_code + "\n```"
+
+    payload = json.loads(
+        _role_json_block(
+            {
+                "body": long_body,
+                "code": long_code,
+                "executable_code": long_code,
+                "raw": "drop this noisy raw field",
+                "reason": "r" * 1000,
+            }
+        )
+    )
+
+    assert payload["body"] == long_body
+    assert payload["code"] == long_code
+    assert payload["executable_code"] == long_code
+    assert "raw" not in payload
+    assert len(payload["reason"]) < 500
 
 
 @pytest.mark.asyncio
@@ -191,6 +218,8 @@ async def test_update_extractor_rules_from_synthetic_feedback_captures_prompt(mo
     assert "hurt_valid_count" in captured["user"]
     assert "resolve_order_id_then_cancel_order" in captured["user"]
     assert "helped_valid_count" in captured["user"]
+    assert "Compare candidates within the same candidate group" in captured["system"]
+    assert "objective exposure_records, credit_records, and bundle_test_records" in captured["system"]
     assert result["rules"][0]["focus"] == "reuse"
     assert "canonical identifier" in result["rules"][0]["text"]
 
@@ -200,6 +229,102 @@ async def test_update_extractor_rules_from_synthetic_feedback_captures_prompt(mo
     print(captured["user"])
     print("\\n=== OUTPUT ===\\n")
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@pytest.mark.asyncio
+async def test_group_refiner_action_prompt_uses_analysis_then_actions(monkeypatch) -> None:
+    captured: dict = {}
+
+    async def fake_ask_json(*, system, user, llm_config, model_name, role, metadata):
+        captured["system"] = system
+        captured["user"] = user
+        captured["role"] = role
+        captured["metadata"] = metadata
+        return {
+            "analysis": "mixed has helpful and harmful evidence, bad only has harmful evidence",
+            "actions": [
+                {
+                    "candidate_group_id": "extract:r0:t1:a",
+                    "skill_name": "mixed",
+                    "action": "refine",
+                    "reason": "helpful idea but harmful trigger breadth",
+                    "patch_intent": "tighten trigger to explicit account-match requests",
+                },
+                {
+                    "candidate_group_id": "extract:r0:t1:a",
+                    "skill_name": "bad",
+                    "action": "archive",
+                    "reason": "harmful dominates and no helpful record",
+                },
+            ],
+        }
+
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_json", fake_ask_json)
+
+    result = await propose_group_refiner_actions_llm(
+        group_feedback_rows=[
+            {
+                "candidate_group_id": "extract:r0:t1:a",
+                "members": [
+                    {
+                        "skill_name": "mixed",
+                        "exposure_count": 2,
+                        "helpful_count": 1,
+                        "harmful_count": 1,
+                        "credit_records": [{"judgment": "harmful", "reason": "over-broad trigger"}],
+                    },
+                    {
+                        "skill_name": "bad",
+                        "exposure_count": 1,
+                        "helpful_count": 0,
+                        "harmful_count": 1,
+                    },
+                ],
+            }
+        ],
+        current_actions=[{"skill_name": "mixed", "action": "refine"}],
+        llm_config="mock",
+        model_name="mock-model",
+        audit_context={"phase": "unit_group_refiner"},
+    )
+
+    assert captured["role"] == "group_refiner"
+    assert captured["metadata"]["n_group_feedback_rows"] == 1
+    assert "First write a free-form `analysis`" in captured["system"]
+    assert '"analysis"' in captured["system"]
+    assert '"actions"' in captured["system"]
+    assert "## Candidate Group Evidence" in captured["user"]
+    assert "over-broad trigger" in captured["user"]
+    assert result["actions"][0]["action"] == "refine"
+    assert result["actions"][0]["patch_intent"] == "tighten trigger to explicit account-match requests"
+
+
+@pytest.mark.asyncio
+async def test_ask_json_retries_after_malformed_json(monkeypatch) -> None:
+    calls = []
+
+    class FlakyJsonClient(JsonRoleClient):
+        async def ask_json(self, *, system, user, llm_config, model_name):
+            calls.append(user)
+            if len(calls) == 1:
+                return {"text": '{"decision": ', "usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+            return {"text": '{"ok": true}', "usage": {"prompt_tokens": 4, "completion_tokens": 2}}
+
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._json_role_client", lambda **kwargs: FlakyJsonClient())
+    monkeypatch.delenv("SKILL_MAINTENANCE_AUDIT_LOG", raising=False)
+
+    result = await _ask_json(
+        system="Return JSON.",
+        user='{"input": 1}',
+        llm_config="mock",
+        model_name="mock-model",
+        role="unit_json_retry",
+        metadata={"phase": "unit"},
+    )
+
+    assert result == {"ok": True}
+    assert len(calls) == 2
+    assert "JSON repair retry" in calls[1]
 
 
 def test_extract_system_encodes_se_norms_and_few_shots() -> None:

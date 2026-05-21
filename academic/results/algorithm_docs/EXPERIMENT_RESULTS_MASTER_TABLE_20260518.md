@@ -29,6 +29,25 @@
 
 BFCL 的 split 不是每次随机选。`curated_related_manifest_50_50.json` 已冻结；主 evolve 路径按 `train_task_ids` 顺序训练，不 shuffle。若使用其他 task list，必须在表中标为 diagnostic 或 ablation。
 
+### Spreadsheet 固定项
+
+| 项 | 固定值 |
+|---|---|
+| train ids file | `academic/experiments/spreadsheet_case_lists/shuffled_seed42_train_200.json` |
+| test ids file | `academic/experiments/spreadsheet_case_lists/shuffled_seed42_test_200.json` |
+| train ids hash | `04c5121288e0e687` |
+| test ids hash | `a309d0fe247a8d63` |
+| train/test overlap | 0 |
+| train prefix used in 20/0 debug | first 20 ids, hash `afbbdccb557d3dbb` |
+| test prefix used in 50-test baseline | first 50 ids, hash `d355c557a14c329e` |
+| model / llm_config | `claude-sonnet-4-5` / `local_claude_proxy` |
+| notebook max turns | 5 |
+| max_task_seconds | 180 |
+| baseline test_concurrency | 4 |
+| evolve train/micro/test concurrency | 4 / 8 / 4 |
+
+Spreadsheet 主结果必须使用上述落盘 task id 文件。`shuffled_seed42_test_200.json` 只有 195 个 task，因为当前 verified/local fixture loader 能加载 395 个有效 task；不要补造 200 个 test id。
+
 ## BFCL
 
 | run | phase | file | n | success | official_valid | avg_score | recall | precision | avg_tokens | input | output | timeout | 备注 |
@@ -42,6 +61,50 @@ BFCL 的 split 不是每次随机选。`curated_related_manifest_50_50.json` 已
 | cost compact | diagnostic mixed-set | `academic/results/cost_retest_bfcl_compact_20260518.json` | 50 | 0.22 | 0.64 | 0.7937 | 0.8666 | 0.7511 | 71810.7 | 70812.6 | 998.1 | 0.0 | mixed set：17 train / 10 test / 23 manifest 外 |
 | latest train50 | train | `academic/results/bfcl_train50_20260518_202840.json` | 50 | 0.20 | 0.58 | 0.8090 | 0.8789 | 0.7697 | 62339.2 | 61247.4 | 1091.8 | 0.0 | 最新完整 run |
 | latest train50 | test | `academic/results/bfcl_train50_20260518_202840.json` | 50 | 0.08 | 0.70 | 0.7892 | 0.8955 | 0.7193 | 83043.9 | 81956.2 | 1087.8 | 0.0 | 最新完整 run heldout |
+| related50 baseline rerun | test | `academic/results/bfcl_related50_50_claude45proxy_official_related50_50_baseline_rerun_20260519.json` | 50 | 0.08 | 0.48 | 0.7388 | 0.8181 | 0.7023 | 70551.3 | 69514.6 | 1036.8 | 0.0 | fixed 50/50 baseline rerun；no skills |
+| TRL competition warm-up 20/50 | test | `academic/results/bfcl_related20_50_sonnet_trl_20260520_evolve.json` | 50 | 0.06 | 0.62 | 0.7710 | 0.8595 | 0.7234 | 73770.5 | 72720.6 | 1049.9 | 0.0 | diagnostic：train prefix 20 + heldout 50；candidate_competition_enabled=true；prompt-injected 24/50；summary `academic/results/bfcl_related20_50_sonnet_trl_20260520_summary.json` |
+| TRL main 50/50 | train | `academic/results/bfcl_related50_50_sonnet_trl_20260520_evolve.json` | 50 | 0.24 | 0.70 | 0.8324 | 0.8979 | 0.7939 | 61572.7 | 60485.4 | 1087.2 | 0.0 | completed；candidate_competition_enabled=true；candidate_sample_count=3 |
+| TRL main 50/50 | test | `academic/results/bfcl_related50_50_sonnet_trl_20260520_evolve.json` | 50 | 0.08 | 0.52 | 0.7474 | 0.8491 | 0.6850 | 76689.5 | 75624.8 | 1064.7 | 0.0 | completed；fixed heldout 50；prompt_only |
+| TRL injector-gate 50/50 | train | `academic/results/bfcl_related50_50_sonnet_trl_injector_gate_20260520_evolve.json` | 50 | 0.22 | 0.6531 | 0.8183 | 0.8744 | 0.7874 | 59604.8 | 58559.2 | 1045.6 | 0.0 | completed；LLM injector gate；candidate_competition_enabled=true |
+| TRL injector-gate 50/50 | test | `academic/results/bfcl_related50_50_sonnet_trl_injector_gate_20260520_evolve.json` | 50 | 0.08 | 0.60 | 0.7530 | 0.8371 | 0.7096 | 74175.7 | 73152.7 | 1023.0 | 0.0 | completed；当前 best official valid；fixed heldout 50 |
+| aligned no-TRL competition deterministic | train | `academic/results/bfcl_align_notrl_compete_detinj_20260520.json` | 50 | 0.26 | 0.62 | 0.8325 | 0.8917 | 0.7982 | 61739.7 | 60635.9 | 1103.8 | 0.0 | ablation；current code role-aligned；extractor TRL off；candidate_competition=true；deterministic injector；every-step retrieval；extractor_existing_artifacts=full_store |
+| aligned no-TRL competition deterministic | test | `academic/results/bfcl_align_notrl_compete_detinj_20260520.json` | 50 | 0.12 | 0.74 | 0.7901 | 0.8938 | 0.7235 | 81663.5 | 80598.2 | 1065.3 | 0.0 | ablation；best current BFCL heldout strict/official；no skill_injector LLM calls |
+| aligned no-TRL competition LLM injector | train | `academic/results/bfcl_align_notrl_compete_llminj_20260520.json` | 50 | 0.26 | 0.66 | 0.8441 | 0.9035 | 0.8059 | 61484.3 | 60377.7 | 1106.6 | 0.0 | ablation；same as previous but BFCL_SKILL_INJECTOR_GATE=llm；809 total injector calls over train+test |
+| aligned no-TRL competition LLM injector | test | `academic/results/bfcl_align_notrl_compete_llminj_20260520.json` | 50 | 0.10 | 0.60 | 0.7763 | 0.8693 | 0.7139 | 74948.4 | 73896.2 | 1052.3 | 0.0 | ablation；LLM injector improves train valid but hurts heldout vs deterministic |
+| aligned TRL competition deterministic 20/50 | train | `academic/results/bfcl_align_trl_compete_detinj_train20_50_20260520.json` | 20 | 0.45 | 0.80 | 0.9114 | 0.9493 | 0.8972 | 49767.4 | 48747.8 | 1019.5 | 0.0 | debug warm-up；current code role-aligned；TRL on；candidate_competition=true；deterministic injector；checkpoint has completed prefix sidecars for continuation to 50 train |
+| aligned TRL competition deterministic 20/50 | test | `academic/results/bfcl_align_trl_compete_detinj_train20_50_20260520.json` | 50 | 0.10 | 0.52 | 0.7565 | 0.8255 | 0.7189 | 73129.4 | 72095.9 | 1033.5 | 0.0 | debug warm-up；fixed heldout 50；no LLM skill_injector role；TRL feedback ran 2 updates |
+| aligned TRL maturity-gated deterministic 20/50 | train | `academic/results/bfcl_align_trl_maturity_train20_50_20260520.json` | 20 | 0.45 | 0.75 | 0.9069 | 0.9410 | 0.8960 | 49712.9 | 48689.8 | 1023.0 | 0.0 | candidate-group-only TRL；maturity gate ratio=1.0；neutral-only loser archive bug fixed；checkpoint preserved for 50/50 continuation |
+| aligned TRL maturity-gated deterministic 20/50 | test | `academic/results/bfcl_align_trl_maturity_train20_50_20260520.json` | 50 | 0.08 | 0.54 | 0.7655 | 0.8498 | 0.7102 | 73192.1 | 72147.4 | 1044.7 | 0.0 | 13/50 heldout prompt-injected；active skills only TradingBot direct symbol + market price；case analysis `academic/results/algorithm_docs/BFCL_TRL_MATURITY_20_50_CASE_ANALYSIS_20260520.md` |
+| aligned TRL maturity-gated deterministic 50/50 | train | `academic/results/bfcl_align_trl_maturity_train50_50_20260520.json` | 50 | 0.26 | 0.64 | 0.8319 | 0.8849 | 0.8006 | 61436.7 | 60329.6 | 1107.1 | 0.0 | resumed from 20-task checkpoint；candidate-group-only TRL；maturity gate ratio=1.0；deterministic injector；no LLM skill_injector |
+| aligned TRL maturity-gated deterministic 50/50 | test | `academic/results/bfcl_align_trl_maturity_train50_50_20260520.json` | 50 | 0.08 | 0.74 | 0.7984 | 0.9024 | 0.7266 | 80774.6 | 79684.5 | 1090.1 | 0.0 | heldout prompt-injected Vehicle/TradingBot/invoice skills；official_valid matches no-TRL deterministic；avg_score slightly higher |
+| strictmeta TRL 20/50 | train | `academic/results/bfcl_trl_strictmeta_train20_50_20260520.json` | 20 | 0.45 | 0.70 | 0.8974 | 0.9243 | 0.8918 | 47634.7 | 46637.2 | 997.4 | 0.0 | strict harmful gate；三角色 meta-feedback：extractor/refiner/refactorer；soft promotion/backup；candidate rows 2 |
+| strictmeta TRL 20/50 | test | `academic/results/bfcl_trl_strictmeta_train20_50_20260520.json` | 50 | 0.10 | 0.54 | 0.7602 | 0.8418 | 0.7117 | 71052.2 | 70013.8 | 1038.4 | 0.0 | fixed heldout 50；37 skills；prompt_only；called_skill_tools empty |
+| strictmeta TRL 50/50 | train | `academic/results/bfcl_trl_strictmeta_train50_50_20260520.json` | 50 | 0.22 | 0.64 | 0.8428 | 0.8937 | 0.8128 | 60965.8 | 59874.9 | 1090.9 | 0.0 | full 50 train；candidate rows 15；decisions 71；role feedback rules extractor/refiner/refactorer = 5/5/5 |
+| strictmeta TRL 50/50 | test | `academic/results/bfcl_trl_strictmeta_train50_50_20260520.json` | 50 | 0.10 | 0.66 | 0.7965 | 0.8824 | 0.7423 | 74365.6 | 73309.4 | 1056.2 | 0.0 | fixed heldout 50；161 skills；top injected: symbol binding, brake/start, invoice, order verification |
+| SkillX aligned 50/50 | test | `academic/results/skillx_bfcl_aligned/skillx_bfcl_50_50_sonnet_hash_embed_20260520/skillx_bfcl_result_with_elapsed.json` | 50 | 0.08 | 0.54 | 0.7679 | 0.8508 | 0.7140 | 78787.6 | 77726.6 | 1061.0 | 0.0 | completed diagnostic；plan_with_skill；max_skills=10；uses hash embedding fallback；caveat `academic/results/skillx_bfcl_aligned/skillx_bfcl_50_50_sonnet_hash_embed_20260520/embedding_caveat.json` |
+
+### BFCL 2026-05-20 fixed 50/50 完整指标
+
+这些行都使用同一个 fixed manifest：`academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`。`strict` 是 task-level exact success；`official_valid` 是 BFCL official checker 口径；`score/Mtok` 和 `valid/Mtok` 来自 `utility_per_million_tokens`。
+
+| run | phase | n | strict | official_valid | avg_score | recall | precision | avg_tokens | input | output | elapsed_s | model_steps | score/Mtok | valid/Mtok | total_tokens |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| baseline test | test | 50 | `4/50 = 0.08` | `24/50 = 0.4800` | 0.7388 | 0.8181 | 0.7023 | 70551.3 | 69514.6 | 1036.8 | 35.555 | 9.66 | 10.471129 | 6.803558 | 3527566 |
+| TRL train | train | 50 | `12/50 = 0.24` | `35/50 = 0.7000` | 0.8324 | 0.8979 | 0.7939 | 61572.7 | 60485.4 | 1087.2 | 65.506 | 9.28 | 13.519048 | 11.368678 | 3078634 |
+| TRL test | test | 50 | `4/50 = 0.08` | `26/50 = 0.5200` | 0.7474 | 0.8491 | 0.6850 | 76689.5 | 75624.8 | 1064.7 | 79.253 | 10.08 | 9.745293 | 6.780586 | 3834477 |
+| TRL injector train | train | 50 | `11/50 = 0.22` | `32/50 = 0.6531` | 0.8183 | 0.8744 | 0.7874 | 59604.8 | 58559.2 | 1045.6 | 46.364 | 9.14 | 13.729067 | 10.737394 | 2980239 |
+| TRL injector test | test | 50 | `4/50 = 0.08` | `30/50 = 0.6000` | 0.7530 | 0.8371 | 0.7096 | 74175.7 | 73152.7 | 1023.0 | 49.427 | 9.78 | 10.151815 | 8.088902 | 3708785 |
+| aligned no-TRL deterministic train | train | 50 | `13/50 = 0.26` | `31/50 = 0.6200` | 0.8325 | 0.8917 | 0.7982 | 61739.7 | 60635.9 | 1103.8 | 32.637 | 9.22 | 13.484590 | 10.042167 | 3086983 |
+| aligned no-TRL deterministic test | test | 50 | `6/50 = 0.12` | `37/50 = 0.7400` | 0.7901 | 0.8938 | 0.7235 | 81663.5 | 80598.2 | 1065.3 | 35.683 | 10.16 | 9.675113 | 9.061571 | 4083177 |
+| aligned no-TRL LLM-injector train | train | 50 | `13/50 = 0.26` | `33/50 = 0.6600` | 0.8441 | 0.9035 | 0.8059 | 61484.3 | 60377.7 | 1106.6 | 54.196 | 9.26 | 13.727927 | 10.734448 | 3074215 |
+| aligned no-TRL LLM-injector test | test | 50 | `5/50 = 0.10` | `30/50 = 0.6000` | 0.7763 | 0.8693 | 0.7139 | 74948.4 | 73896.2 | 1052.3 | 67.044 | 9.94 | 10.358110 | 8.005506 | 3747421 |
+| aligned TRL deterministic 20/50 train | train | 20 | `9/20 = 0.45` | `16/20 = 0.8000` | 0.9114 | 0.9493 | 0.8972 | 49767.4 | 48747.8 | 1019.5 | 30.405 | 9.10 | 18.313494 | 16.074780 | 995348 |
+| aligned TRL deterministic 20/50 test | test | 50 | `5/50 = 0.10` | `26/50 = 0.5200` | 0.7565 | 0.8255 | 0.7189 | 73129.4 | 72095.9 | 1033.5 | 32.416 | 9.62 | 10.344622 | 7.110683 | 3656470 |
+| strictmeta TRL 20/50 train | train | 20 | `9/20 = 0.45` | `14/20 = 0.7000` | 0.8974 | 0.9243 | 0.8918 | 47634.7 | 46637.2 | 997.4 | 37.511 | 9.05 | 18.839332 | 14.695185 | 952693 |
+| strictmeta TRL 20/50 test | test | 50 | `5/50 = 0.10` | `27/50 = 0.5400` | 0.7602 | 0.8418 | 0.7117 | 71052.2 | 70013.8 | 1038.4 | 38.094 | 9.68 | 10.698579 | 7.600042 | 3552612 |
+| strictmeta TRL 50/50 train | train | 50 | `11/50 = 0.22` | `32/50 = 0.6400` | 0.8428 | 0.8937 | 0.8128 | 60965.8 | 59874.9 | 1090.9 | 46.282 | 9.14 | 13.824828 | 10.497685 | 3048291 |
+| strictmeta TRL 50/50 test | test | 50 | `5/50 = 0.10` | `33/50 = 0.6600` | 0.7965 | 0.8824 | 0.7423 | 74365.6 | 73309.4 | 1056.2 | 48.147 | 9.84 | 10.710818 | 8.875076 | 3718278 |
+| SkillX test | test | 50 | `4/50 = 0.08` | `27/50 = 0.5400` | 0.7679 | 0.8508 | 0.7140 | 78787.6 | 77726.6 | 1061.0 | 34.927 | 9.78 | 9.746531 | 6.853869 | 3939381 |
 
 ## Spreadsheet
 
@@ -50,6 +113,12 @@ BFCL 的 split 不是每次随机选。`curated_related_manifest_50_50.json` 已
 | baseline old | test | `academic/results/spreadsheet_baseline_test50_20260517_233447.json` | 50 | 0.22 | 0.2564 | 1552.1 | - | - | 0.0 | 早期 baseline |
 | evolve 50/50 | train | `academic/results/spreadsheet_evolve_50_50_true_20260518_022120.json` | 50 | 0.24 | 0.2827 | 3460.0 | - | - | - | generic online evolve |
 | evolve 50/50 | test | `academic/results/spreadsheet_evolve_50_50_true_20260518_022120.json` | 50 | 0.24 | 0.3208 | 3748.2 | - | - | - | learned skill test |
+| notebook baseline test50 | test | `academic/results/spreadsheet_notebook_baseline_test50_0519.json` | 50 | 0.28 | 0.3600 | 7151.4 | 5596.2 | 1555.2 | 0.0 | notebook max_turns=5；test_concurrency=4；top_k=0；elapsed 483.784s |
+| notebook evolve 50/50 speedup | train | `academic/results/spreadsheet_0519-speedup.json` | 50 | 0.26 | 0.3176 | 13816.5 | 11695.0 | 2121.6 | 0.0 | notebook max_turns=5；train/micro/test concurrency=4/8/4；top_k=3；observed wall-clock 7740.0s |
+| notebook evolve 50/50 speedup | test | `academic/results/spreadsheet_0519-speedup.json` | 50 | 0.28 | 0.3350 | 13557.4 | 11594.8 | 1962.5 | 0.0 | vs 20260518 evolve test：success +0.04，avg_score +0.0142；完整对比见 changelog |
+| fixedsplit notebook train20 debug | train | `academic/results/spreadsheet_0520-fixedsplit-train20-debug.json` | 20 | 0.30 | 0.3397 | 10979.7 | - | - | 0.0 | fixed split train prefix hash `afbbdccb557d3dbb`；验证 injection/promotion/filter bugfix |
+| fixedsplit train20 post-fix progressive pending | train | `academic/results/spreadsheet_0520-postfix-train20-progressive-pending.json` | 20 | 0.30 | 0.3397 | 11910.8 | 9960.8 | 1950.0 | 0.0 | fixed split hash `afbbdccb557d3dbb`；no callable exposed/called；1 pending skill became disabled after 9 harmful credits；maintenance tokens 657583 |
+| fixedsplit notebook baseline test50 | test | `academic/results/spreadsheet_0520-fixedsplit-notebook-baseline-test50.json` | 50 | 0.26 | 0.3148 | 7645.1 | 5802.7 | 1842.3 | 0.0 | fixed split test prefix hash `d355c557a14c329e`；top_k=0；elapsed 540.592s |
 | cost baseline | test | `academic/results/cost_retest_sheet_baseline_20260518.json` | 50 | 0.26 | 0.3189 | 1621.3 | 747.9 | 873.5 | 0.0 | 新 cost accounting |
 | cost fullskill | test | `academic/results/cost_retest_sheet_fullskill_20260518.json` | 50 | 0.36 | 0.4501 | 3816.3 | 3006.0 | 810.4 | 0.0 | full skill 最好但 input 高 |
 | cost compact | test | `academic/results/cost_retest_sheet_compact_20260518.json` | 50 | 0.24 | 0.3186 | 1873.2 | 1038.7 | 834.5 | 0.0 | compact 丢失 function 信息 |
@@ -64,6 +133,12 @@ BFCL 的 split 不是每次随机选。`curated_related_manifest_50_50.json` 已
 | notebook hard | `academic/results/spreadsheet_notebook_hard_55427_20260518.json` | 1 | 0.0 | 0.0 | 6950.0 | 5788.0 | 1162.0 | 26.124 | hard case |
 | notebook hard direct | `academic/results/spreadsheet_notebook_hard_55427_direct_20260518.json` | 1 | - | - | - | - | - | - | relative workdir 修复验证 |
 | notebook hard direct v2 | `academic/results/spreadsheet_notebook_hard_55427_direct_v2_20260518.json` | 1 | - | - | - | - | - | - | direct wrapper 验证 |
+| notebook baseline test50 | `academic/results/spreadsheet_notebook_baseline_test50_0519.json` | 50 | 0.28 | 0.3600 | 7151.4 | 5596.2 | 1555.2 | 483.784 | baseline；avg turns 2.96，max turns 5，partial `academic/results/spreadsheet_notebook_baseline_test50_0519_partial.json` |
+| notebook evolve 50/50 speedup train | `academic/results/spreadsheet_0519-speedup.json` | 50 | 0.26 | 0.3176 | 13816.5 | 11695.0 | 2121.6 | 7740.0 observed | 主实验；train/micro/test concurrency=4/8/4；maintenance tokens 1511532 |
+| notebook evolve 50/50 speedup test | `academic/results/spreadsheet_0519-speedup.json` | 50 | 0.28 | 0.3350 | 13557.4 | 11594.8 | 1962.5 | 7740.0 observed | 主实验 heldout；partial/resume 文件 `academic/results/spreadsheet_0519-speedup_partial.json` |
+| fixedsplit train20 debug | `academic/results/spreadsheet_0520-fixedsplit-train20-debug.json` | 20 | 0.30 | 0.3397 | 10979.7 | - | - | 1860.305 | fixed train prefix；active failed-source skills = 0；pending blocked = 8；called skill functions = 0 |
+| fixedsplit train20 post-fix progressive pending | `academic/results/spreadsheet_0520-postfix-train20-progressive-pending.json` | 20 | 0.30 | 0.3397 | 11910.8 | 9960.8 | 1950.0 | 1967.315 | fixed train prefix；called/inspect/import = 0；bad pending skill disabled；pre-store rejected 6 candidates |
+| fixedsplit baseline test50 | `academic/results/spreadsheet_0520-fixedsplit-notebook-baseline-test50.json` | 50 | 0.26 | 0.3148 | 7645.1 | 5802.7 | 1842.3 | 540.592 | fixed test prefix；top_k=0；errors/timeouts = 0 |
 
 ## SkillsBench
 
@@ -80,3 +155,6 @@ BFCL 的 split 不是每次随机选。`curated_related_manifest_50_50.json` 已
 - 旧结果没有 input/output 细分，表中记为 `-`。
 - `guardfix evolve test` 的 timeout_rate 为 0.60，因此它的低 token 和高 official_valid 不能直接解释为更优。
 - `cost_retest_bfcl_*` 三行是混合 task set 的 cost diagnostic，不是固定 curated heldout 50；其 exact success 不进入主结论。
+- `spreadsheet_0519-speedup.json` 的顶层 `elapsed_s=0.647` 是最后一次 resume 后重新汇总 summary 的进程耗时，不是完整运行耗时；完整对比使用 `observed_wall_clock_s=7740.0`。
+- `spreadsheet_notebook_baseline_test50_0519.log` 里前半段包含一次修复前中断尝试；主表只采用完整 JSON `spreadsheet_notebook_baseline_test50_0519.json`。
+- `spreadsheet_notebook_baseline_test50_0519.json` 和 `spreadsheet_0519-speedup.json` 的 test set 不对齐，只能作为诊断对比；从 `0520-fixedsplit-*` 开始，Spreadsheet notebook baseline/evolve 必须使用固定 task id 文件。

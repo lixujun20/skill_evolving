@@ -20,6 +20,153 @@ def turn_query_text(user_messages: List[Dict[str, Any]]) -> str:
     return "\n".join(str(msg.get("content", "")) for msg in user_messages)
 
 
+def _text_tokens(value: Any) -> set[str]:
+    stop = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "when",
+        "then",
+        "that",
+        "this",
+        "from",
+        "into",
+        "user",
+        "call",
+        "tool",
+        "turn",
+        "only",
+        "after",
+        "before",
+        "current",
+        "vehicle",
+        "car",
+    }
+    return {
+        item
+        for item in re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*|\d+", str(value or "").lower())
+        if len(item) > 2 and item not in stop
+    }
+
+
+def _skill_scope_text(skill: SkillArtifact) -> str:
+    metadata = skill.metadata or {}
+    interface = skill.interface
+    chunks = [
+        skill.description,
+        metadata.get("scope"),
+        metadata.get("applicability"),
+        metadata.get("non_applicability"),
+        interface.summary,
+        interface.usage,
+        interface.compatibility_notes,
+        json.dumps(interface.input_contract or {}, ensure_ascii=False, sort_keys=True),
+        json.dumps(interface.output_contract or {}, ensure_ascii=False, sort_keys=True),
+    ]
+    chunks.extend(str(item) for item in (metadata.get("intent_keywords") or []))
+    return "\n".join(str(item or "") for item in chunks)
+
+
+def _output_contract_tool_names(skill: SkillArtifact) -> set[str]:
+    text = json.dumps(skill.interface.output_contract or {}, ensure_ascii=False)
+    tools = set()
+    for match in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(", text):
+        tools.add(match)
+    for item in re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"', text):
+        if "_" in item or item[:1].islower():
+            tools.add(item)
+    return {item for item in tools if item and item not in {"tool_call", "tool_call_order"}}
+
+
+def skill_action_tool_names(skill: SkillArtifact) -> set[str]:
+    """Return tool names the skill actually instructs the executor to call."""
+
+    tools = set(_output_contract_tool_names(skill))
+    action_text = "\n".join(
+        str(item or "")
+        for item in [
+            skill.body,
+            skill.description,
+            skill.interface.summary,
+            skill.interface.usage,
+            skill.interface.compatibility_notes,
+        ]
+    )
+    for match in re.findall(r"\b(call|invoke|use)\s+([A-Za-z_][A-Za-z0-9_]*)\b", action_text, flags=re.I):
+        tools.add(match[1])
+    for match in re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(", action_text):
+        tools.add(match)
+    return {item for item in tools if item and item not in {"tool_call", "tool_call_order"}}
+
+
+def bfcl_low_trust_counts_toward_task_limit(skill: SkillArtifact) -> bool:
+    """Whether a low-trust candidate should consume the per-task risk cap."""
+
+    high_risk_actions = {
+        "set_navigation",
+    }
+    return bool(skill_action_tool_names(skill) & high_risk_actions)
+
+
+def query_requests_engine_start(query: str) -> bool:
+    query_lower = (query or "").lower()
+    return any(
+        phrase in query_lower
+        for phrase in (
+            "start the engine",
+            "start engine",
+            "start up the engine",
+            "start up my engine",
+            "start up our engine",
+            "turn on the engine",
+            "get the engine running",
+            "engine running",
+            "engine is on",
+            "engine's on",
+            "prime the engine",
+            "fire up the engine",
+            "ignite the engine",
+            "start the vehicle's engine",
+            "start the vehicle engine",
+            "start the car engine",
+            "start the vehicle",
+            "ignitionmode='start'",
+            "ignition mode 'start'",
+            "ignition mode start",
+        )
+    )
+
+
+def is_engine_start_brake_skill(skill: SkillArtifact) -> bool:
+    skill_text = "\n".join(
+        str(item or "")
+        for item in [
+            skill.name,
+            skill.description,
+            skill.body,
+            skill.interface.summary,
+            skill.interface.usage,
+            json.dumps(skill.interface.output_contract or {}, ensure_ascii=False, sort_keys=True),
+        ]
+    )
+    if not bool(re.search(r"\bpressBrakePedal\b", skill_text)) or not bool(re.search(r"\bstartEngine\b", skill_text)):
+        return False
+    lower = skill_text.lower()
+    return bool(re.search(r"\bbrake\b", lower)) and any(
+        phrase in lower
+        for phrase in (
+            "before startengine",
+            "before calling startengine",
+            "before accepting startengine",
+            "before starting",
+            "requires the brake",
+            "safety precondition",
+            "safety interlock",
+        )
+    )
+
+
 def query_tool_overlap_score(skill: SkillArtifact, query: str) -> int:
     allowed_tools = [
         str(item).strip().lower()
@@ -38,6 +185,66 @@ def query_tool_overlap_score(skill: SkillArtifact, query: str) -> int:
         if any(token and token in query_lower for token in tool_tokens):
             score += 1
     return score
+
+
+def low_trust_turn_match_reason(skill: SkillArtifact, task: BenchmarkTask, turn_index: int, user_messages: List[Dict[str, Any]]) -> str:
+    """Return an empty string when an unvalidated candidate is safe to expose.
+
+    Low-trust trial/pending candidates are useful for recall, but their metadata
+    can be broad because it is extracted from failed trajectories.  Keep the
+    normal active-skill path permissive and make only this path require current
+    turn evidence.
+    """
+
+    if not bfcl_skill_matches_turn(skill, task, turn_index, user_messages):
+        return "turn_scope_mismatch"
+
+    query = turn_query_text(user_messages).lower()
+    query_tokens = _text_tokens(query)
+    scope_tokens = _text_tokens(_skill_scope_text(skill))
+    intent_tokens = _text_tokens(" ".join(str(item) for item in ((skill.metadata or {}).get("intent_keywords") or [])))
+    scope_overlap = len(query_tokens & scope_tokens)
+    intent_overlap = len(query_tokens & intent_tokens)
+    tool_overlap = query_tool_overlap_score(skill, query)
+    contract_tools = skill_action_tool_names(skill)
+
+    # Executing navigation is an especially common source of BFCL extra calls:
+    # many turns ask to find or identify a location, while a later turn asks to
+    # set GPS/navigation.  Do not expose low-trust navigation workflows unless
+    # the current turn explicitly asks for route/GPS/navigation execution.
+    if "set_navigation" in contract_tools:
+        navigation_terms = {
+            "navigation",
+            "navigate",
+            "gps",
+            "route",
+            "directions",
+        }
+        phrase_intent = any(
+            phrase in query
+            for phrase in (
+                "set navigation",
+                "set our navigation",
+                "set my navigation",
+                "set the navigation",
+                "set gps",
+                "set the gps",
+            )
+        )
+        if not ((query_tokens & navigation_terms) or phrase_intent):
+            return "low_trust_navigation_without_explicit_navigation_intent"
+
+    if tool_overlap > 0:
+        return ""
+    if intent_overlap >= 1 and scope_overlap >= 2:
+        return ""
+    if scope_overlap >= 4:
+        return ""
+    return "low_trust_insufficient_turn_evidence"
+
+
+def bfcl_low_trust_skill_matches_turn(skill: SkillArtifact, task: BenchmarkTask, turn_index: int, user_messages: List[Dict[str, Any]]) -> bool:
+    return low_trust_turn_match_reason(skill, task, turn_index, user_messages) == ""
 
 
 def error_aware_skill_query(
@@ -165,6 +372,7 @@ def bfcl_skill_rerank_key(
     source_extra_call_count = int(skill.metadata.get("source_extra_call_count") or 0)
     source_error_weight = int(sum((skill.metadata.get("source_error_counts") or {}).values()))
     return (
+        1 if query_requests_engine_start(query) and is_engine_start_brake_skill(skill) else 0,
         tool_overlap,
         global_overlap,
         intent_overlap,
@@ -190,16 +398,78 @@ def bfcl_skill_matches_turn(
     ]
     if forbid_keywords and any(keyword in query for keyword in forbid_keywords):
         return False
+    if _is_contextual_order_details_skill(skill) and not _query_requests_contextual_order_details(query):
+        return False
 
     return True
+
+
+def _is_contextual_order_details_skill(skill: SkillArtifact) -> bool:
+    metadata = skill.metadata or {}
+    domains = {str(item).strip() for item in (metadata.get("domains") or []) if str(item).strip()}
+    if "TradingBot" not in domains:
+        return False
+    action_tools = skill_action_tool_names(skill)
+    allowed_tools = {
+        str(item).strip()
+        for item in (metadata.get("allowed_tools") or [])
+        if str(item).strip()
+    }
+    tools = allowed_tools or action_tools
+    if not tools or not tools <= {"get_order_details"}:
+        return False
+    scope = " ".join(
+        str(item or "")
+        for item in (
+            skill.name,
+            skill.description,
+            skill.body,
+            skill.interface.summary,
+            skill.interface.usage,
+            " ".join(str(keyword) for keyword in (metadata.get("intent_keywords") or [])),
+        )
+    ).lower()
+    return "recent order" in scope or "latest order" in scope or "most recent order" in scope
+
+
+def _query_requests_contextual_order_details(query: str) -> bool:
+    query_lower = (query or "").lower()
+    if not query_lower:
+        return False
+    explicit_phrases = (
+        "latest order",
+        "recent order",
+        "most recent order",
+        "order details",
+        "details of the order",
+        "details of my order",
+        "verify the order",
+        "verify my order",
+        "review the order",
+        "review my order",
+        "status of the order",
+        "status of my order",
+    )
+    if any(phrase in query_lower for phrase in explicit_phrases):
+        return True
+    tokens = _text_tokens(query_lower)
+    detail_terms = {"detail", "details", "status", "verify", "verification", "review", "check", "show"}
+    order_terms = {"order", "orders", "transaction", "execution"}
+    return bool(tokens & detail_terms) and bool(tokens & order_terms)
 
 
 __all__ = [
     "task_query_text",
     "turn_query_text",
     "query_tool_overlap_score",
+    "skill_action_tool_names",
+    "bfcl_low_trust_counts_toward_task_limit",
+    "query_requests_engine_start",
+    "is_engine_start_brake_skill",
+    "low_trust_turn_match_reason",
     "error_aware_skill_query",
     "bfcl_retrieval_context",
+    "bfcl_low_trust_skill_matches_turn",
     "bfcl_skill_matches_task",
     "bfcl_skill_task_filter_reason",
     "bfcl_skill_rerank_key",

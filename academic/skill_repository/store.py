@@ -417,6 +417,7 @@ class ArtifactStore:
         predicate: Callable[[SkillArtifact], bool] | None = None,
         rerank_key: Callable[[SkillArtifact], tuple] | None = None,
         debug_context: Dict[str, Any] | None = None,
+        include_pending: bool = False,
     ) -> List[SkillArtifact]:
         audit = self.retrieve_audit(
             query,
@@ -425,6 +426,7 @@ class ArtifactStore:
             predicate=predicate,
             rerank_key=rerank_key,
             debug_context=debug_context,
+            include_pending=include_pending,
         )
         return [
             self._artifacts[item["name"]]
@@ -441,6 +443,7 @@ class ArtifactStore:
         predicate: Callable[[SkillArtifact], bool] | None = None,
         rerank_key: Callable[[SkillArtifact], tuple] | None = None,
         debug_context: Dict[str, Any] | None = None,
+        include_pending: bool = False,
     ) -> Dict[str, Any]:
         context = dict(debug_context or {})
         if not self._artifacts:
@@ -478,7 +481,10 @@ class ArtifactStore:
                     "source": artifact.metadata.get("source"),
                 },
             }
-            if not artifact.retrieval_enabled():
+            pending_allowed = bool(include_pending) and (
+                artifact.status == "pending" or bool(artifact.metadata.get("is_pending_skill"))
+            )
+            if not artifact.retrieval_enabled() and not pending_allowed:
                 row.update({"predicate_passed": False, "filter_reason": "retrieval_disabled", "score": 0.0, "base_score": 0.0, "tag_score": 0.0, "tag_matches": [], "rerank": []})
                 candidates.append(row)
                 continue
@@ -647,12 +653,14 @@ class ArtifactStore:
         artifacts: List[SkillArtifact] | None = None,
         *,
         include_types: Iterable[str] | None = None,
+        include_retrieval_disabled: bool = False,
     ) -> str:
         target = artifacts if artifacts is not None else self.all()
         if include_types is not None:
             allowed: Set[str] = {str(item) for item in include_types}
             target = [artifact for artifact in target if artifact.injection_type() in allowed]
-        target = [artifact for artifact in target if artifact.retrieval_enabled()]
+        if not include_retrieval_disabled:
+            target = [artifact for artifact in target if artifact.retrieval_enabled()]
         if not target:
             return "(no reusable skill artifacts retrieved)"
         return "\n\n".join(artifact.prompt_block() for artifact in target)

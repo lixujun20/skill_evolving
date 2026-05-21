@@ -16,11 +16,12 @@ from academic.benchmarks.spreadsheet.executor import (
     build_spreadsheet_notebook_turn_prompt as _build_spreadsheet_notebook_turn_prompt,
     build_spreadsheet_prompt as _build_spreadsheet_prompt,
     clip_notebook_text as _clip_notebook_text,
+    run_spreadsheet_task_bash_react as _run_spreadsheet_task_bash_react_impl,
     run_spreadsheet_task as _run_spreadsheet_task_impl,
     run_spreadsheet_task_notebook as _run_spreadsheet_task_notebook_impl,
     workbook_preview as _workbook_preview,
 )
-from academic.benchmarks.spreadsheet.loader import ensure_spreadsheetbench, load_spreadsheet_tasks
+from academic.benchmarks.spreadsheet.loader import ensure_spreadsheetbench, load_spreadsheet_task_pool, load_spreadsheet_tasks
 from academic.benchmarks.spreadsheet.maintenance.adapter import *  # noqa: F401,F403
 from academic.benchmarks.spreadsheet.maintenance.adapter import (
     SpreadsheetMaintenanceAdapter,
@@ -65,6 +66,8 @@ from academic.benchmarks.spreadsheet.skill_runtime import (
     looks_like_spreadsheet_python as _looks_like_spreadsheet_python,
     render_spreadsheet_skill_function as _render_spreadsheet_skill_function,
     run_code as _run_code,
+    is_spreadsheet_package_skill as _is_spreadsheet_package_skill,
+    write_spreadsheet_skill_packages as _write_spreadsheet_skill_packages,
     spreadsheet_callable_description as _spreadsheet_callable_description,
     spreadsheet_callable_kwargs as _spreadsheet_callable_kwargs,
     spreadsheet_column_value as _spreadsheet_column_value,
@@ -108,3 +111,8 @@ async def run_spreadsheet_task(*args: Any, **kwargs: Any) -> BenchmarkResult:
 async def run_spreadsheet_task_notebook(*args: Any, **kwargs: Any) -> BenchmarkResult:
     _spreadsheet_executor.ask_text_llm = ask_text_llm
     return await _run_spreadsheet_task_notebook_impl(*args, **kwargs)
+
+
+async def run_spreadsheet_task_bash_react(*args: Any, **kwargs: Any) -> BenchmarkResult:
+    _spreadsheet_executor.ask_text_llm = ask_text_llm
+    return await _run_spreadsheet_task_bash_react_impl(*args, **kwargs)

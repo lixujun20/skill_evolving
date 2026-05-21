@@ -27,6 +27,8 @@ class MaintenanceRunConfig:
     n_test_runs: int = 1
     micro_maintenance_step: int = 1
     macro_maintenance_step: int = 10
+    train_concurrency: int = 1
+    micro_maintenance_concurrency: int = 1
     test_concurrency: int = 1
     max_task_seconds: float | None = None
     top_k_skills: int = 5
@@ -218,6 +220,15 @@ class BenchmarkMaintenanceAdapter(Protocol):
     def store_snapshot(self, store: ArtifactStore) -> Dict[str, Any]:
         """Return a compact serializable store snapshot."""
 
+    def maintenance_lock_names(
+        self,
+        *,
+        detail: Dict[str, Any],
+        store: ArtifactStore,
+        config: MaintenanceRunConfig,
+    ) -> List[str]:
+        """Return skill/dependency names that must be write-locked for this detail."""
+
 
 class NoOpMaintenanceAdapter:
     """Base class for benchmarks that only support rollout at first."""
@@ -303,3 +314,13 @@ class NoOpMaintenanceAdapter:
                 for artifact in store.all()
             },
         }
+
+    def maintenance_lock_names(
+        self,
+        *,
+        detail: Dict[str, Any],
+        store: ArtifactStore,
+        config: MaintenanceRunConfig,
+    ) -> List[str]:
+        del detail, store, config
+        return []

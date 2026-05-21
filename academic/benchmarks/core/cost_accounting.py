@@ -184,6 +184,97 @@ def summarize_cost_events(events: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def summarize_token_request_curve(
+    events: Iterable[Dict[str, Any]],
+    *,
+    bucket_seconds: int = 60,
+) -> Dict[str, Any]:
+    rows = [copy.deepcopy(dict(event or {})) for event in events or [] if isinstance(event, dict)]
+    bucket_s = max(1, int(bucket_seconds or 60))
+    parsed: List[tuple[datetime | None, int, Dict[str, Any]]] = []
+    for idx, event in enumerate(rows):
+        parsed.append((_parse_event_ts(event.get("ts")), idx, event))
+    dated = [item for item in parsed if item[0] is not None]
+    start = min((item[0] for item in dated if item[0] is not None), default=None)
+
+    def empty_bucket(bucket_index: int, bucket_start_s: int | None) -> Dict[str, Any]:
+        return {
+            "bucket_index": bucket_index,
+            "bucket_start_s": bucket_start_s,
+            "n_calls": 0,
+            "input_tokens": 0,
+            "cache_input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "prompt_chars": 0,
+            "skill_prompt_chars": 0,
+            "system_prompt_chars": 0,
+            "final_conversation_chars": 0,
+            "duration_ms": 0,
+            "by_role": {},
+            "by_phase": {},
+        }
+
+    def empty_row() -> Dict[str, Any]:
+        return {
+            "n_calls": 0,
+            "input_tokens": 0,
+            "cache_input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "prompt_chars": 0,
+            "skill_prompt_chars": 0,
+            "system_prompt_chars": 0,
+            "final_conversation_chars": 0,
+            "duration_ms": 0,
+        }
+
+    def add(row: Dict[str, Any], event: Dict[str, Any]) -> None:
+        row["n_calls"] += 1
+        input_tokens = int(event.get("input_tokens") or event.get("prompt_tokens") or 0)
+        cache_tokens = int(event.get("cache_input_tokens") or 0)
+        output_tokens = int(event.get("output_tokens") or event.get("completion_tokens") or 0)
+        total_tokens = int(event.get("total_tokens") or (input_tokens + cache_tokens + output_tokens))
+        row["input_tokens"] += input_tokens
+        row["cache_input_tokens"] += cache_tokens
+        row["output_tokens"] += output_tokens
+        row["total_tokens"] += total_tokens
+        for key in (
+            "prompt_chars",
+            "skill_prompt_chars",
+            "system_prompt_chars",
+            "final_conversation_chars",
+            "duration_ms",
+        ):
+            row[key] += int(event.get(key) or 0)
+
+    buckets: Dict[int, Dict[str, Any]] = {}
+    undated_bucket = -1
+    for ts, idx, event in parsed:
+        if ts is None or start is None:
+            bucket_index = undated_bucket
+            bucket_start_s = None
+        else:
+            bucket_index = int((ts - start).total_seconds() // bucket_s)
+            bucket_start_s = bucket_index * bucket_s
+        bucket = buckets.setdefault(bucket_index, empty_bucket(bucket_index, bucket_start_s))
+        add(bucket, event)
+        role = str(event.get("role") or "unknown")
+        phase = str(event.get("phase") or "unscoped")
+        add(bucket["by_role"].setdefault(role, empty_row()), event)
+        add(bucket["by_phase"].setdefault(phase, empty_row()), event)
+        bucket.setdefault("first_event_index", idx)
+        bucket["last_event_index"] = idx
+
+    ordered = [buckets[key] for key in sorted(buckets)]
+    return {
+        "bucket_seconds": bucket_s,
+        "start_ts": start.isoformat() if start else None,
+        "n_events": len(rows),
+        "buckets": ordered,
+    }
+
+
 def cost_events_from_runs(runs: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     events: List[Dict[str, Any]] = []
     for run in runs or []:
@@ -195,10 +286,24 @@ def cost_events_from_runs(runs: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]
     return events
 
 
+def _parse_event_ts(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 __all__ = [
     "CostEvent",
     "PricingConfig",
     "cost_events_from_runs",
     "make_cost_event",
     "summarize_cost_events",
+    "summarize_token_request_curve",
 ]

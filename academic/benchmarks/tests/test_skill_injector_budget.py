@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from academic.benchmarks.core.runner import _aggregate
-from academic.benchmarks.core.skill_injector import BudgetSkillInjector, compact_skill_prompt_block
+from academic.benchmarks.core.skill_injector import BudgetSkillInjector, compact_skill_prompt_block, select_skill_context_with_llm
 from academic.benchmarks.core.types import SkillArtifact, SkillInterface
 
 
@@ -38,6 +38,34 @@ def test_compact_skill_prompt_omits_long_body_evidence() -> None:
     assert len(compact) <= 500
 
 
+def test_low_trust_skill_prompt_blocks_are_explicitly_marked() -> None:
+    artifact = _skill("trial_ticket_hint", "Use title, description, priority exactly.")
+    artifact.status = "trial"
+    artifact.metadata["executor_low_trust_hint"] = True
+
+    compact = compact_skill_prompt_block(artifact, max_chars=500)
+
+    assert "trust: unvalidated hint" in compact
+    assert "Use title, description, priority exactly" not in compact
+
+
+def test_compact_skill_prompt_does_not_show_partial_body_when_contract_missing() -> None:
+    code = "def reusable_skill():\n" + "\n".join(f"    value_{idx} = {idx}" for idx in range(100))
+    artifact = SkillArtifact(
+        name="body_only_skill",
+        kind="workflow_guardrail_card",
+        description="Body-only skill.",
+        body=code,
+        interface=SkillInterface(),
+    )
+
+    compact = compact_skill_prompt_block(artifact, max_chars=220)
+
+    assert "def reusable_skill" not in compact
+    assert "value_0" not in compact
+    assert "... " not in compact
+
+
 def test_budget_skill_injector_filters_redundant_and_limits_prompt_chars() -> None:
     first = _skill("ticket_priority_schema_a", "Use title, description, priority exactly.")
     redundant = _skill("ticket_priority_schema_b", "Same ticket schema rule with extra evidence.")
@@ -58,6 +86,97 @@ def test_budget_skill_injector_filters_redundant_and_limits_prompt_chars() -> No
     ]
     assert any(item["skill_name"] == "ticket_priority_schema_b" and item["reason"] == "redundant_candidate" for item in result.filtered)
     assert result.as_event()["prompt_chars"] <= 900
+
+
+async def test_llm_skill_injector_gate_runs_independent_of_full_presentation(monkeypatch) -> None:
+    relevant = _skill("ticket_priority_schema", "Use title, description, priority exactly.")
+    unrelated = _skill("spreadsheet_sum_formula", "Use SUMIF on spreadsheet columns.", tool="openpyxl")
+    calls = []
+
+    async def fake_ask_json(**kwargs):
+        calls.append(kwargs)
+        return {
+            "selected_skills": [{"skill_name": "ticket_priority_schema", "reason": "matches ticket creation"}],
+            "rejected_skills": [{"skill_name": "spreadsheet_sum_formula", "reason": "spreadsheet only"}],
+        }
+
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_json", fake_ask_json)
+
+    result = await select_skill_context_with_llm(
+        [relevant, unrelated],
+        query="create a high priority support ticket",
+        llm_config="unit-test",
+        model_name="mock-model",
+        presentation_mode="full",
+        allowed_injection_types={"informational", "workflow"},
+        max_selected=2,
+        benchmark="unit",
+        task_id="ticket_task",
+    )
+
+    assert calls and calls[0]["role"] == "skill_injector"
+    assert [item.artifact.name for item in result.injected] == ["ticket_priority_schema"]
+    assert result.injected[0].decision == "llm_select"
+    assert "spreadsheet_sum_formula" not in result.prompt()
+    assert result.filtered == [{"skill_name": "spreadsheet_sum_formula", "reason": "spreadsheet only"}]
+
+
+async def test_llm_skill_injector_falls_back_to_retrieved_order_on_failure(monkeypatch) -> None:
+    relevant = _skill("ticket_priority_schema", "Use title, description, priority exactly.")
+
+    async def fake_ask_json(**kwargs):
+        raise RuntimeError("unit failure")
+
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_json", fake_ask_json)
+
+    result = await select_skill_context_with_llm(
+        [relevant],
+        query="create a high priority support ticket",
+        llm_config="unit-test",
+        model_name="mock-model",
+        presentation_mode="full",
+        allowed_injection_types={"informational", "workflow"},
+        max_selected=1,
+        benchmark="unit",
+        task_id="ticket_task",
+    )
+
+    assert [item.artifact.name for item in result.injected] == ["ticket_priority_schema"]
+    assert "llm_injector_failed_fallback:RuntimeError" in result.injected[0].reason
+
+
+async def test_llm_skill_injector_uses_benchmark_specific_model_and_config(monkeypatch) -> None:
+    relevant = _skill("ticket_priority_schema", "Use title, description, priority exactly.")
+    calls = []
+
+    async def fake_ask_json(**kwargs):
+        calls.append(kwargs)
+        return {
+            "selected_skills": [{"skill_name": "ticket_priority_schema", "reason": "matches ticket creation"}],
+            "rejected_skills": [],
+        }
+
+    monkeypatch.setenv("UNIT_SKILL_INJECTOR_LLM_CONFIG", "haiku-proxy")
+    monkeypatch.setenv("UNIT_SKILL_INJECTOR_MODEL_NAME", "claude-haiku-3-5")
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_json", fake_ask_json)
+
+    result = await select_skill_context_with_llm(
+        [relevant],
+        query="create a high priority support ticket",
+        llm_config="sonnet-proxy",
+        model_name="claude-sonnet-4-5",
+        presentation_mode="full",
+        allowed_injection_types={"informational", "workflow"},
+        max_selected=1,
+        benchmark="unit",
+        task_id="ticket_task",
+    )
+
+    assert calls[0]["llm_config"] == "haiku-proxy"
+    assert calls[0]["model_name"] == "claude-haiku-3-5"
+    event = result.as_event()
+    assert event["llm_config"] == "haiku-proxy"
+    assert event["model_name"] == "claude-haiku-3-5"
 
 
 def test_aggregate_reports_per_token_utility() -> None:

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, List
@@ -23,12 +24,14 @@ from academic.benchmarks.bfcl import (
     run_bfcl_task,
     score_bfcl_calls,
 )
+from academic.benchmarks.bfcl.retrieval import bfcl_low_trust_counts_toward_task_limit, low_trust_turn_match_reason
 from academic.benchmarks.core.artifacts import ArtifactStore
 from academic.benchmarks.core.runner import (
     _build_bfcl_skill_bundles,
     _build_maintenance_test_results,
     _build_skill_test_result,
     _load_saved_details,
+    _select_tasks_by_id,
     _run_bfcl_baseline,
     _run_spreadsheet_baseline,
     _result_from_dict,
@@ -334,6 +337,106 @@ async def test_spreadsheet_runner_forwards_model_name(monkeypatch) -> None:
 
     assert calls[0]["llm_config"] == "local_claude_proxy"
     assert calls[0]["model_name"] == "claude-sonnet-4-5"
+
+
+async def test_spreadsheet_baseline_records_notebook_timeout_and_partial(monkeypatch, tmp_path: Path) -> None:
+    calls = []
+
+    async def fake_run_spreadsheet_task_notebook(task, **kwargs):
+        calls.append((task.task_id, kwargs))
+        if task.task_id == "sheet_timeout":
+            raise asyncio.TimeoutError()
+        return BenchmarkResult(
+            benchmark="spreadsheet",
+            task_id=task.task_id,
+            success=True,
+            score=1.0,
+            metrics={"elapsed_s": 0.1, "execution_mode": "notebook"},
+            trace={},
+        )
+
+    monkeypatch.setattr(
+        "academic.benchmarks.core.runner.run_spreadsheet_task_notebook",
+        fake_run_spreadsheet_task_notebook,
+    )
+    tasks = [
+        SimpleNamespace(task_id="sheet_ok", benchmark="spreadsheet", question="q", expected={}, metadata={}),
+        SimpleNamespace(task_id="sheet_timeout", benchmark="spreadsheet", question="q", expected={}, metadata={}),
+    ]
+    partial = tmp_path / "spreadsheet_partial.json"
+
+    details = await _run_spreadsheet_baseline(
+        tasks,
+        1,
+        "local_claude_proxy",
+        ArtifactStore(),
+        execution_mode="notebook",
+        max_task_seconds=3,
+        llm_request_timeout_s=3,
+        partial_output=partial,
+        concurrency=2,
+    )
+
+    assert [item["task_id"] for item in details] == ["sheet_ok", "sheet_timeout"]
+    timeout_run = details[1]["runs"][0]
+    assert timeout_run["success"] is False
+    assert timeout_run["metrics"]["exception"] == "TaskTimeout"
+    assert timeout_run["metrics"]["execution_mode"] == "notebook"
+    assert calls[0][1]["llm_request_timeout_s"] == 3
+    assert partial.exists()
+    payload = json.loads(partial.read_text())
+    assert payload["completed_tasks"] == 2
+    assert [item["task_id"] for item in payload["details"]] == ["sheet_ok", "sheet_timeout"]
+
+
+async def test_spreadsheet_baseline_routes_bash_react_mode(monkeypatch) -> None:
+    calls = []
+
+    async def fake_run_spreadsheet_task_bash_react(task, **kwargs):
+        calls.append((task.task_id, kwargs))
+        return BenchmarkResult(
+            benchmark="spreadsheet",
+            task_id=task.task_id,
+            success=True,
+            score=1.0,
+            metrics={"elapsed_s": 0.1, "execution_mode": "bash_react"},
+            trace={},
+        )
+
+    monkeypatch.setattr(
+        "academic.benchmarks.core.runner.run_spreadsheet_task_bash_react",
+        fake_run_spreadsheet_task_bash_react,
+    )
+    task = SimpleNamespace(task_id="sheet_bash", benchmark="spreadsheet", question="q", expected={}, metadata={})
+
+    details = await _run_spreadsheet_baseline(
+        [task],
+        1,
+        "local_claude_proxy",
+        ArtifactStore(),
+        execution_mode="bash_react",
+        max_turns=11,
+        max_task_seconds=3,
+        llm_request_timeout_s=3,
+    )
+
+    assert details[0]["runs"][0]["metrics"]["execution_mode"] == "bash_react"
+    assert calls[0][1]["max_turns"] == 11
+    assert calls[0][1]["llm_request_timeout_s"] == 3
+
+
+def test_runner_select_tasks_by_id_preserves_manifest_order(tmp_path: Path) -> None:
+    tasks = [
+        SimpleNamespace(task_id="sheet_a"),
+        SimpleNamespace(task_id="sheet_b"),
+        SimpleNamespace(task_id="sheet_c"),
+    ]
+    manifest = tmp_path / "ids.json"
+    manifest.write_text(json.dumps({"task_ids": ["sheet_c", "sheet_a"]}))
+
+    selected = _select_tasks_by_id(tasks, manifest)
+
+    assert [task.task_id for task in selected] == ["sheet_c", "sheet_a"]
 
 
 async def test_spreadsheet_task_passes_model_override_to_llm(monkeypatch, tmp_path: Path) -> None:
@@ -755,6 +858,108 @@ async def test_run_bfcl_task_error_feedback_uses_step_start_context_update(monke
 
 
 @pytest.mark.asyncio
+async def test_run_bfcl_task_legacy_every_step_retrieval_without_error(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_SKILL_INJECTOR_GATE", "deterministic")
+    monkeypatch.setenv("BFCL_DYNAMIC_RETRIEVAL_POLICY", "every_step")
+
+    class FakeToolClient:
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def ask(self, *, messages, system, tools, temperature, max_request_wall_s):
+            self.calls += 1
+            if self.calls == 1:
+                return _ToolModelResponse(
+                    content="",
+                    tool_calls=[{"id": "call_1", "name": "get_ticket", "arguments": "{}"}],
+                    assistant_msg={
+                        "role": "assistant",
+                        "content": "",
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {"name": "get_ticket", "arguments": "{}"},
+                            }
+                        ],
+                    },
+                )
+            return _ToolModelResponse(
+                content="done",
+                tool_calls=[],
+                assistant_msg={"role": "assistant", "content": "done"},
+            )
+
+        def tool_result_message(self, tool_call_id: str, content: str):
+            return {"role": "tool", "tool_call_id": tool_call_id, "content": content}
+
+        def total_tokens(self) -> int:
+            return 0
+
+    class FakeEnv:
+        available = True
+        backend_name = "official"
+
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def call(self, name, args):
+            return {"ticket_id": 123}, None
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter._make_tool_api_client", lambda **kwargs: FakeToolClient())
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter.BFCLOfficialEnvironment", FakeEnv)
+
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="ticket-every-step",
+        question=[[{"role": "user", "content": "Check ticket state."}]],
+        expected=[["get_ticket(ticket_id=123)"]],
+        metadata={"involved_classes": ["TicketAPI"]},
+        input_artifacts={"initial_config": {}},
+    )
+    store = ArtifactStore([
+        SkillArtifact(
+            name="ticket_state_rule",
+            kind="interface_contract_card",
+            description="Reuse ticket state after a lookup.",
+            body="After get_ticket returns ticket state, continue with that state.",
+            metadata={
+                "domains": ["TicketAPI"],
+                "allowed_tools": ["get_ticket"],
+                "intent_keywords": ["ticket", "state"],
+            },
+        )
+    ])
+
+    result = await run_bfcl_task(
+        task,
+        llm_config="unused",
+        model_name="fake",
+        tools=[
+            {"type": "function", "function": {"name": "get_ticket", "parameters": {"type": "object", "properties": {}}}},
+        ],
+        artifact_store=store,
+        top_k_skills=1,
+        min_skill_score=0.0,
+        max_steps_per_turn=2,
+        adapter_mode="official",
+        execution_backend="official",
+        prompt_style="native",
+        tool_api_style="auto",
+        skill_injection_mode="prompt_only",
+        debug_sink=DebugEventSink(collect_events=True),
+    )
+
+    retrieval_events = [event for event in result.trace["debug_events"] if event["event_type"] == "retrieval"]
+    assert [event.get("trigger") for event in retrieval_events].count("step_start") == 1
+    skipped = [event for event in result.trace["debug_events"] if event["event_type"] == "dynamic_retrieval_skipped"]
+    assert not skipped
+
+
+@pytest.mark.asyncio
 async def test_bfcl_function_skill_expands_to_raw_tool_calls(monkeypatch) -> None:
     class FakeToolClient:
         prompt_tokens = 0
@@ -766,13 +971,16 @@ async def test_bfcl_function_skill_expands_to_raw_tool_calls(monkeypatch) -> Non
 
         async def ask(self, *, messages, system, tools, temperature, max_request_wall_s):
             self.calls += 1
+            tool_names = [tool["function"]["name"] for tool in tools]
+            assert "skill_001" in tool_names
+            assert "skill__create_ticket_high_priority" not in tool_names
             if self.calls == 1:
                 return _ToolModelResponse(
                     content="",
                     tool_calls=[
                         {
                             "id": "call_skill_1",
-                            "name": "skill__create_ticket_high_priority",
+                            "name": "skill_001",
                             "arguments": '{"title": "Issue", "description": "Help"}',
                         }
                     ],
@@ -784,7 +992,7 @@ async def test_bfcl_function_skill_expands_to_raw_tool_calls(monkeypatch) -> Non
                                 "id": "call_skill_1",
                                 "type": "function",
                                 "function": {
-                                    "name": "skill__create_ticket_high_priority",
+                                    "name": "skill_001",
                                     "arguments": '{"title": "Issue", "description": "Help"}',
                                 },
                             }
@@ -895,6 +1103,7 @@ async def test_bfcl_function_skill_expands_to_raw_tool_calls(monkeypatch) -> Non
 
     assert result.success is True
     assert result.metrics["called_skill_tools"] == ["create_ticket_high_priority"]
+    assert result.trace["skill_events"][0]["tool_name"] == "skill_001"
     assert result.trace["tool_calls"] == [
         {
             "name": "create_ticket",
@@ -903,6 +1112,14 @@ async def test_bfcl_function_skill_expands_to_raw_tool_calls(monkeypatch) -> Non
             "tool_call_id": "skill::create_ticket_high_priority::0",
             "result": {"ok": True},
             "error": None,
+        }
+    ]
+    alias_events = [event for event in result.trace["debug_events"] if event["event_type"] == "skill_tool_aliases"]
+    assert alias_events[0]["output"]["aliases"] == [
+        {
+            "skill_name": "create_ticket_high_priority",
+            "tool_name": "skill_001",
+            "legacy_tool_name": "skill__create_ticket_high_priority",
         }
     ]
     assert any(event["event_type"] == "function_skill_raw_tool_call" for event in result.trace["debug_events"])
@@ -1025,6 +1242,40 @@ def test_bfcl_skill_predicate_rejects_cross_domain_and_cross_tool_noise() -> Non
     assert _bfcl_skill_matches_task(vehicle_skill, vehicle_task) is True
 
 
+def test_bfcl_contextual_order_details_skill_requires_details_turn_intent() -> None:
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="trading-order-details",
+        question=[
+            [{"role": "user", "content": "Please execute an order for MSFT at current market price, targeting 150 shares."}],
+            [{"role": "user", "content": "May I have the details of the most recent order I've placed to verify the transaction?"}],
+        ],
+        expected=[
+            ["get_stock_info(symbol='MSFT')", "place_order(order_type='Buy',symbol='MSFT',price=310.23,amount=150)"],
+            ["get_order_details(order_id=12446)"],
+        ],
+        metadata={"involved_classes": ["TradingBot"]},
+    )
+    skill = SkillArtifact(
+        name="retrieve_recent_order_details_from_context",
+        kind="workflow_guardrail_card",
+        description="Retrieve recent/latest order details from contextual order id.",
+        body="When user asks for latest or recent order details, call get_order_details with contextual order_id.",
+        interface=SkillInterface(
+            summary="Retrieve recent order details using contextual order id.",
+            usage="Apply when user asks for latest/recent/most recent order details.",
+        ),
+        metadata={
+            "domains": ["TradingBot"],
+            "allowed_tools": ["get_order_details"],
+            "intent_keywords": ["details", "latest order", "recent order", "most recent order", "verify"],
+        },
+    )
+
+    assert _bfcl_skill_matches_turn(skill, task, 0, task.question[0]) is False
+    assert _bfcl_skill_matches_turn(skill, task, 1, task.question[1]) is True
+
+
 def test_spreadsheet_answer_range_parser_handles_official_multi_ranges() -> None:
     assert _answer_range_refs("'Main!'A2:M70", default_sheet="Main") == [("Main", "A2:M70")]
     assert _answer_range_refs(
@@ -1058,6 +1309,484 @@ def test_bfcl_skill_predicate_does_not_use_expected_tools_as_filter() -> None:
         metadata={"domains": ["TicketAPI"], "allowed_tools": ["not_the_expected_tool"]},
     )
     assert _bfcl_skill_matches_task(skill, task) is True
+
+
+def test_bfcl_low_trust_navigation_requires_current_navigation_intent() -> None:
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="vehicle-navigation",
+        question=[
+            [{"role": "user", "content": "If any tire is below 40 PSI, point me to the closest tire service station."}],
+            [{"role": "user", "content": "Set up the GPS to guide me directly to that shop."}],
+        ],
+        expected=[
+            ["check_tire_pressure()", "find_nearest_tire_shop()"],
+            ["set_navigation(destination='456 Oakwood Avenue, Rivermist, 83214')"],
+        ],
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    skill = SkillArtifact(
+        name="navigate_to_tire_shop_when_pressure_low_trial",
+        kind="workflow_guardrail_card",
+        description="Navigate to the nearest tire shop when pressure is low.",
+        body="Call find_nearest_tire_shop then set_navigation when the user asks for tire shop navigation.",
+        status="trial",
+        interface=SkillInterface(
+            summary="Tire shop navigation workflow when pressure is insufficient.",
+            usage="Apply after low tire pressure and user asks for navigation.",
+            input_contract={"domain": "VehicleControlAPI"},
+            output_contract={"tool_call_order": ["find_nearest_tire_shop()", "set_navigation(destination=<shop_location>)"]},
+            invocation_contract={"injection_type": "workflow"},
+            compatibility_notes="Do not apply when user only asks to find a tire shop.",
+        ),
+        metadata={
+            "domains": ["VehicleControlAPI"],
+            "allowed_tools": ["find_nearest_tire_shop", "set_navigation"],
+            "intent_keywords": ["tire pressure", "tire shop", "navigate", "low pressure"],
+            "candidate_group_id": "g1",
+            "promotion_state": "trial",
+            "injection_type": "workflow",
+        },
+    )
+
+    assert (
+        low_trust_turn_match_reason(skill, task, 0, task.question[0])
+        == "low_trust_navigation_without_explicit_navigation_intent"
+    )
+    assert low_trust_turn_match_reason(skill, task, 1, task.question[1]) == ""
+
+
+def test_bfcl_low_trust_navigation_does_not_treat_generic_guidance_as_navigation_intent() -> None:
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="vehicle-navigation-guide-only",
+        question=[
+            [
+                {
+                    "role": "user",
+                    "content": (
+                        "I've initiated my vehicle, and I'd greatly appreciate it if you could take a look at the "
+                        "tire pressures. Should any tire display a pressure below 40 PSI, kindly guide me to the "
+                        "nearest tire service facility for a fix."
+                    ),
+                }
+            ],
+            [{"role": "user", "content": "Set our navigation to that tire service facility."}],
+        ],
+        expected=[
+            ["check_tire_pressure()", "find_nearest_tire_shop()"],
+            ["set_navigation(destination='456 Oakwood Avenue, Rivermist, 83214')"],
+        ],
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    skill = SkillArtifact(
+        name="vehicle_tire_service_navigation_workflow_trial",
+        kind="workflow_guardrail_card",
+        description="Find a tire service facility and set vehicle navigation to it.",
+        body="Call find_nearest_tire_shop, then call set_navigation with the returned shop location.",
+        status="trial",
+        metadata={
+            "domains": ["VehicleControlAPI"],
+            "allowed_tools": ["find_nearest_tire_shop", "set_navigation"],
+            "intent_keywords": ["tire", "service", "navigation"],
+            "candidate_group_id": "g1",
+            "promotion_state": "trial",
+            "injection_type": "workflow",
+        },
+    )
+
+    assert (
+        low_trust_turn_match_reason(skill, task, 0, task.question[0])
+        == "low_trust_navigation_without_explicit_navigation_intent"
+    )
+    assert low_trust_turn_match_reason(skill, task, 1, task.question[1]) == ""
+
+
+@pytest.mark.asyncio
+async def test_bfcl_trial_supplement_marks_trial_skill_low_trust(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_SKILL_INJECTOR_GATE", "llm")
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="vehicle-task",
+        question=[[{"role": "user", "content": "Start the engine."}]],
+        expected=[["pressBrakePedal(pedalPosition=100)", "startEngine()"]],
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    trial_skill = SkillArtifact(
+        name="press_brake_before_starting_engine_trial",
+        kind="workflow_guardrail_card",
+        description="Press the brake pedal before starting the vehicle engine.",
+        body="Call pressBrakePedal before startEngine when starting the engine.",
+        status="trial",
+        metadata={
+            "domains": ["VehicleControlAPI"],
+            "allowed_tools": ["pressBrakePedal", "startEngine"],
+            "intent_keywords": ["start", "engine"],
+            "candidate_group_id": "g1",
+            "candidate_group_role": "alternative",
+            "promotion_state": "trial",
+            "injection_type": "workflow",
+        },
+    )
+    captured = {}
+
+    async def fake_select(artifacts, **kwargs):
+        captured["artifacts"] = artifacts
+        from academic.benchmarks.core.skill_injector import InjectedSkill, SkillInjectionResult
+
+        result = SkillInjectionResult(mode="unit")
+        result.injected = [
+            InjectedSkill(
+                artifact=artifacts[0],
+                decision="unit",
+                reason="unit",
+                prompt_block=artifacts[0].prompt_block(),
+                prompt_chars=len(artifacts[0].prompt_block()),
+            )
+        ] if artifacts else []
+        return result
+
+    class NoCallClient:
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        async def ask(self, **kwargs):
+            return None
+
+        def total_tokens(self):
+            return 0
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter.select_skill_context_with_llm", fake_select)
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter._make_tool_api_client", lambda **kwargs: NoCallClient())
+
+    result = await run_bfcl_task(
+        task,
+        llm_config="mock",
+        tools=[
+            {"type": "function", "function": {"name": "pressBrakePedal", "parameters": {"type": "object", "properties": {}}}},
+            {"type": "function", "function": {"name": "startEngine", "parameters": {"type": "object", "properties": {}}}},
+        ],
+        artifact_store=ArtifactStore([trial_skill]),
+        top_k_skills=1,
+        allow_trial_skills=False,
+        trial_supplement_k=1,
+        max_steps_per_turn=1,
+    )
+
+    assert captured["artifacts"][0].name == trial_skill.name
+    assert captured["artifacts"][0].metadata["executor_low_trust_hint"] is True
+    assert result.metrics["retrieved_skills"] == [trial_skill.name]
+
+
+@pytest.mark.asyncio
+async def test_bfcl_injector_rescues_explicit_engine_start_subtask(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_SKILL_INJECTOR_GATE", "llm")
+    monkeypatch.setenv("BFCL_ENABLE_ENGINE_START_BRAKE_RESCUE", "1")
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="vehicle-engine-subtask",
+        question=[[{"role": "user", "content": "Please post the update, then start the engine."}]],
+        expected=[["pressBrakePedal(pedalPosition=1.0)", "startEngine(ignitionMode='START')"]],
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    brake_skill = SkillArtifact(
+        name="press_brake_before_starting_engine_trial",
+        kind="workflow_guardrail_card",
+        description="Press the brake pedal before starting the vehicle engine.",
+        body="Call pressBrakePedal(pedalPosition=1.0) before startEngine(ignitionMode='START').",
+        status="trial",
+        metadata={
+            "domains": ["VehicleControlAPI"],
+            "allowed_tools": ["pressBrakePedal", "startEngine"],
+            "intent_keywords": ["start", "engine"],
+            "candidate_group_id": "g1",
+            "promotion_state": "trial",
+            "injection_type": "workflow",
+        },
+    )
+    captured = {}
+
+    async def fake_select(artifacts, **kwargs):
+        captured["artifacts"] = list(artifacts)
+        from academic.benchmarks.core.skill_injector import SkillInjectionResult
+
+        result = SkillInjectionResult(mode="unit")
+        result.filtered = [{"skill_name": artifact.name, "reason": "unit_rejected"} for artifact in artifacts]
+        return result
+
+    class NoCallClient:
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        async def ask(self, **kwargs):
+            return None
+
+        def total_tokens(self):
+            return 0
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter.select_skill_context_with_llm", fake_select)
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter._make_tool_api_client", lambda **kwargs: NoCallClient())
+
+    result = await run_bfcl_task(
+        task,
+        llm_config="mock",
+        tools=[
+            {"type": "function", "function": {"name": "pressBrakePedal", "parameters": {"type": "object", "properties": {}}}},
+            {"type": "function", "function": {"name": "startEngine", "parameters": {"type": "object", "properties": {}}}},
+        ],
+        artifact_store=ArtifactStore([brake_skill]),
+        top_k_skills=1,
+        allow_trial_skills=False,
+        trial_supplement_k=1,
+        max_steps_per_turn=1,
+    )
+
+    assert captured["artifacts"][0].name == brake_skill.name
+    assert result.metrics["prompt_injected_skills"] == [brake_skill.name]
+
+
+@pytest.mark.asyncio
+async def test_bfcl_legacy_deterministic_injector_gate_skips_llm(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_SKILL_INJECTOR_GATE", "deterministic")
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="ticket-deterministic-injector",
+        question=[[{"role": "user", "content": "Create a support ticket."}]],
+        expected=[["create_ticket(title='Issue')"]],
+        metadata={"involved_classes": ["TicketAPI"]},
+        input_artifacts={"initial_config": {}},
+    )
+    skill = SkillArtifact(
+        name="ticket_creation_rule",
+        kind="interface_contract_card",
+        description="Create tickets directly for support requests.",
+        body="For TicketAPI support requests, call create_ticket.",
+        metadata={
+            "domains": ["TicketAPI"],
+            "allowed_tools": ["create_ticket"],
+            "intent_keywords": ["support", "ticket"],
+        },
+    )
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("LLM injector should not run in deterministic gate mode")
+
+    class NoCallClient:
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        async def ask(self, **kwargs):
+            return None
+
+        def total_tokens(self):
+            return 0
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter.select_skill_context_with_llm", fail_if_called)
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter._make_tool_api_client", lambda **kwargs: NoCallClient())
+
+    result = await run_bfcl_task(
+        task,
+        llm_config="mock",
+        tools=[
+            {"type": "function", "function": {"name": "create_ticket", "parameters": {"type": "object", "properties": {}}}},
+        ],
+        artifact_store=ArtifactStore([skill]),
+        top_k_skills=1,
+        max_steps_per_turn=1,
+        skill_injection_mode="prompt_only",
+        skill_injector_mode="full",
+        debug_sink=DebugEventSink(collect_events=True),
+    )
+
+    assert result.metrics["prompt_injected_skills"] == [skill.name]
+    injector_events = [event for event in result.trace["debug_events"] if event["event_type"] == "skill_injector"]
+    assert injector_events
+    assert injector_events[0]["output"]["gate"] == "deterministic"
+
+
+@pytest.mark.asyncio
+async def test_bfcl_injector_rescue_does_not_rescue_generic_navigation(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_SKILL_INJECTOR_GATE", "llm")
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="vehicle-navigation-guide-only",
+        question=[
+            [
+                {
+                    "role": "user",
+                    "content": "Check the tire pressures and guide me to the nearest service facility if needed.",
+                }
+            ]
+        ],
+        expected=[["check_tire_pressure()"]],
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    nav_skill = SkillArtifact(
+        name="vehicle_tire_service_navigation_workflow_trial",
+        kind="workflow_guardrail_card",
+        description="Find a tire service facility and set vehicle navigation to it.",
+        body="Call find_nearest_tire_shop, then call set_navigation with the returned shop location.",
+        status="trial",
+        metadata={
+            "domains": ["VehicleControlAPI"],
+            "allowed_tools": ["find_nearest_tire_shop", "set_navigation"],
+            "intent_keywords": ["tire", "service", "navigation"],
+            "candidate_group_id": "g1",
+            "promotion_state": "trial",
+            "injection_type": "workflow",
+        },
+    )
+
+    async def fake_select(artifacts, **kwargs):
+        from academic.benchmarks.core.skill_injector import SkillInjectionResult
+
+        result = SkillInjectionResult(mode="unit")
+        result.filtered = [{"skill_name": artifact.name, "reason": "unit_rejected"} for artifact in artifacts]
+        return result
+
+    class NoCallClient:
+        prompt_tokens = 0
+        completion_tokens = 0
+
+        async def ask(self, **kwargs):
+            return None
+
+        def total_tokens(self):
+            return 0
+
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter.select_skill_context_with_llm", fake_select)
+    monkeypatch.setattr("academic.benchmarks.bfcl.adapter._make_tool_api_client", lambda **kwargs: NoCallClient())
+
+    result = await run_bfcl_task(
+        task,
+        llm_config="mock",
+        tools=[
+            {"type": "function", "function": {"name": "find_nearest_tire_shop", "parameters": {"type": "object", "properties": {}}}},
+            {"type": "function", "function": {"name": "set_navigation", "parameters": {"type": "object", "properties": {}}}},
+        ],
+        artifact_store=ArtifactStore([nav_skill]),
+        top_k_skills=1,
+        allow_trial_skills=True,
+        max_steps_per_turn=1,
+    )
+
+    assert result.metrics["prompt_injected_skills"] == []
+
+
+def test_bfcl_trial_supplement_caps_low_trust_candidates_per_task() -> None:
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="vehicle-task",
+        question=[
+            [{"role": "user", "content": "Set GPS navigation to the nearest tire shop."}],
+            [{"role": "user", "content": "Set GPS navigation to the nearest gas station."}],
+        ],
+        expected=[
+            ["set_navigation(destination='456 Oakwood Avenue, Rivermist, 83214')"],
+            ["set_navigation(destination='101 Fuel Road, Rivermist, 83214')"],
+        ],
+        metadata={"involved_classes": ["VehicleControlAPI"]},
+    )
+    skills = [
+        SkillArtifact(
+            name=f"vehicle_navigation_trial_{idx}",
+            kind="workflow_guardrail_card",
+            description="Set vehicle navigation for a requested destination.",
+            body="Call set_navigation when the user explicitly asks for GPS navigation.",
+            status="trial",
+            metadata={
+                "domains": ["VehicleControlAPI"],
+                "allowed_tools": ["set_navigation"],
+                "intent_keywords": ["navigation", "navigate", "gps"],
+                "candidate_group_id": f"g{idx}",
+                "promotion_state": "trial",
+                "injection_type": "workflow",
+            },
+        )
+        for idx in range(2)
+    ]
+    policy = _RetrievalPolicy(
+        store=ArtifactStore(skills),
+        task=task,
+        top_k_skills=0,
+        min_skill_score=0.0,
+        allow_trial_skills=False,
+        trial_supplement_k=1,
+        low_trust_total_limit=1,
+    )
+
+    first, _first_audit = policy.retrieve_for_turn(turn_index=0, user_messages=task.question[0])
+    second, second_audit = policy.retrieve_for_turn(turn_index=1, user_messages=task.question[1])
+
+    assert len(first) == 1
+    assert second == []
+    assert any(
+        item.get("filter_reason") == "low_trust_task_total_limit"
+        for item in (second_audit.get("low_trust_supplement") or {}).get("candidates", [])
+    )
+
+
+def test_bfcl_low_trust_task_limit_only_counts_high_risk_actions() -> None:
+    task = BenchmarkTask(
+        benchmark="bfcl_v3",
+        task_id="trading-task",
+        question=[
+            [{"role": "user", "content": "I'm exploring technology sector investments. Could you offer a list of stock symbols to consider?"}],
+            [{"role": "user", "content": "Please execute an order for MSFT at current market price, targeting 150 shares."}],
+        ],
+        expected=[
+            ["get_available_stocks(sector='Technology')"],
+            ["get_stock_info(symbol='MSFT')", "place_order(order_type='Buy',symbol='MSFT',price=310.23,amount=150)"],
+        ],
+        metadata={"involved_classes": ["TradingBot"]},
+    )
+    list_skill = SkillArtifact(
+        name="trading_list_symbols_trial",
+        kind="workflow_guardrail_card",
+        description="List stock symbols for a requested sector.",
+        body="Call get_available_stocks when the user asks for stock symbols in a sector.",
+        status="trial",
+        metadata={
+            "domains": ["TradingBot"],
+            "allowed_tools": ["get_available_stocks"],
+            "intent_keywords": ["sector", "symbols", "stocks"],
+            "candidate_group_id": "g1",
+            "promotion_state": "trial",
+            "injection_type": "workflow",
+        },
+    )
+    buy_skill = SkillArtifact(
+        name="buy_order_fetch_current_price_workflow_trial",
+        kind="workflow_guardrail_card",
+        description="Fetch current stock price before placing a market-price buy order.",
+        body="For buy orders at current market price, call get_stock_info first, then call place_order with the retrieved price.",
+        status="trial",
+        metadata={
+            "domains": ["TradingBot"],
+            "allowed_tools": ["get_stock_info", "place_order"],
+            "intent_keywords": ["buy order", "current market price", "price lookup"],
+            "candidate_group_id": "g2",
+            "promotion_state": "trial",
+            "injection_type": "workflow",
+        },
+    )
+    policy = _RetrievalPolicy(
+        store=ArtifactStore([list_skill, buy_skill]),
+        task=task,
+        top_k_skills=0,
+        min_skill_score=0.0,
+        allow_trial_skills=False,
+        trial_supplement_k=1,
+        low_trust_total_limit=1,
+    )
+
+    first, _first_audit = policy.retrieve_for_turn(turn_index=0, user_messages=task.question[0])
+    second, _second_audit = policy.retrieve_for_turn(turn_index=1, user_messages=task.question[1])
+
+    assert [skill.name for skill in first] == [list_skill.name]
+    assert [skill.name for skill in second] == [buy_skill.name]
+    assert bfcl_low_trust_counts_toward_task_limit(list_skill) is False
+    assert bfcl_low_trust_counts_toward_task_limit(buy_skill) is False
 
 
 def test_turn_skill_constraints_do_not_leak_expected_tools() -> None:

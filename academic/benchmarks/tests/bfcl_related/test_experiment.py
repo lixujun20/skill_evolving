@@ -28,6 +28,10 @@ from academic.benchmarks.bfcl.related.experiment import (
     _build_candidate_group_feedback_rows,
     _select_macro_candidate_group_feedback_rows,
     _apply_candidate_group_competition_decisions,
+    _append_candidate_group_replay_rows,
+    _apply_group_refiner_actions,
+    _group_refiner_actions_from_feedback_rows,
+    _run_group_maintenance,
     _mark_prior_artifacts_pending,
     _normalize_role_feedback_memory,
     _pending_skill_summary,
@@ -40,10 +44,12 @@ from academic.benchmarks.bfcl.related.experiment import (
     _write_current_round_sidecars,
     _run_related_baseline,
     _run_related_evolve_experiment,
+    _sample_replay_rows_for_role,
     rebuild_checkpoint_from_sidecars,
     build_analysis_artifacts,
     validate_experiment_config,
 )
+from academic.benchmarks.bfcl.maintenance.adapter import extract_bfcl_skill_artifacts_llm
 from academic.benchmarks.bfcl.related.manifest import (
     build_curated_related_task_manifest,
     validate_curated_manifest,
@@ -66,6 +72,104 @@ def test_curated_manifest_has_50_50_split() -> None:
     assert len(manifest["test_task_ids"]) == 50
     assert not (set(manifest["train_task_ids"]) & set(manifest["test_task_ids"]))
     assert manifest["train_tasks"][0]["why_related"]
+
+
+@pytest.mark.asyncio
+async def test_bfcl_extraction_metadata_preserves_governed_scope(monkeypatch) -> None:
+    observed = []
+
+    async def fake_extract(*args, **kwargs):
+        observed.append(kwargs)
+        return [
+            SkillArtifact(
+                name="cancel_booking_rule",
+                kind="workflow_guardrail_card",
+                description="Cancel booking with id.",
+                body="Use the booking id when canceling.",
+                metadata={
+                    "domains": ["TravelAPI"],
+                    "allowed_tools": ["cancel_booking"],
+                    "intent_keywords": ["cancel"],
+                },
+            )
+        ]
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.maintenance.adapter.extract_skill_artifacts_from_results_llm",
+        fake_extract,
+    )
+
+    artifacts = await extract_bfcl_skill_artifacts_llm(
+        [
+            {
+                "task_id": "travel_1",
+                "task": {"metadata": {"involved_classes": ["TravelAPI"]}},
+                "trace": {
+                    "tool_calls": [
+                        {"name": "lookup_booking"},
+                        {"name": "cancel_booking"},
+                        {"name": "contact_customer_support"},
+                    ]
+                },
+                "metrics": {},
+            }
+        ],
+        tool_schemas=[
+            {"type": "function", "function": {"name": "lookup_booking"}},
+            {"type": "function", "function": {"name": "cancel_booking"}},
+            {"type": "function", "function": {"name": "contact_customer_support"}},
+        ],
+        existing_artifacts=[],
+        extractor_rules=[],
+        llm_config="mock",
+    )
+
+    assert observed[0]["tool_schemas"]
+    assert artifacts[0].metadata["allowed_tools"] == ["cancel_booking"]
+    assert artifacts[0].metadata["domains"] == ["TravelAPI"]
+    assert "metadata_quality" not in artifacts[0].metadata
+
+
+@pytest.mark.asyncio
+async def test_bfcl_extraction_metadata_marks_missing_scope_without_all_or_batch_tools(monkeypatch) -> None:
+    async def fake_extract(*args, **kwargs):
+        return [
+            SkillArtifact(
+                name="underspecified_rule",
+                kind="workflow_guardrail_card",
+                description="Too broad.",
+                body="Do something useful.",
+                metadata={"domains": ["all"], "allowed_tools": []},
+            )
+        ]
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.maintenance.adapter.extract_skill_artifacts_from_results_llm",
+        fake_extract,
+    )
+
+    artifacts = await extract_bfcl_skill_artifacts_llm(
+        [
+            {
+                "task_id": "ticket_1",
+                "task": {"metadata": {"involved_classes": ["TicketAPI"]}},
+                "trace": {"tool_calls": [{"name": "get_ticket"}, {"name": "edit_ticket"}]},
+                "metrics": {},
+            }
+        ],
+        tool_schemas=[],
+        existing_artifacts=[],
+        extractor_rules=[],
+        llm_config="mock",
+    )
+
+    metadata = artifacts[0].metadata
+    assert metadata["allowed_tools"] == []
+    assert metadata["domains"] == []
+    assert metadata["metadata_quality"]["missing_allowed_tools"] is True
+    assert metadata["metadata_quality"]["missing_domains"] is True
+    assert metadata["metadata_quality"]["observed_task_tools"] == ["edit_ticket", "get_ticket"]
+    assert metadata["metadata_quality"]["observed_task_domains"] == ["TicketAPI"]
 
 
 def test_segment_vector_index_records_rows_without_embeddings_when_not_strict() -> None:
@@ -206,26 +310,498 @@ def test_candidate_group_feedback_selects_winner_and_marks_loser() -> None:
         credit_events=credit_events,
         maintenance_test_results=[],
     )
+    selected_rows = _select_macro_candidate_group_feedback_rows(
+        raw_rows=rows,
+        state={},
+        macro_index=0,
+        current_task_index=3,
+        min_usage=1,
+        min_age_tasks=1,
+        low_usage_patience=3,
+    )
 
     assert rows[0]["winner"] == "skill_win"
     assert rows[0]["losers"] == ["skill_lose"]
+    assert rows[0]["members"][0]["exposure_records"]
+    assert rows[0]["members"][0]["credit_records"]
+    assert rows[0]["members"][0]["exposure_count"] == 1
+    assert rows[0]["members"][0]["helpful_per_exposure"] == 1.0
+    assert rows[0]["members"][1]["harmful_per_exposure"] == 1.0
     store = ArtifactStore(
         [
             SkillArtifact(name="skill_win", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id, "candidate_group_role": "alternative"}),
             SkillArtifact(name="skill_lose", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id, "candidate_group_role": "alternative"}),
         ]
     )
-    decisions = _apply_candidate_group_competition_decisions(store=store, group_feedback_rows=rows)
+    decisions = _apply_candidate_group_competition_decisions(store=store, group_feedback_rows=selected_rows)
 
     assert store.get("skill_win").status == "active"
     assert store.get("skill_win").metadata["competition_status"] == "winner"
     assert store.get("skill_lose").metadata["competition_status"] == "loser"
-    assert any(row["action"] == "winner" for row in decisions)
+    assert any(row["action"] == "winner_promoted" for row in decisions)
+
+
+def test_candidate_group_soft_promotion_keeps_neutral_loser_as_backup() -> None:
+    group_id = "extract:r0:t2:task"
+    rows = [
+        {
+            "candidate_group_id": group_id,
+            "winner": "skill_win",
+            "members": [
+                {"skill_name": "skill_win", "winner_score": 5, "helpful_count": 2, "harmful_count": 0, "strict_harmful_count": 0},
+                {"skill_name": "skill_neutral", "winner_score": 1, "helpful_count": 0, "harmful_count": 0, "strict_harmful_count": 0, "net_credit": 0},
+            ],
+        }
+    ]
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="skill_win", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id}),
+            SkillArtifact(name="skill_neutral", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id}),
+        ]
+    )
+
+    decisions = _apply_candidate_group_competition_decisions(store=store, group_feedback_rows=rows)
+
+    assert store.get("skill_win").status == "active"
+    assert store.get("skill_neutral").status == "trial"
+    assert store.get("skill_neutral").metadata["competition_backup_state"] == "runner_up"
+    assert any(row["action"] == "marked_loser_backup" for row in decisions)
+
+
+def test_replay_buffer_samples_by_source_role() -> None:
+    replay_buffer: Dict[str, List[Dict[str, Any]]] = {"extractor": [], "refactorer": [], "refiner_revision": []}
+    _append_candidate_group_replay_rows(
+        replay_buffer,
+        [
+            {"candidate_group_id": "extract:r0:t1:a", "members": []},
+            {"candidate_group_id": "refactor:r0:g1", "members": []},
+            {"candidate_group_id": "refiner:r0:s1", "members": []},
+        ],
+    )
+
+    assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "extractor")] == ["extractor"]
+    assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "refactorer")] == ["refactorer"]
+    assert [row["source_role"] for row in _sample_replay_rows_for_role(replay_buffer, "refiner_revision")] == ["refiner_revision"]
+
+
+def test_group_refiner_actions_refine_archive_and_backup() -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="mixed", kind="rule_card", description="d", body="b", status="trial"),
+            SkillArtifact(name="bad", kind="rule_card", description="d", body="b", status="trial"),
+            SkillArtifact(name="zero", kind="rule_card", description="d", body="b", status="trial"),
+        ]
+    )
+    rows = [
+        {
+            "candidate_group_id": "extract:r0:t1:a",
+            "members": [
+                {"skill_name": "mixed", "exposure_count": 2, "helpful_count": 1, "harmful_count": 1, "strict_harmful_count": 0, "net_credit": 0},
+                {"skill_name": "bad", "exposure_count": 1, "helpful_count": 0, "harmful_count": 1, "strict_harmful_count": 1, "net_credit": -1},
+                {"skill_name": "zero", "exposure_count": 0, "helpful_count": 0, "harmful_count": 0, "strict_harmful_count": 0, "net_credit": 0},
+            ],
+        }
+    ]
+
+    actions = _group_refiner_actions_from_feedback_rows(store=store, group_feedback_rows=rows)
+    by_name = {row["skill_name"]: row["action"] for row in actions}
+
+    assert by_name == {"mixed": "refine", "bad": "archive", "zero": "backup"}
+    assert store.get("mixed").metadata["group_refiner_refine_required"] is True
+    assert store.get("bad").status == "archived"
+    assert store.get("zero").metadata["competition_backup_state"] == "group_refiner_backup"
+
+
+def test_apply_group_refiner_actions_guards_against_archiving_helpful_or_zero_exposure() -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="helpful", kind="rule_card", description="d", body="b", status="trial"),
+            SkillArtifact(name="zero", kind="rule_card", description="d", body="b", status="trial"),
+        ]
+    )
+    rows = [
+        {
+            "candidate_group_id": "extract:r0:t1:a",
+            "members": [
+                {"skill_name": "helpful", "exposure_count": 3, "helpful_count": 1, "harmful_count": 1},
+                {"skill_name": "zero", "exposure_count": 0, "helpful_count": 0, "harmful_count": 0},
+            ],
+        }
+    ]
+
+    actions = _apply_group_refiner_actions(
+        store=store,
+        group_feedback_rows=rows,
+        actions=[
+            {"candidate_group_id": "extract:r0:t1:a", "skill_name": "helpful", "action": "archive", "reason": "too broad"},
+            {"candidate_group_id": "extract:r0:t1:a", "skill_name": "zero", "action": "refine", "reason": "maybe useful"},
+        ],
+        source="llm",
+    )
+    by_name = {row["skill_name"]: row["action"] for row in actions}
+
+    assert by_name == {"helpful": "backup", "zero": "backup"}
+    assert store.get("helpful").status == "trial"
+    assert store.get("helpful").metadata["group_refiner_action_source"] == "llm"
+    assert store.get("zero").metadata["competition_backup_state"] == "group_refiner_backup"
+
+
+@pytest.mark.asyncio
+async def test_run_group_maintenance_triggers_bundle_test_and_repair_rounds(monkeypatch) -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="group_refine_skill", kind="rule_card", description="d", body="b", status="trial"),
+        ]
+    )
+    calls = {"test": 0, "refine": 0}
+
+    async def fake_bundle_test_and_refine_targets(**kwargs):
+        calls["test"] += 1
+        calls["refine"] += 1
+        return {
+            "maintenance_targets": list(kwargs["targets"]),
+            "maintenance_test_results": [{"skill_name": "group_refine_skill", "aggregate": {"pass_all_tests": False}}],
+            "refine_decisions": [{"skill_name": "group_refine_skill", "action": "rewrite"}],
+        }
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment._run_bundle_test_and_refine_targets",
+        fake_bundle_test_and_refine_targets,
+    )
+
+    report = await _run_group_maintenance(
+        store=store,
+        group_feedback_rows=[
+            {
+                "candidate_group_id": "extract:r0:t1:task",
+                "source_task_ids": ["task_1"],
+                "members": [
+                    {
+                        "skill_name": "group_refine_skill",
+                        "exposure_count": 2,
+                        "helpful_count": 1,
+                        "harmful_count": 1,
+                        "strict_harmful_count": 0,
+                        "net_credit": 0,
+                        "credit_records": [{"skill_name": "group_refine_skill", "judgment": "harmful"}],
+                    }
+                ],
+            }
+        ],
+        window_details=[{"task_id": "task_1"}],
+        tools=[],
+        llm_config="mock",
+        model_name=None,
+        execution_backend="official",
+        prompt_style="native",
+        tool_api_style="auto",
+        max_steps_per_turn=1,
+        max_task_seconds=1.0,
+        temperature=None,
+        synthetic_continue=False,
+        explicit_skill_tool=False,
+        round_index=0,
+        tag="group_test",
+        credit_context_by_skill={"group_refine_skill": [{"task_id": "task_1", "judgment": "harmful"}]},
+        dependency_context_by_skill={"group_refine_skill": []},
+        refiner_rules=[],
+        lock_manager=SkillMaintenanceLockManager(micro_concurrency=1),
+    )
+
+    assert calls == {"test": 1, "refine": 1}
+    assert report["maintenance_targets"] == ["group_refine_skill"]
+    assert report["group_refiner_actions"][0]["action"] == "refine"
+    assert report["maintenance_test_results"][0]["skill_name"] == "group_refine_skill"
+    assert report["refine_decisions"][0]["action"] == "rewrite"
+
+
+@pytest.mark.asyncio
+async def test_run_group_maintenance_can_consume_precomputed_llm_group_actions(monkeypatch) -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="llm_refine_skill", kind="rule_card", description="d", body="b", status="trial"),
+        ]
+    )
+    calls = {"refine": 0}
+
+    async def fake_bundle_test_and_refine_targets(**kwargs):
+        calls["refine"] += 1
+        return {
+            "maintenance_targets": list(kwargs["targets"]),
+            "maintenance_test_results": [{"skill_name": "llm_refine_skill", "aggregate": {"pass_all_tests": False}}],
+            "refine_decisions": [{"skill_name": "llm_refine_skill", "action": "rewrite"}],
+        }
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment._run_bundle_test_and_refine_targets",
+        fake_bundle_test_and_refine_targets,
+    )
+
+    report = await _run_group_maintenance(
+        store=store,
+        group_feedback_rows=[
+            {
+                "candidate_group_id": "extract:r0:t1:task",
+                "source_task_ids": ["task_1"],
+                "members": [
+                    {"skill_name": "llm_refine_skill", "exposure_count": 4, "helpful_count": 2, "harmful_count": 1}
+                ],
+            }
+        ],
+        window_details=[{"task_id": "task_1"}],
+        tools=[],
+        llm_config="mock",
+        model_name=None,
+        execution_backend="official",
+        prompt_style="native",
+        tool_api_style="auto",
+        max_steps_per_turn=1,
+        max_task_seconds=1.0,
+        temperature=None,
+        synthetic_continue=False,
+        explicit_skill_tool=False,
+        round_index=0,
+        tag="group_test",
+        refiner_rules=[],
+        lock_manager=SkillMaintenanceLockManager(micro_concurrency=1),
+        group_refiner_actions=[
+            {
+                "candidate_group_id": "extract:r0:t1:task",
+                "skill_name": "llm_refine_skill",
+                "action": "refine",
+                "reason": "LLM saw useful but mixed evidence",
+                "source": "llm",
+                "patch_intent": "tighten trigger",
+            }
+        ],
+        group_refiner_action_payload={
+            "source": "llm",
+            "analysis": "Useful candidate with one harmful overgeneralization.",
+        },
+    )
+
+    assert calls["refine"] == 1
+    assert report["maintenance_targets"] == ["llm_refine_skill"]
+    assert report["group_refiner_actions"][0]["source"] == "llm"
+    assert report["group_refiner_action_payload"]["source"] == "llm"
+    assert report["refine_decisions"][0]["action"] == "rewrite"
+
+
+@pytest.mark.asyncio
+async def test_group_maintenance_mock_llm_sees_group_evidence_and_outputs_consumable_refine(monkeypatch) -> None:
+    store = ArtifactStore(
+        [
+            SkillArtifact(
+                name="group_refine_skill",
+                kind="rule_card",
+                description="Use lookup before update.",
+                body="Original rule misses the group-level account mismatch.",
+                status="trial",
+                metadata={"domains": ["TicketAPI"], "allowed_tools": ["lookup_ticket", "update_ticket"]},
+            ),
+        ]
+    )
+    bundle_calls: List[Dict[str, Any]] = []
+    llm_calls: List[Dict[str, Any]] = []
+    monkeypatch.setenv("BFCL_GROUP_REPAIR_ROUNDS", "3")
+
+    async def fake_execute_bfcl_bundle_tests(artifact, **kwargs):
+        bundle_calls.append({"name": artifact.name, "version": artifact.version, "body": artifact.body})
+        passed = len(bundle_calls) >= 3
+        return SkillTestResult(
+            result_id=f"group_mock:{artifact.name}:call{len(bundle_calls)}",
+            skill_name=artifact.name,
+            skill_version=artifact.version,
+            bundle_id=artifact.bundle.bundle_id or f"{artifact.name}.bundle",
+            bundle_version=artifact.bundle.bundle_version,
+            run_label="mock_group_bundle",
+            aggregate={
+                "pass_all_tests": passed,
+                "passed": passed,
+                "n_regressed": 0 if passed else 1,
+                "n_improved": 1 if passed else 0,
+                "failure_reason": "" if passed else "wrong account update after group exposure",
+            },
+            integration_failures=[] if passed else [{"task_id": "task_group_1", "reason": "wrong account update"}],
+        )
+
+    async def fake_ask_json(**kwargs: Any) -> Dict[str, Any]:
+        assert kwargs["role"] == "refiner"
+        user = str(kwargs.get("user") or "")
+        metadata = dict(kwargs.get("metadata") or {})
+        llm_calls.append({"user": user, "metadata": metadata})
+        assert metadata["phase"] == "group_refine"
+        assert metadata["repair_round"] == len(llm_calls) - 1
+        assert "## Recent Credit Assignment Context" in user
+        assert "task_group_1" in user
+        assert "mixed_helpful_and_harmful_evidence" in user
+        assert "wrong account update after group exposure" in user
+        return {
+            "decision": {
+                "action": "refine_minor",
+                "reason": "Mock LLM followed group credit and narrowed the account-update scope.",
+                "version_kind": "minor",
+                "migration_reason": "group_refiner mixed helpful/harmful evidence",
+            },
+            "artifact": {
+                "body": (
+                    "Use lookup_ticket to confirm the target account before update_ticket; "
+                    f"group repair round {len(llm_calls)}."
+                ),
+                "metadata": {
+                    "mock_group_refine_round": len(llm_calls),
+                    "non_applicability": ["Do not update a ticket when lookup result belongs to another account."],
+                },
+            },
+            "bundle": {
+                "maintenance_notes": "Added a group-evidence regression case from task_group_1.",
+                "negative_cases": [
+                    {
+                        "case_id": "task_group_1_wrong_account_regression",
+                        "source": "group_refiner_mock",
+                        "prompt": "Lookup the ticket, then update only if the account matches.",
+                        "expected": {"official_valid": True},
+                        "context": {"source_task_id": "task_group_1", "credit_judgment": "harmful"},
+                        "tags": ["group_refiner", "credit_regression"],
+                        "polarity": "negative",
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment.execute_bfcl_bundle_tests",
+        fake_execute_bfcl_bundle_tests,
+    )
+    monkeypatch.setattr(
+        "academic.skill_repository.llm_maintenance._ask_json",
+        fake_ask_json,
+    )
+
+    report = await _run_group_maintenance(
+        store=store,
+        group_feedback_rows=[
+            {
+                "candidate_group_id": "extract:r0:t1:task_group_1",
+                "source_task_ids": ["task_group_1"],
+                "members": [
+                    {
+                        "skill_name": "group_refine_skill",
+                        "exposure_count": 2,
+                        "retrieved_count": 2,
+                        "injected_count": 2,
+                        "used_count": 1,
+                        "helpful_count": 1,
+                        "harmful_count": 1,
+                        "strict_harmful_count": 0,
+                        "net_credit": 0,
+                        "credit_records": [
+                            {
+                                "task_id": "task_group_1",
+                                "task_index": 1,
+                                "judgment": "harmful",
+                                "effect_type": "correctness_loss",
+                                "confidence": 0.91,
+                                "reason": "wrong account update after group exposure",
+                                "retrieved": True,
+                                "injected": True,
+                                "used": True,
+                                "official_valid": False,
+                                "strict_success": False,
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+        window_details=[
+            {
+                "task_id": "task_group_1",
+                "runs": [
+                    {
+                        "metrics": {
+                            "official_valid": False,
+                            "retrieved_skills": ["group_refine_skill"],
+                            "prompt_injected_skills": ["group_refine_skill"],
+                            "used_skills": ["group_refine_skill"],
+                        }
+                    }
+                ],
+            }
+        ],
+        tools=[],
+        llm_config="mock",
+        model_name="mock-model",
+        execution_backend="official",
+        prompt_style="native",
+        tool_api_style="auto",
+        max_steps_per_turn=1,
+        max_task_seconds=1.0,
+        temperature=None,
+        synthetic_continue=False,
+        explicit_skill_tool=False,
+        round_index=0,
+        tag="group_mock_llm",
+        credit_context_by_skill={
+            "group_refine_skill": [
+                {
+                    "task_id": "task_group_1",
+                    "judgment": "harmful",
+                    "reason": "mixed_helpful_and_harmful_evidence: wrong account update after group exposure",
+                    "retrieved": True,
+                    "injected": True,
+                    "used": True,
+                }
+            ]
+        },
+        dependency_context_by_skill={"group_refine_skill": []},
+        refiner_rules=[],
+        lock_manager=SkillMaintenanceLockManager(micro_concurrency=1),
+    )
+
+    updated = store.get("group_refine_skill")
+    assert updated is not None
+    assert len(bundle_calls) == 3
+    assert len(llm_calls) == 2
+    assert report["group_refiner_actions"][0]["action"] == "refine"
+    assert report["group_refiner_credit_rows"][0]["task_id"] == "task_group_1"
+    assert [row["action"] for row in report["refine_decisions"]] == ["refine_minor", "refine_minor"]
+    assert report["maintenance_test_results"][-1]["aggregate"]["pass_all_tests"] is True
+    assert updated.version >= 3
+    assert updated.metadata["mock_group_refine_round"] == 2
+    assert updated.bundle.negative_cases[0].case_id == "task_group_1_wrong_account_regression"
+    assert "group repair round 2" in updated.body
+
+
+def test_candidate_group_archives_only_positive_harmful_loser() -> None:
+    group_id = "extract:r0:t2:task"
+    rows = [
+        {
+            "candidate_group_id": group_id,
+            "winner": "skill_win",
+            "members": [
+                {"skill_name": "skill_win", "winner_score": 6, "helpful_count": 2, "harmful_count": 0, "strict_harmful_count": 0},
+                {"skill_name": "skill_bad", "winner_score": 1, "helpful_count": 0, "harmful_count": 1, "strict_harmful_count": 1, "net_credit": -1},
+            ],
+        }
+    ]
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="skill_win", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id}),
+            SkillArtifact(name="skill_bad", kind="rule_card", description="d", body="b", status="trial", metadata={"candidate_group_id": group_id}),
+        ]
+    )
+
+    decisions = _apply_candidate_group_competition_decisions(store=store, group_feedback_rows=rows)
+
+    assert store.get("skill_bad").status == "archived"
+    assert any(row["action"] == "archived_loser" for row in decisions)
 
 
 def test_macro_candidate_group_feedback_filters_by_usage_and_low_usage_patience() -> None:
     used_row = {
-        "candidate_group_id": "group_used",
+        "candidate_group_id": "extract:r0:t0:group_used",
+        "created_task_index": 0,
         "winner": "skill_used_a",
         "members": [
             {"skill_name": "skill_used_a", "retrieved_count": 1, "injected_count": 0, "used_count": 0},
@@ -233,7 +809,8 @@ def test_macro_candidate_group_feedback_filters_by_usage_and_low_usage_patience(
         ],
     }
     idle_row = {
-        "candidate_group_id": "group_idle",
+        "candidate_group_id": "extract:r0:t0:group_idle",
+        "created_task_index": 0,
         "winner": "skill_idle_a",
         "members": [
             {"skill_name": "skill_idle_a", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
@@ -246,37 +823,44 @@ def test_macro_candidate_group_feedback_filters_by_usage_and_low_usage_patience(
         raw_rows=[used_row, idle_row],
         state=state,
         macro_index=0,
+        current_task_index=0,
         min_usage=1,
+        min_age_tasks=2,
         low_usage_patience=3,
     )
     second = _select_macro_candidate_group_feedback_rows(
         raw_rows=[idle_row],
         state=state,
         macro_index=1,
+        current_task_index=1,
         min_usage=1,
+        min_age_tasks=2,
         low_usage_patience=3,
     )
     third = _select_macro_candidate_group_feedback_rows(
-        raw_rows=[idle_row],
+        raw_rows=[used_row, idle_row],
         state=state,
         macro_index=2,
+        current_task_index=2,
         min_usage=1,
+        min_age_tasks=2,
         low_usage_patience=3,
     )
 
-    assert [row["candidate_group_id"] for row in first] == ["group_used"]
-    assert first[0]["feedback_reason"] == "sufficient_macro_usage"
+    assert first == []
     assert second == []
-    assert third[0]["candidate_group_id"] == "group_idle"
-    assert third[0]["feedback_reason"] == "low_reuse_below_usage_threshold"
-    assert third[0]["winner"] == ""
-    assert set(third[0]["losers"]) == {"skill_idle_a", "skill_idle_b"}
-    assert state["group_idle"]["consecutive_low_usage_macros"] == 3
+    assert [row["candidate_group_id"] for row in third] == ["extract:r0:t0:group_used"]
+    assert third[0]["feedback_reason"] == "sufficient_macro_usage"
+    assert third[0]["age_tasks"] == 2
+    assert third[0]["min_age_tasks"] == 2
+    assert state["extract:r0:t0:group_idle"]["consecutive_low_usage_macros"] == 1
+    assert state["extract:r0:t0:group_idle"]["last_skip_reason"] == "below_usage_threshold"
 
 
-def test_macro_candidate_group_low_usage_feedback_can_have_some_usage_below_threshold() -> None:
+def test_macro_candidate_group_low_usage_feedback_requires_explicit_opt_in() -> None:
     low_usage_row = {
-        "candidate_group_id": "group_low",
+        "candidate_group_id": "extract:r0:t0:group_low",
+        "created_task_index": 0,
         "winner": "skill_low_a",
         "members": [
             {"skill_name": "skill_low_a", "retrieved_count": 1, "injected_count": 0, "used_count": 0},
@@ -289,22 +873,28 @@ def test_macro_candidate_group_low_usage_feedback_can_have_some_usage_below_thre
         raw_rows=[low_usage_row],
         state=state,
         macro_index=0,
+        current_task_index=3,
         min_usage=2,
+        min_age_tasks=2,
         low_usage_patience=2,
     )
     second = _select_macro_candidate_group_feedback_rows(
         raw_rows=[low_usage_row],
         state=state,
         macro_index=1,
+        current_task_index=4,
         min_usage=2,
+        min_age_tasks=2,
         low_usage_patience=2,
+        allow_low_usage_feedback=True,
     )
 
     assert first == []
     assert second[0]["feedback_reason"] == "low_reuse_below_usage_threshold"
     assert second[0]["macro_usage_count"] == 1
     assert second[0]["min_usage_threshold"] == 2
-    assert "below the required macro usage threshold" in second[0]["comparison_summary"]
+    assert second[0]["age_tasks"] == 4
+    assert "low-usage feedback is emitted only after maturity/patience gates" in second[0]["objective_record_schema"]
 
 
 def test_prior_extraction_adds_pending_skills_that_do_not_retrieve() -> None:
@@ -1712,6 +2302,24 @@ def test_role_feedback_normalization_caps_rules_and_reindexes() -> None:
     assert normalized["extractor"]["rules"][0]["rule_id"] == "extractor_rule_1"
     assert len(normalized["extractor"]["history"]) == 12
     assert projected["extractor"]["n_rules"] == 5
+    assert projected["refactorer"]["n_rules"] == 0
+    assert "refiner" not in projected
+
+
+def test_role_feedback_normalization_drops_refiner_and_keeps_refactorer() -> None:
+    raw = {
+        "refiner": {
+            "rules": [{"text": "Narrow triggers when extra calls appear.", "focus": "strictness"}],
+            "history": [{"round_index": 1}],
+        },
+        "refactorer": {
+            "rules": [{"text": "Do not merge skills with different argument schemas.", "focus": "merge_guard"}],
+            "history": [{"round_index": 2}],
+        },
+    }
+    projected = _role_feedback_projection(raw)
+    assert "refiner" not in projected
+    assert projected["refactorer"]["rules"][0]["rule_id"] == "refactorer_rule_1"
 
 
 def test_build_extractor_feedback_rows_summarizes_harm_and_bundle_failures() -> None:
@@ -2307,15 +2915,16 @@ async def test_run_related_evolve_experiment_emits_role_feedback(monkeypatch, tm
             }
         ),
     )
+    update_mock = AsyncMock(
+        return_value={
+            "summary": "Prefer narrower contract-anchored skills.",
+            "rules": [{"rule_id": "extractor_rule_1", "text": "Prefer exact local contract rules.", "focus": "contract"}],
+            "updated_at": "2026-05-15T00:00:00+00:00",
+        }
+    )
     monkeypatch.setattr(
         "academic.benchmarks.bfcl.related.experiment.update_extractor_rules_from_feedback_llm",
-        AsyncMock(
-            return_value={
-                "summary": "Prefer narrower contract-anchored skills.",
-                "rules": [{"rule_id": "extractor_rule_1", "text": "Prefer exact local contract rules.", "focus": "contract"}],
-                "updated_at": "2026-05-15T00:00:00+00:00",
-            }
-        ),
+        update_mock,
     )
 
     payload = await _run_related_evolve_experiment(
@@ -2346,14 +2955,16 @@ async def test_run_related_evolve_experiment_emits_role_feedback(monkeypatch, tm
         extractor_trl_enabled=True,
         experiment_variant="w_extractor_reusage_trl",
     )
-    assert payload["role_feedback"]["extractor"]["n_rules"] == 1
-    assert payload["rounds"][0]["role_feedback"]["extractor"]["n_rules"] == 1
+    assert payload["role_feedback"]["extractor"]["n_rules"] == 0
+    assert payload["rounds"][0]["role_feedback"]["extractor"]["n_rules"] == 0
+    assert payload["rounds"][0]["role_feedback"]["extractor"]["last_update_summary"] == "extractor_trl_candidate_group_only:round_single_skill_feedback_logged_not_used"
     assert payload["rounds"][0]["extractor_feedback_rows"][0]["skill_name"] == "skill_a"
     assert payload["rounds"][0]["credit_events"][0]["skill_name"] == "skill_a"
     assert payload["rounds"][0]["skill_credit_summary"][0]["skill_name"] == "skill_a"
     assert payload["skill_credit_events"][0]["judgment"] == "harmful"
     assert payload["skill_credit_summary"][0]["harmful_count"] == 1
     credit_mock.assert_awaited()
+    update_mock.assert_not_called()
 
 
 async def test_run_related_evolve_experiment_can_disable_extractor_trl(monkeypatch, tmp_path: Path) -> None:

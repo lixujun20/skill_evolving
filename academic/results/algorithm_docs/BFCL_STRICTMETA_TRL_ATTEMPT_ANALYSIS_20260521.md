@@ -548,4 +548,3 @@ comment:
    - strictmeta + no LLM injector，只 deterministic inject active winners。
    - strictmeta + domain-specific role feedback。
    - 每个 ablation 先跑 20/50 或固定 regression subset，再决定是否跑 50/50。
-

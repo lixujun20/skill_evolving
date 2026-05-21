@@ -63,4 +63,3 @@ Ours, TRL + maturity gate & yes & deterministic & 0.08 & \textbf{0.74} & \textbf
 | Ours, TRL before maturity gate | `academic/results/bfcl_related50_50_sonnet_trl_20260520_evolve.json` | 50 | 0.08 | 0.52 | 0.7474 | 0.8491 | 0.6850 | 76689.5 | 75624.8 | 1064.7 | 79.253 | 10.08 | 0.0 |
 | Ours, TRL + injector gate | `academic/results/bfcl_related50_50_sonnet_trl_injector_gate_20260520_evolve.json` | 50 | 0.08 | 0.60 | 0.7530 | 0.8371 | 0.7096 | 74175.7 | 73152.7 | 1023.0 | 49.427 | 9.78 | 0.0 |
 | Ours, TRL + maturity gate | `academic/results/bfcl_align_trl_maturity_train50_50_20260520.json` | 50 | 0.08 | 0.74 | 0.7984 | 0.9024 | 0.7266 | 80774.6 | 79684.5 | 1090.1 | 34.210 | 9.98 | 0.0 |
-

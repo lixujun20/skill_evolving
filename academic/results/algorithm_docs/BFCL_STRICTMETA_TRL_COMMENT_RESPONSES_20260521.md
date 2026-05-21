@@ -600,4 +600,3 @@ artifact.metadata["domains"] = sorted(existing_domains + inferred_domains_or_all
 - Trading symbol skill 是否减少 prompt pollution；
 - `skill_injector` role 是否彻底消失；
 - final skills 是否不再大量出现 `domains=["all"]` 和过宽 tools。
-

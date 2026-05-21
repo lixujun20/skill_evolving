@@ -65,13 +65,13 @@ Lines 1-217 define the benchmark-neutral credit event schema helpers. The import
 ```python
      1	"""Benchmark-neutral credit event helpers for skill maintenance."""
      2	from __future__ import annotations
-     3	
+     3
      4	import copy
      5	from typing import Any, Dict, Iterable, List, Sequence
-     6	
+     6
      7	from academic.benchmarks.core.artifacts import ArtifactStore
      8	from academic.benchmarks.core.maintenance_utils import now_iso
-     9	
+     9
     10	HELPFUL_REASONS = {
     11	    "token_saving",
     12	    "schema_help",
@@ -82,8 +82,8 @@ Lines 1-217 define the benchmark-neutral credit event schema helpers. The import
     17	HELPFUL_JUDGMENTS = {"helpful", "positive"}
     18	UNCERTAIN_JUDGMENTS = {"neutral", "uncertain", "unknown", ""}
     19	EVIDENCE_LIMIT_PER_SKILL = 24
-    20	
-    21	
+    20
+    21
     22	def normalize_credit_events(
     23	    rows: Iterable[Dict[str, Any]],
     24	    *,
@@ -92,11 +92,11 @@ Lines 1-217 define the benchmark-neutral credit event schema helpers. The import
     27	    default_source: str = "credit_assigner",
     28	) -> List[Dict[str, Any]]:
     29	    """Return stable credit rows shared by benchmark adapters.
-    30	
+    30
     31	    Adapters may keep benchmark-specific fields; this helper only normalizes the
     32	    common columns used by bundle/micro/macro orchestration.
     33	    """
-    34	
+    34
     35	    normalized: List[Dict[str, Any]] = []
     36	    for index, raw in enumerate(rows or []):
     37	        if not isinstance(raw, dict):
@@ -143,7 +143,7 @@ Lines 1-217 define the benchmark-neutral credit event schema helpers. The import
     77	    if raw in UNCERTAIN_JUDGMENTS:
     78	        return "uncertain" if raw in {"uncertain", "unknown", ""} else "neutral"
     79	    return raw
-    80	
+    80
     82	def normalize_evidence_strength(value: Any, *, confidence: float = 0.0, judgment: str = "") -> str:
     83	    raw = str(value or "").strip().lower()
     84	    if raw in {"strong", "medium", "weak", "uncertain"}:
@@ -155,7 +155,7 @@ Lines 1-217 define the benchmark-neutral credit event schema helpers. The import
     90	    if judgment in {"harmful", "helpful"}:
     91	        return "weak"
     92	    return "uncertain"
-    93	
+    93
     95	def is_strong_harmful_credit(event: Dict[str, Any], *, confidence_threshold: float = 0.65) -> bool:
     96	    judgment = normalize_judgment(event.get("judgment"))
     97	    confidence = _float_or_default(event.get("confidence"), 0.0)
@@ -1115,9 +1115,9 @@ Lines 1-5 define the new Spreadsheet maintenance package entrypoint.
 
 ```python
      1	"""SpreadsheetBench maintenance implementation modules."""
-     2	
+     2
      3	from academic.benchmarks.spreadsheet.maintenance.adapter import SpreadsheetMaintenanceAdapter
-     4	
+     4
      5	__all__ = ["SpreadsheetMaintenanceAdapter"]
 ```
 
@@ -1127,7 +1127,7 @@ Lines 1-110 now keep the old public/test-facing import surface while moving main
 
 ```python
      1	"""SpreadsheetBench compatibility facade.
-     2	
+     2
      3	Execution, loading, verification, skill runtime, trace projection, and
      4	maintenance helpers live in focused modules.  This facade preserves the public
      5	and test-facing imports that previously came from this file.

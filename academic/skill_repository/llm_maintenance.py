@@ -978,8 +978,12 @@ def _compact_role_payload(
     preserve_keys: set[str] | None = None,
 ) -> Any:
     preserve_keys = preserve_keys or set()
-    if value in (None, "", [], {}):
+    if value in (None, ""):
         return None
+    if value == []:
+        return []
+    if value == {}:
+        return {}
     if isinstance(value, str):
         if key in _ROLE_PRESERVE_TEXT_KEYS:
             return value
@@ -2693,9 +2697,10 @@ async def update_role_rules_from_feedback_llm(
             "rules": normalized_current,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+    role_label = normalized_role.replace("_", " ").title()
     user = (
-        "## Current Extractor Rules\n"
-        f"{_role_json_block(normalized_current)}\n\n"
+        f"## Current {role_label} Rules\n"
+        f"{_role_json_block(normalized_current or [])}\n\n"
         "## Runtime Feedback Evidence\n"
         f"{_role_json_block(feedback_rows)}\n"
     )

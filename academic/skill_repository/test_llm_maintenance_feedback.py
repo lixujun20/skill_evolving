@@ -12,6 +12,7 @@ from academic.skill_repository.llm_maintenance import (
     _role_json_block,
     propose_group_refiner_actions_llm,
     update_extractor_rules_from_feedback_llm,
+    update_role_rules_from_feedback_llm,
 )
 
 
@@ -336,6 +337,51 @@ Prefer narrow lookup contracts.
     assert parsed["rules"][0]["rule_id"] == "extractor_rule_1"
     assert parsed["rules"][0]["focus"] == "contract"
     assert "lookup result id" in parsed["rules"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_update_refiner_rules_prompt_uses_refiner_label_and_empty_list(monkeypatch) -> None:
+    captured: dict = {}
+
+    async def fake_ask_text(*, system, user, llm_config, model_name, role, metadata):
+        captured["system"] = system
+        captured["user"] = user
+        captured["role"] = role
+        captured["metadata"] = metadata
+        return """=== ANALYSIS ===
+Refiner revision candidates show one repair preserved the useful workflow and one ignored the failing precondition.
+=== SUMMARY ===
+Repair the exact failing precondition.
+=== RULES ===
+[scope] Preserve helpful workflow steps while narrowing the harmful precondition shown by credit records.
+=== END ==="""
+
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_text", fake_ask_text)
+
+    result = await update_role_rules_from_feedback_llm(
+        role_name="refiner",
+        current_rules=[],
+        feedback_rows=[
+            {
+                "candidate_group_id": "refiner:r0:mock:skill",
+                "source_role": "refiner_revision",
+                "members": [
+                    {"skill_name": "skill__refined_r0_c0", "helpful_count": 1},
+                    {"skill_name": "skill__refined_r0_c1", "harmful_count": 1},
+                ],
+            }
+        ],
+        llm_config="mock",
+        model_name="mock-model",
+        max_rules=3,
+    )
+
+    assert captured["role"] == "refiner_feedback"
+    assert "## Current Refiner Rules\n[]" in captured["user"]
+    assert "## Current Extractor Rules" not in captured["user"]
+    assert captured["metadata"]["feedback_role"] == "refiner"
+    assert result["rules"][0]["rule_id"] == "refiner_rule_1"
+    assert result["rules"][0]["focus"] == "scope"
 
 
 def test_extract_system_encodes_se_norms_and_few_shots() -> None:

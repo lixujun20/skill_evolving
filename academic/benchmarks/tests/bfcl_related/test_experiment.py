@@ -55,7 +55,7 @@ from academic.benchmarks.bfcl.related.manifest import (
     validate_curated_manifest,
 )
 from academic.benchmarks.bfcl.related.segment_index import SegmentVectorIndex
-from academic.skill_repository.types import SkillArtifact, SkillTestResult
+from academic.skill_repository.types import SkillArtifact, SkillBundle, SkillBundleCase, SkillEvidence, SkillTestResult
 from academic.skill_repository.refactor_overlap import OverlapGraphState, TraceSegment
 from academic.skill_repository.store import ArtifactStore
 
@@ -72,6 +72,55 @@ def test_curated_manifest_has_50_50_split() -> None:
     assert len(manifest["test_task_ids"]) == 50
     assert not (set(manifest["train_task_ids"]) & set(manifest["test_task_ids"]))
     assert manifest["train_tasks"][0]["why_related"]
+
+
+def test_semantic_skill_update_resets_version_local_credit_evidence() -> None:
+    original = SkillArtifact(
+        name="symbol_rule",
+        kind="atomic_tool_rule_card",
+        description="Use company names directly.",
+        body="Skip symbol lookup for known public companies.",
+        bundle=SkillBundle(
+            positive_cases=[
+                SkillBundleCase(
+                    case_id="symbol_rule:positive:0",
+                    source="manual",
+                    prompt="Buy known public company stock.",
+                )
+            ]
+        ),
+        evidence=SkillEvidence(
+            helpful_cases=[{"task_id": "task_helped", "judgment": "helpful"}],
+            harmful_cases=[{"task_id": "task_harmed", "judgment": "harmful"}],
+            repeated_evidence=[{"task_id": "task_repeated", "judgment": "neutral"}],
+        ),
+    )
+    store = ArtifactStore([original])
+
+    updated = SkillArtifact(
+        name="symbol_rule",
+        kind="atomic_tool_rule_card",
+        description="Use exact symbols only when already supplied.",
+        body="Use a symbol directly only when the user or previous tool result supplies the exact ticker.",
+    )
+    store.add(updated)
+
+    current = store.get("symbol_rule")
+    assert current is not None
+    assert current.version == 2
+    assert current.bundle.positive_cases[0].case_id == "symbol_rule:positive:0"
+    assert current.metadata["bundle_inherited_from_version"] == 1
+    assert current.evidence.helpful_cases == []
+    assert current.evidence.harmful_cases == []
+    assert current.evidence.repeated_evidence == []
+    assert current.history[-1]["evidence"]["helpful_cases"][0]["task_id"] == "task_helped"
+    assert current.history[-1]["evidence"]["harmful_cases"][0]["task_id"] == "task_harmed"
+
+    assert store.rollback("symbol_rule") is True
+    rolled_back = store.get("symbol_rule")
+    assert rolled_back is not None
+    assert rolled_back.version == 1
+    assert rolled_back.evidence.helpful_cases[0]["task_id"] == "task_helped"
 
 
 @pytest.mark.asyncio

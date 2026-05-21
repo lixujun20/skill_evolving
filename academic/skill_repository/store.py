@@ -294,8 +294,11 @@ class ArtifactStore:
         """Preserve durable assets when an extractor emits a same-name update.
 
         LLM extraction often returns only the semantic skill card. The bound
-        bundle/evidence/dependency decisions are repository-maintained assets
-        and must not be silently erased by a same-name content refresh.
+        bundle/dependency decisions are repository-maintained assets and must
+        not be silently erased by a same-name content refresh. Credit evidence
+        is version-local runtime performance, so semantic updates must build
+        fresh helpful/harmful evidence instead of inheriting the parent
+        version's outcomes.
         """
 
         if not incoming.bundle.all_cases() and existing.bundle.all_cases():
@@ -314,8 +317,6 @@ class ArtifactStore:
                 incoming.bundle.integration_cases,
                 existing.bundle.integration_cases,
             )
-        if _evidence_empty(incoming.evidence) and not _evidence_empty(existing.evidence):
-            incoming.evidence = deepcopy(existing.evidence)
         if not incoming.dependency_pins and existing.dependency_pins:
             incoming.dependency_pins = deepcopy(existing.dependency_pins)
 

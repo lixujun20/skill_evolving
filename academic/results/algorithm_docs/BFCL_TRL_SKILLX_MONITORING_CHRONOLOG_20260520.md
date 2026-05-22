@@ -4996,3 +4996,95 @@ Next implementation candidate:
   - positive targets: `152`, `153`, `194`.
   - regression guards: `54`, `65`, `78`, `88`, and one or two Trading/FileSystem cases.
 - Do not run a full 50/50 until the targeted probe improves Travel without damaging Vehicle/Twitter.
+
+## 2026-05-21 +0800 - Fresh SkillX no-memory baseline on the aligned BFCL 50/50 split
+
+User asked to run the SkillX baseline and inspect its effect.
+
+I first rechecked the existing SkillX-aligned run:
+- SkillX-aligned result: `academic/results/skillx_bfcl_aligned/skillx_bfcl_50_50_sonnet_hash_embed_20260520/skillx_bfcl_result_with_elapsed.json`.
+- It is a diagnostic aligned run, not a strict official SkillX embedding reproduction, because `embedding_caveat.json` says local `Qwen3-Embedding-8B` was unavailable and a local deterministic/simple embedding endpoint was used.
+- It extracted a SkillX library with `23` planning skills, `4` functional skills, and `0` atomic skills.
+- Test-time provider events show `191` retrieval events over `50` tasks; event histogram by selected-skill count was `{0: 84, 1: 53, 2: 26, 3: 28}`.
+- SkillX injected reference text, not callable skill tools. `called_skill_tools` remained empty by design.
+
+Then I launched a fresh no-memory baseline on the same curated BFCL 50/50 manifest:
+
+```bash
+ANTHROPIC_API_KEY=1234abcd OPENAI_API_KEY=1234abcd BFCL_RELATED_TEST_CONCURRENCY=4 \
+python -m academic.benchmarks.bfcl.related.experiment \
+  --mode baseline \
+  --manifest academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json \
+  --expected-train-size 50 \
+  --expected-test-size 50 \
+  --llm-config local_claude_proxy \
+  --model-name claude-sonnet-4-5 \
+  --data-source bfcl_eval_bundle \
+  --execution-backend official \
+  --prompt-style native \
+  --tool-api-style auto \
+  --max-steps-per-turn 20 \
+  --max-task-seconds 180 \
+  --temperature 0.0 \
+  --test-concurrency 4 \
+  --tag skillx_bfcl_no_memory_baseline_50_50_20260521 \
+  --output academic/results/skillx_bfcl_aligned/skillx_bfcl_no_memory_baseline_50_50_20260521.json
+```
+
+Output:
+- Result: `academic/results/skillx_bfcl_aligned/skillx_bfcl_no_memory_baseline_50_50_20260521.json`.
+- Log: `academic/results/skillx_bfcl_aligned/logs/skillx_bfcl_no_memory_baseline_50_50_20260521.log`.
+- The log confirmed every task used `skill_injection_mode=none`, with empty `prompt_injected_skills`, `tool_injected_skills`, and `called_skill_tools`.
+
+Fresh no-memory baseline metrics:
+- Strict success: `4/50 = 0.08`.
+- Official valid: `25/50 = 0.50`.
+- Avg score: `0.7446`.
+- Avg total tokens: `69286.1`.
+- Avg elapsed: `32.57s`.
+- Timeout rate: `0.0`.
+
+SkillX-aligned diagnostic metrics on the same 50 heldout ids:
+- Strict success: `4/50 = 0.08`.
+- Official valid: `27/50 = 0.54`.
+- Avg score: `0.7679`.
+- Avg total tokens: `78787.6`.
+- Avg elapsed: `34.927s`.
+- Timeout rate: `0.0`.
+
+Net effect of SkillX-aligned vs fresh no-memory baseline:
+- Strict success: unchanged, `+0/50`.
+- Official valid: `+2/50`.
+- Avg score: `+0.0233`.
+- Avg total tokens: `+9501.5` per task, about `+13.7%`.
+- Avg elapsed: `+2.357s` per task, about `+7.2%`.
+
+Largest SkillX-over-baseline score gains:
+- `multi_turn_base_194`: `0.4000 -> 0.7692`, `+0.3692`.
+- `multi_turn_base_10`: `0.5556 -> 0.7273`, `+0.1717`.
+- `multi_turn_base_28`: `0.7692 -> 0.9231`, `+0.1539`, official valid improved.
+- `multi_turn_base_9`: `0.5333 -> 0.6667`, `+0.1334`.
+- `multi_turn_base_88`: `0.6667 -> 0.8000`, `+0.1333`.
+- `multi_turn_base_152`: `0.7273 -> 0.8333`, `+0.1060`, official valid improved.
+
+Largest SkillX regressions:
+- `multi_turn_base_179`: `0.1818 -> 0.0000`, `-0.1818`, official valid regressed.
+- `multi_turn_base_103`: `0.6667 -> 0.6154`, `-0.0513`.
+- `multi_turn_base_86`: `0.8235 -> 0.7778`, `-0.0457`.
+- `multi_turn_base_145`: `0.5455 -> 0.5000`, `-0.0455`.
+
+Official-valid transitions:
+- Improved to valid: `multi_turn_base_138`, `multi_turn_base_152`, `multi_turn_base_28`.
+- Regressed from valid: `multi_turn_base_179`.
+
+SkillX selected-skill task coverage:
+- `trading analyze pending order cancellation decision`: `21` tasks.
+- `stock get most recent order id`: `13` tasks.
+- `stock cancel order`: `13` tasks.
+- `flight book with fallback airports`: `12` tasks.
+
+Interpretation:
+- SkillX-aligned gives a real but modest gain over a clean no-memory baseline on this split: mainly average score and a small official-valid gain.
+- The improvement is not from callable execution; it is from reference prompt guidance and plan/skill retrieval.
+- The strongest gains are still Travel/FileSystem-like cases where broad workflow context helps. The main regression is a Travel case where retrieved guidance appears to push the model into a wrong or incomplete transaction path.
+- Because this SkillX run uses non-official local/simple embeddings, it should be reported as `SkillX-aligned diagnostic`, not as a strict SkillX reproduction.

@@ -28,6 +28,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     _build_candidate_group_feedback_rows,
     _select_macro_candidate_group_feedback_rows,
     _apply_candidate_group_competition_decisions,
+    _merge_role_feedback_update,
     _append_candidate_group_replay_rows,
     _apply_group_refiner_actions,
     _group_refiner_actions_from_feedback_rows,
@@ -39,6 +40,7 @@ from academic.benchmarks.bfcl.related.experiment import (
     _promote_pending_from_refactor_report,
     _role_feedback_projection,
     _restore_current_round_state,
+    _run_bundle_test_and_refine_targets,
     _run_locked_micro_maintenance,
     _update_skill_relation_graph_locked,
     _write_current_round_sidecars,
@@ -440,6 +442,33 @@ def test_replay_buffer_samples_by_source_role() -> None:
         extractor_refiner_probability=1.0,
     )
     assert [row["source_role"] for row in mixed] == ["extractor", "refiner_revision"]
+
+
+def test_role_feedback_merge_preserves_empty_update_diagnostics() -> None:
+    role_feedback: Dict[str, Any] = {}
+    merged = _merge_role_feedback_update(
+        role_feedback,
+        role_name="extractor",
+        update={
+            "summary": "empty_rule_update",
+            "rules": [],
+            "updated_at": "2026-05-22T00:00:00+00:00",
+            "n_new_rules": 0,
+            "empty_update_reason": "empty_rule_update",
+            "raw_response_preview": "=== RULES ===\n=== END ===",
+        },
+        round_index=0,
+        macro_index=1,
+        n_feedback_rows=2,
+        feedback_scope="candidate_group_macro",
+        trl_enabled=True,
+    )
+
+    row = merged["extractor"]["history"][-1]
+    assert row["summary"] == "empty_rule_update"
+    assert row["n_new_rules"] == 0
+    assert row["empty_update_reason"] == "empty_rule_update"
+    assert "=== RULES ===" in row["raw_response_preview"]
 
 
 def test_candidate_group_feedback_rows_include_refiner_revision_store_candidates() -> None:
@@ -979,6 +1008,68 @@ async def test_group_maintenance_mock_llm_sees_group_evidence_and_outputs_consum
     assert "group repair round 2" in updated.body
 
 
+async def test_bundle_test_disabled_skips_replay_and_refine(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_ENABLE_BUNDLE_TEST", "0")
+    store = ArtifactStore(
+        [
+            SkillArtifact(
+                name="skip_bundle_skill",
+                kind="rule_card",
+                description="skip bundle",
+                body="body",
+            )
+        ]
+    )
+    bundle_calls: List[str] = []
+    refine_calls: List[str] = []
+
+    async def fake_execute_bfcl_bundle_tests(artifact, **kwargs):
+        bundle_calls.append(artifact.name)
+        raise AssertionError("bundle tests should be skipped when BFCL_ENABLE_BUNDLE_TEST=0")
+
+    async def fake_refine_bfcl_skill_store_llm(store, *, artifact_names, **kwargs):
+        refine_calls.extend(list(artifact_names))
+        raise AssertionError("refine should not run without bundle test results")
+
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment.execute_bfcl_bundle_tests",
+        fake_execute_bfcl_bundle_tests,
+    )
+    monkeypatch.setattr(
+        "academic.benchmarks.bfcl.related.experiment.refine_bfcl_skill_store_llm",
+        fake_refine_bfcl_skill_store_llm,
+    )
+
+    report = await _run_bundle_test_and_refine_targets(
+        store=store,
+        targets=["skip_bundle_skill"],
+        tools=[],
+        llm_config="mock",
+        model_name="mock-model",
+        execution_backend="official",
+        prompt_style="native",
+        tool_api_style="auto",
+        max_steps_per_turn=1,
+        max_task_seconds=1.0,
+        temperature=None,
+        synthetic_continue=False,
+        explicit_skill_tool=False,
+        round_index=0,
+        tag="bundle_disabled_unit",
+        phase="micro",
+        run_refine=True,
+        max_repair_rounds=2,
+    )
+
+    assert bundle_calls == []
+    assert refine_calls == []
+    assert report["maintenance_targets"] == ["skip_bundle_skill"]
+    assert report["maintenance_test_results"] == []
+    assert report["refine_decisions"] == []
+    assert report["run_bundle_tests"] is False
+    assert report["bundle_tests_disabled_by_env"] == "BFCL_ENABLE_BUNDLE_TEST=0"
+
+
 def test_candidate_group_archives_only_positive_harmful_loser() -> None:
     group_id = "extract:r0:t2:task"
     rows = [
@@ -1101,6 +1192,81 @@ def test_macro_candidate_group_low_usage_feedback_requires_explicit_opt_in() -> 
     assert second[0]["min_usage_threshold"] == 2
     assert second[0]["age_tasks"] == 4
     assert "low-usage feedback is emitted only after maturity/patience gates" in second[0]["objective_record_schema"]
+
+
+def test_refiner_revision_low_usage_feedback_is_role_scoped_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("BFCL_TRL_LOW_USAGE_FEEDBACK_SOURCE_ROLES", raising=False)
+    extractor_low_usage = {
+        "candidate_group_id": "extract:r0:t0:group_low",
+        "created_task_index": 0,
+        "winner": "extract_a",
+        "members": [
+            {"skill_name": "extract_a", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+            {"skill_name": "extract_b", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+        ],
+    }
+    refiner_low_usage = {
+        "candidate_group_id": "refiner:r0:t0:group_low",
+        "source_role": "refiner_revision",
+        "created_task_index": 0,
+        "winner": "refined_a",
+        "members": [
+            {"skill_name": "refined_a", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+            {"skill_name": "refined_b", "retrieved_count": 0, "injected_count": 0, "used_count": 0},
+        ],
+    }
+    state: Dict[str, Dict[str, Any]] = {}
+
+    first = _select_macro_candidate_group_feedback_rows(
+        raw_rows=[extractor_low_usage, refiner_low_usage],
+        state=state,
+        macro_index=0,
+        current_task_index=3,
+        min_usage=1,
+        min_age_tasks=2,
+        low_usage_patience=2,
+    )
+    second = _select_macro_candidate_group_feedback_rows(
+        raw_rows=[extractor_low_usage, refiner_low_usage],
+        state=state,
+        macro_index=1,
+        current_task_index=4,
+        min_usage=1,
+        min_age_tasks=2,
+        low_usage_patience=2,
+    )
+
+    assert first == []
+    assert [row["candidate_group_id"] for row in second] == ["refiner:r0:t0:group_low"]
+    assert second[0]["source_role"] == "refiner_revision"
+    assert second[0]["low_usage_feedback_source_role_allowed"] is True
+
+
+def test_refine_refactor_env_switch_defaults(monkeypatch) -> None:
+    from academic.benchmarks.bfcl.related.experiment import (
+        _bundle_test_enabled,
+        _credit_filter_enabled,
+        _refactor_enabled,
+        _refine_enabled,
+    )
+
+    monkeypatch.delenv("BFCL_ENABLE_REFINE", raising=False)
+    monkeypatch.delenv("BFCL_ENABLE_REFACTOR", raising=False)
+    monkeypatch.delenv("BFCL_ENABLE_BUNDLE_TEST", raising=False)
+    monkeypatch.delenv("BFCL_ENABLE_CREDIT_FILTER", raising=False)
+    assert _refine_enabled() is True
+    assert _refactor_enabled() is True
+    assert _bundle_test_enabled() is True
+    assert _credit_filter_enabled() is True
+
+    monkeypatch.setenv("BFCL_ENABLE_REFINE", "0")
+    monkeypatch.setenv("BFCL_ENABLE_REFACTOR", "false")
+    monkeypatch.setenv("BFCL_ENABLE_BUNDLE_TEST", "0")
+    monkeypatch.setenv("BFCL_ENABLE_CREDIT_FILTER", "false")
+    assert _refine_enabled() is False
+    assert _refactor_enabled() is False
+    assert _bundle_test_enabled() is False
+    assert _credit_filter_enabled() is False
 
 
 def test_prior_extraction_adds_pending_skills_that_do_not_retrieve() -> None:
@@ -2730,6 +2896,39 @@ def test_bfcl_credit_events_use_common_normalization_and_evidence_limits() -> No
     assert store.get("skill_a").evidence.helpful_cases[0]["task_id"] == "task_18"
     assert store.get("skill_a").evidence.helpful_cases[-1]["task_id"] == "task_29"
     assert len(store.get("skill_a").evidence.helpful_cases) == 12
+
+
+def test_credit_filter_disabled_records_would_act_without_mutation(monkeypatch) -> None:
+    monkeypatch.setenv("BFCL_ENABLE_CREDIT_FILTER", "0")
+    store = ArtifactStore(
+        [
+            SkillArtifact(name="skill_a", kind="atomic_tool_rule_card", description="a", body="a"),
+            SkillArtifact(name="skill_b", kind="atomic_tool_rule_card", description="b", body="b"),
+        ]
+    )
+    events = [
+        {
+            "skill_name": "skill_a",
+            "task_id": f"train_{idx}",
+            "judgment": "harmful",
+            "effect_type": "domain_mismatch",
+            "confidence": 0.8,
+            "retrieved": True,
+            "injected": True,
+            "used": False,
+        }
+        for idx in range(2)
+    ]
+    summary = _aggregate_skill_credit(events, store=store)
+
+    decisions = _apply_skill_credit_filter(store=store, credit_summary=summary, threshold=2)
+    skill_a = store.get("skill_a")
+
+    assert skill_a is not None and skill_a.is_disabled() is False
+    assert skill_a.metadata.get("disabled_reason") is None
+    assert decisions[0]["action"] == "filter_disabled"
+    assert decisions[0]["would_disable"] is True
+    assert decisions[0]["reason"] == "BFCL_ENABLE_CREDIT_FILTER=0"
 
 
 def test_bfcl_micro_write_targets_use_common_target_ordering() -> None:

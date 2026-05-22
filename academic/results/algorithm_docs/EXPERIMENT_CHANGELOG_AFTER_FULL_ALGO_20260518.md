@@ -1744,3 +1744,188 @@ This suggests the maturity-gated TRL fixes removed the worst negative behavior a
 The strictmeta changes improve strict heldout success relative to the earlier maturity-gated TRL continuation (`0.10` vs `0.08`) and keep avg_score high (`0.7965`). However, official_valid drops from `0.74` in maturity-gated 50/50 to `0.66`, and strict success still does not beat the no-TRL deterministic competition result (`0.12`).
 
 This is useful evidence that three-role TRL and strict loser handling are not catastrophic, but the current prompt-only skill exposure is still not converting enough partial/official improvements into exact BFCL success. The next TRL improvement should focus on exact-call error conversion, especially whether meta-rules make refiner/refactorer skills too broad or whether retrieved prompt skills add extra calls in Vehicle/Trading/Invoice tasks.
+
+## 2026-05-21 BFCL baseline-first group-refiner TRL 50/50 run
+
+**Motivation.** The user asked to first verify that the baseline still works under the last good deterministic no-TRL setting, then implement the new TRL changes and run the full BFCL 50/50 result. The intended TRL change for this round was conservative: keep deterministic skill injection, keep candidate competition, add an LLM group-refiner over objective candidate-group evidence, and update extractor feedback from candidate groups only. Refiner/refactorer meta-skill feedback remains off in this variant.
+
+**Code changes.**
+
+- `academic/benchmarks/bfcl/adapter.py`
+  - Added short callable-skill tool aliases such as `skill_001`, while keeping canonical skill names for traces, store lookup, and credit assignment.
+  - Preserved legacy `skill__{name}` mapping internally.
+  - Added a `skill_tool_aliases` debug event and adjusted available-tool counting so alias tools do not inflate raw BFCL tool counts.
+- `academic/benchmarks/bfcl/related/experiment.py`
+  - Added macro-stage LLM group-refiner action proposal over candidate-group evidence.
+  - Added `_apply_group_refiner_actions(...)` guards so LLM actions cannot archive helpful or zero-exposure skills and cannot refine zero-exposure skills.
+  - Wired macro maintenance to consume precomputed group-refiner actions and record `group_refiner_action_payload`.
+  - Added error fallback: if group-refiner LLM fails, times out, or returns unparseable JSON, the run records the error and continues with deterministic heuristic actions.
+- `academic/skill_repository/llm_maintenance.py`
+  - Added `GROUP_REFINER_ACTION_SYSTEM` and `propose_group_refiner_actions_llm(...)`.
+  - The prompt asks for free-form `analysis` first and then structured `actions`.
+- Tests updated:
+  - `academic/benchmarks/tests/bfcl/test_benchmark_adapters.py`
+  - `academic/benchmarks/tests/bfcl_related/test_experiment.py`
+  - `academic/skill_repository/test_llm_maintenance_feedback.py`
+
+**Verification.**
+
+- `python -m py_compile academic/benchmarks/bfcl/adapter.py academic/benchmarks/bfcl/maintenance/adapter.py academic/benchmarks/bfcl/related/experiment.py academic/skill_repository/llm_maintenance.py academic/skill_repository/refactor_overlap.py academic/benchmarks/core/skill_injector.py`
+- `pytest -q academic/benchmarks/tests/bfcl/test_benchmark_adapters.py -k "function_skill_expands_to_raw_tool_calls or trial_supplement_marks_trial_skill_low_trust or injector_rescues_explicit_engine_start_subtask or legacy_deterministic_injector_gate_skips_llm"`
+  - `4 passed`
+- `pytest -q academic/skill_repository/test_llm_maintenance_feedback.py academic/benchmarks/tests/bfcl_related/test_experiment.py`
+  - `67 passed`
+
+**Baseline sanity run.**
+
+- Result: `academic/results/bfcl_baseline_detinj_after_baseline_fixes_20260521_run2.json`
+- Checkpoint: `academic/results/bfcl_baseline_detinj_after_baseline_fixes_20260521_run2_checkpoint.json`
+- Skills: `academic/results/bfcl_baseline_detinj_after_baseline_fixes_20260521_run2_skills.json`
+- Log: `academic/results/bfcl_baseline_detinj_after_baseline_fixes_20260521_run2.log`
+- Setting matched the prior aligned no-TRL deterministic run: fixed 50/50 manifest, deterministic injector, every-step retrieval, full-store extractor context, candidate competition, candidate sample count 3, `top_k_skills=2`, `prompt_only`, `max_steps_per_turn=20`, no extractor TRL.
+- Baseline still works: heldout strict `6/50 = 0.12`, official_valid `35/50 = 0.70`, avg_score `0.7993`. This is slightly above the earlier aligned no-TRL deterministic avg_score `0.7901`, though official_valid is `0.70` instead of `0.74`.
+
+**Smoke checks.**
+
+- `academic/results/bfcl_trl_group_refiner_smoke_2_2_retry_20260521.json` completed without runtime errors but produced no candidate-group feedback rows, so it validated no-crash behavior only.
+- A direct manual group-refiner call using real candidate-group evidence from `academic/results/bfcl_trl_20_0_callable_probe_20260521.json` returned a sensible action plan: refine the exposed `cancel_order_reuses_prior_order_id` variant with 3 helpful / 2 harmful credits and preserve zero-exposure siblings as backup.
+
+**Full group-refiner TRL run.**
+
+- Result: `academic/results/bfcl_trl_group_refiner_50_50_20260521.json`
+- Checkpoint: `academic/results/bfcl_trl_group_refiner_50_50_20260521_checkpoint.json`
+- Skills: `academic/results/bfcl_trl_group_refiner_50_50_20260521_skills.json`
+- Log: `academic/results/bfcl_trl_group_refiner_50_50_20260521.log`
+- Setting: fixed `curated_related_manifest_50_50.json`, Sonnet 4.5 via `local_claude_proxy`, deterministic injector, every-step retrieval, full-store extractor context, candidate competition, candidate sample count 3, macro step 10, test/train concurrency 4, `top_k_skills=2`, `prompt_only`, `max_steps_per_turn=20`, `max_task_seconds=180`, TRL enabled.
+
+**Metrics.**
+
+| run | phase | n | strict | official_valid | avg_score | recall | precision | avg_tokens | input | output | elapsed_s | model_steps | timeout | total_tokens | score/Mtok | valid/Mtok |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| baseline after fixes | train | 50 | `13/50 = 0.26` | `31/50 = 0.6200` | 0.8264 | 0.8882 | 0.7899 | 62233.1 | 61115.8 | 1117.3 | 34.035 | 9.26 | 0.0 | 3111655 | 13.279075 | 9.962544 |
+| baseline after fixes | test | 50 | `6/50 = 0.12` | `35/50 = 0.7000` | 0.7993 | 0.8985 | 0.7330 | 81423.4 | 80334.9 | 1088.6 | 35.294 | 10.18 | 0.0 | 4071172 | 9.816019 | 8.597033 |
+| group-refiner TRL | train | 50 | `11/50 = 0.22` | `35/50 = 0.7000` | 0.8338 | 0.8999 | 0.7978 | 63668.7 | 62561.4 | 1107.3 | 34.666 | 9.24 | 0.0 | 3183435 | 13.095728 | 10.994413 |
+| group-refiner TRL | test | 50 | `4/50 = 0.08` | `33/50 = 0.6600` | 0.8021 | 0.8982 | 0.7353 | 78353.5 | 77282.1 | 1071.4 | 33.366 | 9.84 | 0.0 | 3917673 | 10.236766 | 8.423368 |
+
+**Maintenance cost.**
+
+| run | maintenance calls | maintenance total tokens | extractor tokens | credit tokens | refiner tokens | group_refiner tokens | feedback tokens |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| baseline after fixes | 225 | 1582418 | 1074292 | 124181 | 163643 | 0 | 0 |
+| group-refiner TRL | 258 | 1955017 | 1244621 | 195881 | 296634 | 50896 | 13547 |
+
+**Monitoring observations.**
+
+- The 50/50 run completed cleanly: no traceback, timeout, or maintenance LLM error in the final log scan.
+- Real group-refiner path triggered. Window payloads were: heuristic/no rows, LLM, LLM, heuristic fallback, heuristic/no rows.
+- One group-refiner call hit JSON/max-token failure: attempts 1-3 each reached 4096 output tokens. The new fallback kept the run alive and recorded `llm_error_type=ValueError` in the third macro window payload.
+- Final skill library grew to `283` skills, far above baseline after fixes (`19`) and strictmeta (`161`). This came from many long extractor outputs after role feedback, especially later windows.
+- Final role feedback is extractor-only: `role_feedback.extractor` has 5 rules and `role_feedback.refactorer` has 0 rules.
+- Candidate-group feedback rows: `9`.
+- Replay buffer summary: extractor `9`, refactorer `0`, refiner_revision `0`.
+- Heldout `called_skill_tools` stayed empty because this run is `prompt_only`; effects are prompt influence/retrieval, not direct callable execution.
+
+**Comparison.**
+
+| run | heldout strict | heldout official_valid | heldout avg_score | note |
+|---|---:|---:|---:|---|
+| group-refiner TRL 50/50 | 0.08 | 0.66 | 0.8021 | best avg_score in these current BFCL rows, but lower exact success |
+| baseline after fixes deterministic | 0.12 | 0.70 | 0.7993 | strongest current strict exact success |
+| aligned no-TRL deterministic 2026-05-20 | 0.12 | 0.74 | 0.7901 | previous aligned deterministic reference |
+| strictmeta TRL 50/50 | 0.10 | 0.66 | 0.7965 | stronger strict than group-refiner, same official_valid |
+| maturity-gated TRL 50/50 | 0.08 | 0.74 | 0.7984 | stronger official_valid, lower avg_score |
+| SkillX aligned 50/50 | 0.08 | 0.54 | 0.7679 | same heldout split diagnostic |
+
+**Conclusion.**
+
+The baseline check confirms the current codebase has not regressed the aligned deterministic no-TRL setting: strict heldout remains `0.12`, and avg_score is `0.7993`.
+
+The group-refiner TRL implementation is functionally working: it consumes real candidate-group evidence, produces/refines group actions, falls back safely on overlong JSON, and updates extractor rules. It improves heldout avg_score to `0.8021`, but it does not improve the main strict-success metric. Strict heldout drops to `0.08` and official_valid is `0.66`, below the deterministic baseline after fixes (`0.12` / `0.70`).
+
+The likely reason is over-generation and broad prompt exposure rather than runtime bugs. Extractor maintenance output grew sharply after feedback; final skills increased to `283`, and heldout examples show broad prompt-only skills such as contact-support brevity or Vehicle/Tire navigation being retrieved into cases where they do not guarantee exact-call improvement. TRL is therefore producing useful partial-credit guidance, but not yet enough exact-call control. The next improvement should constrain extractor output length/count per task, cap or rank late-window trial skills more aggressively before heldout, and make group-refiner output compact enough to avoid max-token JSON failures.
+
+## 2026-05-22 Overnight BFCL Meta5 and Spreadsheet Folder Runs
+
+**Scope.** This section records the overnight runs completed after the BFCL group-refiner round and the Spreadsheet folder-skill debugging. The aggregate rows are also appended to `EXPERIMENT_RESULTS_MASTER_TABLE_20260518.md`.
+
+### BFCL Meta5 TRL 50/50 and ablations
+
+Common setting:
+
+- Fixed manifest: `academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`
+- Model/config: `claude-sonnet-4-5` via `local_claude_proxy`
+- Backend/style: official backend, native prompt/tool style, `prompt_only` skill injection
+- `top_k_skills=2`, `candidate_competition=true`, `candidate_sample_count=3`
+- `micro_maintenance_step=1`
+- Meta5 runs used `macro_maintenance_step=5`
+- Deterministic skill injector gate
+
+Completed result files:
+
+| run | file | heldout strict | heldout official_valid | heldout avg_score | heldout avg tokens | interpretation |
+|---|---|---:|---:|---:|---:|---|
+| Meta5 TRL initial | `academic/results/bfcl_trl_refiner_candidates_meta5_50_50_20260522.json` | `7/50 = 0.14` | 0.70 | 0.8083 | 81098.8 | diagnostic predecessor; official_valid ties latest deterministic baseline, avg higher |
+| Meta5 TRL rulesfix | `academic/results/bfcl_trl_refiner_candidates_meta5_rulesfix_50_50_20260522.json` | `6/50 = 0.12` | 0.76 | 0.8144 | 82875.1 | main successful Meta5 run; best current BFCL heldout official_valid/avg in this batch |
+| Meta5 -refactor | `academic/results/bfcl_trl_meta5_ablation_no_refactor_50_50_20260522.json` | `3/50 = 0.06` | 0.48 | 0.7461 | 70454.4 | clean ablation; refactor is essential |
+| Meta5 -refine diagnostic | `academic/results/bfcl_trl_meta5_ablation_no_refine_50_50_20260522.json` | `2/50 = 0.04` | 0.74 | 0.7988 | 83481.1 | diagnostic only; one refine path was still active |
+| Meta5 -refine clean | `academic/results/bfcl_trl_meta5_ablation_no_refine_clean_50_50_20260522.json` | `7/50 = 0.14` | 0.72 | 0.7949 | 80666.2 | clean ablation; refine contributes about +0.04 official_valid and +0.0195 avg_score vs full |
+
+Dedicated writeup:
+
+- `academic/results/algorithm_docs/BFCL_META5_TRL_50_50_RESULTS_AND_ABLATIONS_20260522.md`
+
+Important notes:
+
+- The main Meta5 run improves over latest deterministic baseline (`official_valid 0.76` vs `0.70`, `avg_score 0.8144` vs `0.7993`).
+- Removing refactor is catastrophic (`official_valid 0.48`), supporting refactor as a core contributor.
+- Clean no-refine is below full Meta5 on official_valid and avg_score, but strict exact success is higher (`0.14` vs `0.12`), so refine helps partial/official validity more than strict exactness in this batch.
+- The initial Meta5 run is retained as diagnostic because it ran before the role-feedback parser/rules cleanup.
+
+### Spreadsheet folder-skill runs
+
+Relevant completed files:
+
+| run | file | train strict / avg | test strict / avg | skills | observed wall clock | interpretation |
+|---|---|---:|---:|---:|---:|---|
+| folder generalized direct strict | `academic/results/spreadsheet_0521-folder-generalized-direct-strict-50_50.json` | `11/50`, 0.3140 | `17/50`, 0.3782 | 13 total / 12 pending / 1 disabled | 19500s | best strict among current Spreadsheet folder rows; no Spreadsheet TRL |
+| Spreadsheet +TRL folder | `academic/results/spreadsheet_trl_folder_bash_50_50_20260522.json` | `11/50`, 0.3151 | `15/50`, 0.3755 | 8 pending | 13920s | completed after timeout/observability fix; TRL enabled but no feedback rows, so no actual role-rule update |
+| Spreadsheet +TRL smoke | `academic/results/spreadsheet_trl_smoke4_2_20260522.json` | train 4 | test 2 | 1 pending | 44s after resume | diagnostic smoke for resume and micro-maintenance timeout guard |
+
+Baselines used for comparison:
+
+| run | file | test strict | test avg_score |
+|---|---|---:|---:|
+| bash fixedsplit baseline | `academic/results/spreadsheet_0520-fixedsplit-bash-react-baseline-test50.json` | `14/50` | 0.3003 |
+| bash promptfix baseline | `academic/results/spreadsheet_0520-bash-react-baseline-test50-promptfix.json` | `15/50` | 0.3582 |
+| Spreadsheet SkillX aligned | `academic/results/skillx_spreadsheet_aligned/skillx_spreadsheet_bash_react_50_50_20260522/skillx_spreadsheet_test_result.json` | `17/50` | 0.3969 |
+
+Code/runtime changes made for the Spreadsheet +TRL run:
+
+- `academic/benchmarks/core/evolution.py`
+  - Added `micro_maintenance_start`, `micro_maintenance_done`, `micro_maintenance_timeout`, and `micro_maintenance_failed` progress logs around each task-level micro-maintenance call.
+  - Added a per-task micro-maintenance wall-clock timeout via `MICRO_MAINTENANCE_TIMEOUT_S`; the full run used `300s`.
+- `academic/benchmarks/spreadsheet/maintenance/adapter.py`
+  - Added `spreadsheet_micro_extraction_done`, `spreadsheet_prestore_gate_start`, and `spreadsheet_prestore_gate_done` logs.
+  - This made it clear that the slow path was not proxy/network deadlock but per-task folder extraction plus pre-store bundle/refine/test.
+
+Observed Spreadsheet +TRL behavior:
+
+- The full run completed: `50` train and `50` test, no train/test task timeout.
+- Micro maintenance timed out `30` times, intentionally converting slow maintenance subtasks into bounded failures so the run could finish.
+- Maintenance token stats for Spreadsheet +TRL:
+  - total maintenance calls `233`, total tokens `995876`
+  - folder extractor `143` calls / `533819` tokens
+  - package refiner `50` calls / `62800` tokens
+  - credit assigner `40` calls / `399257` tokens
+- Store after train: 8 pending folder skills, 0 active, 0 disabled.
+- Command-level use check:
+  - Train: 0 commands read/imported skill files.
+  - Test: 3 unique tasks read/imported/copied package code (`conditional_row_deletion`, `sumif_absolute_references`, `clean_numeric_preserve_decimals`); direct callable calls remained 0.
+- Spreadsheet TRL was enabled in all 5 macro windows, but each window had `n_feedback_rows=0`, so `ran=False`. In this experiment +TRL did not actually update extractor/refiner rules. The trigger condition is too narrow for the current Spreadsheet evidence stream.
+
+Interpretation:
+
+- Spreadsheet folder skills can be exposed and occasionally copied/adapted, but still do not reliably become callable utilities.
+- The best Spreadsheet result in this batch remains SkillX aligned (`17/50`, avg `0.3969`) by avg score and tied strict with the folder-generalized direct run.
+- Spreadsheet +TRL folder did not improve over folder generalized direct (`15/50`, avg `0.3755` vs `17/50`, avg `0.3782`) because TRL never received feedback rows.
+- The immediate method issue is not LLM timeout anymore; it is training maintenance cost and feedback sparsity. The next Spreadsheet fix should broaden TRL feedback rows to include retrieved-but-unused package skills and failed/timeout micro-maintenance outcomes, while keeping per-task maintenance bounded.

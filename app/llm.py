@@ -6,6 +6,7 @@ import tempfile
 import os
 import base64
 import mimetypes
+import uuid
 
 from PIL import Image
 import tiktoken
@@ -19,6 +20,9 @@ from openai import (
     RateLimitError,
 )
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat.chat_completion_message_tool_call import (
+    ChatCompletionMessageToolCall,
+)
 from tenacity import (
     retry,
     retry_if_exception,
@@ -45,6 +49,115 @@ def _should_retry_llm_error(exc: BaseException) -> bool:
     if isinstance(exc, _OAIInternalServerError) and getattr(exc, "status_code", None) == 529:
         return False
     return isinstance(exc, (OpenAIError, ValueError))
+
+
+def _anthropic_messages_endpoint(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        return f"{base}/messages"
+    return f"{base}/v1/messages"
+
+
+def _content_to_anthropic_blocks(content: Any) -> List[dict]:
+    if content is None:
+        return []
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}]
+    if isinstance(content, list):
+        return content
+    return [{"type": "text", "text": str(content)}]
+
+
+def _openai_tools_to_anthropic(tools: Optional[List[dict]]) -> Optional[List[dict]]:
+    if not tools:
+        return None
+    converted = []
+    for tool in tools:
+        fn = tool.get("function", {})
+        converted.append(
+            {
+                "name": fn.get("name", ""),
+                "description": fn.get("description", ""),
+                "input_schema": fn.get("parameters", {"type": "object", "properties": {}}),
+            }
+        )
+    return converted
+
+
+def _openai_messages_to_anthropic(messages: List[dict]) -> tuple[Any, List[dict]]:
+    system_blocks: List[dict] = []
+    anthropic_messages: List[dict] = []
+
+    for msg in messages:
+        role = msg.get("role")
+        if role == "system":
+            system_blocks.extend(_content_to_anthropic_blocks(msg.get("content", "")))
+            continue
+        if role == "tool":
+            anthropic_messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": msg.get("tool_call_id", ""),
+                            "content": msg.get("content", ""),
+                        }
+                    ],
+                }
+            )
+            continue
+        if role == "assistant":
+            content = _content_to_anthropic_blocks(msg.get("content", ""))
+            for tc in msg.get("tool_calls", []) or []:
+                fn = tc.get("function", {})
+                raw_args = fn.get("arguments", "{}")
+                try:
+                    parsed_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except Exception:
+                    parsed_args = {"arguments": raw_args}
+                content.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.get("id") or f"toolu_{uuid.uuid4().hex}",
+                        "name": fn.get("name", ""),
+                        "input": parsed_args if isinstance(parsed_args, dict) else {"arguments": parsed_args},
+                    }
+                )
+            anthropic_messages.append({"role": "assistant", "content": content})
+            continue
+        if role == "user":
+            anthropic_messages.append(
+                {"role": "user", "content": _content_to_anthropic_blocks(msg.get("content", ""))}
+            )
+
+    system: Any = system_blocks if system_blocks else None
+    return system, anthropic_messages
+
+
+def _anthropic_response_to_chat_message(payload: dict) -> ChatCompletionMessage:
+    text_parts: List[str] = []
+    tool_calls: List[ChatCompletionMessageToolCall] = []
+    for block in payload.get("content", []) or []:
+        btype = block.get("type")
+        if btype == "text":
+            text_parts.append(block.get("text", ""))
+        elif btype == "tool_use":
+            tool_calls.append(
+                ChatCompletionMessageToolCall(
+                    id=block.get("id") or f"toolu_{uuid.uuid4().hex}",
+                    type="function",
+                    function={
+                        "name": block.get("name", ""),
+                        "arguments": json.dumps(block.get("input", {}), ensure_ascii=False),
+                    },
+                )
+            )
+    return ChatCompletionMessage(
+        role="assistant",
+        content="\n".join(part for part in text_parts if part),
+        tool_calls=tool_calls or None,
+    )
 from app.logger import logger  # Assuming a logger is set up in your app
 from app.schema import (
     ROLE_VALUES,
@@ -1370,6 +1483,52 @@ class LLM:
                 + (", ".join(t.get("function", {}).get("name", "?") for t in tools) if tools else "none")
                 + f"\n{'='*80}"
             )
+            if model_in_use.startswith("claude-") and "/v1/messages" in self.base_url or (
+                model_in_use.startswith("claude-") and "127.0.0.1" in self.base_url
+            ):
+                import httpx
+
+                system, anthropic_messages = _openai_messages_to_anthropic(messages)
+                anthropic_payload: Dict[str, Any] = {
+                    "model": model_in_use,
+                    "messages": anthropic_messages,
+                    "max_tokens": self.max_tokens,
+                    "temperature": temperature if temperature is not None else self.temperature,
+                }
+                if system is not None:
+                    anthropic_payload["system"] = system
+                anthropic_tools = _openai_tools_to_anthropic(tools)
+                if anthropic_tools:
+                    anthropic_payload["tools"] = anthropic_tools
+                    if tool_choice == ToolChoice.REQUIRED:
+                        anthropic_payload["tool_choice"] = {"type": "any"}
+                    elif tool_choice == ToolChoice.NONE:
+                        anthropic_payload["tool_choice"] = {"type": "none"}
+
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    resp = await client.post(
+                        _anthropic_messages_endpoint(self.base_url),
+                        headers={
+                            "x-api-key": self.api_key,
+                            "anthropic-version": "2023-06-01",
+                            "content-type": "application/json",
+                        },
+                        json=anthropic_payload,
+                    )
+                    resp.raise_for_status()
+                payload = resp.json()
+                _tool_result = _anthropic_response_to_chat_message(payload)
+                usage = payload.get("usage") or {}
+                self.update_token_count(
+                    int(usage.get("input_tokens", 0)),
+                    int(usage.get("output_tokens", 0)),
+                    model_in_use,
+                )
+                llm_trace(f"[ASK_TOOL OUTPUT/ANTHROPIC] model={model_in_use}\n{_tool_result}\n{'='*80}")
+                if _cache_active_tool and _tool_result is not None:
+                    store_cached_ask_tool(model_in_use, messages, tools, _tool_result)
+                return _tool_result
+
             response: ChatCompletion = await self.client.chat.completions.create(
                 **params, extra_body=extra_body or None
             )

@@ -1147,7 +1147,14 @@ def _spreadsheet_presentation_mode(mode: str | None) -> str:
 
 
 def _spreadsheet_direct_skill_context_enabled(mode: str | None) -> bool:
-    return str(mode or "").strip().lower() in {"direct", "direct_full", "preselected", "no_llm"}
+    return str(mode or "").strip().lower() in {
+        "direct",
+        "direct_full",
+        "preselected",
+        "no_llm",
+        "none",
+        "off",
+    }
 
 
 def _spreadsheet_notebook_retrieval_query(
@@ -1760,9 +1767,11 @@ def _spreadsheet_package_update_prompt(
 def extract_bash_command(text: str) -> str:
     if not text:
         return ""
-    preferred = re.search(r"```(?:bash|sh|shell)\s*(.*?)```", text, re.S | re.I)
+    preferred = re.search(r"```(?:bash|sh|shell)\s*\n?", text, re.I)
     if preferred:
-        return preferred.group(1).strip()
+        closing = text.rfind("```")
+        if closing > preferred.end():
+            return text[preferred.end():closing].strip()
     python_block = re.search(r"```python\s*(.*?)```", text, re.S | re.I)
     if python_block:
         return "python - <<'PY'\n" + python_block.group(1).strip() + "\nPY"

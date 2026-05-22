@@ -101,12 +101,15 @@ from academic.benchmarks.spreadsheet.verifier import (
 )
 from academic.skill_repository.llm_maintenance import (
     _ask_json,
+    _extractor_rule_suffix,
     _record_maintenance_token_event,
+    _refiner_rule_suffix,
     _role_json_block,
     apply_refine_payload,
     normalize_skill_name,
     refine_skill_artifact_llm,
     summarize_dependency_context,
+    update_role_rules_from_feedback_llm,
 )
 
 
@@ -137,6 +140,22 @@ def _spreadsheet_maintenance_model_name(default: str | None) -> str | None:
         if value:
             return value
     return default
+
+
+def _spreadsheet_role_feedback(config: MaintenanceRunConfig) -> Dict[str, Any]:
+    payload = config.extra.setdefault("role_feedback", {})
+    if not isinstance(payload, dict):
+        payload = {}
+        config.extra["role_feedback"] = payload
+    return payload
+
+
+def _spreadsheet_role_rules(config: MaintenanceRunConfig, role_name: str) -> List[Dict[str, Any]]:
+    role_feedback = _spreadsheet_role_feedback(config)
+    role_payload = role_feedback.get(role_name) or {}
+    if not isinstance(role_payload, dict):
+        return []
+    return [dict(item) for item in (role_payload.get("rules") or []) if isinstance(item, dict)]
 
 
 def _compat_module() -> Any:
@@ -390,6 +409,18 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
             config=config,
             task_index=task_index,
         )
+        print(
+            json.dumps(
+                {
+                    "progress": "spreadsheet_micro_extraction_done",
+                    "task_id": detail.get("task_id"),
+                    "task_index": task_index,
+                    "n_extracted": len(extracted),
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
         extraction_reports: List[Dict[str, Any]] = []
         accepted_extracted: List[SkillArtifact] = []
         for artifact in extracted:
@@ -408,10 +439,37 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
                     }
                 )
                 continue
+            print(
+                json.dumps(
+                    {
+                        "progress": "spreadsheet_prestore_gate_start",
+                        "task_id": detail.get("task_id"),
+                        "task_index": task_index,
+                        "skill_name": artifact.name,
+                        "skill_kind": artifact.kind,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
             prestore_gate = await _run_spreadsheet_prestore_bundle_gate(
                 artifact=artifact,
                 store=store,
                 config=config,
+            )
+            print(
+                json.dumps(
+                    {
+                        "progress": "spreadsheet_prestore_gate_done",
+                        "task_id": detail.get("task_id"),
+                        "task_index": task_index,
+                        "skill_name": artifact.name,
+                        "passed": bool(prestore_gate.get("passed")),
+                        "reason": prestore_gate.get("rejection_reason") or "",
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
             )
             artifact = prestore_gate["artifact"]
             prestore_result = prestore_gate.get("final_result")
@@ -538,10 +596,22 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
         window_index: int,
         final_window: bool = False,
     ) -> Dict[str, Any]:
-        del config, round_index
         promotions = _promote_spreadsheet_pending_from_window(store, window_details)
         dedupe = _dedupe_spreadsheet_skills(store)
         filtered = _filter_spreadsheet_harmful_skills(store, credit_events)
+        trl_feedback = await _update_spreadsheet_role_feedback_from_window(
+            window_details=window_details,
+            all_train_details=all_train_details,
+            credit_events=credit_events,
+            store=store,
+            config=config,
+            round_index=round_index,
+            window_index=window_index,
+            final_window=final_window,
+            promotions=promotions,
+            dedupe=dedupe,
+            filtered=filtered,
+        )
         store.refresh_all_dependencies()
         return {
             "phase": "macro_final" if final_window else "macro",
@@ -556,13 +626,15 @@ class SpreadsheetMaintenanceAdapter(NoOpMaintenanceAdapter):
                 "promoted_pending_skills": promotions,
                 "deduplicated_skills": dedupe,
                 "filtered_skills": filtered,
+                "trl_feedback": trl_feedback,
                 "window_trace_segments": [
                     _spreadsheet_trace_projection(item) for item in window_details
                 ],
                 "all_train_count": len(all_train_details),
             },
+            "trl_feedback": trl_feedback,
             "run_overlap_refactor": True,
-            "reason": "spreadsheet_macro_promote_dedupe_filter",
+            "reason": "spreadsheet_macro_promote_dedupe_filter_trl",
         }
 
     def store_snapshot(self, store: ArtifactStore) -> Dict[str, Any]:
@@ -744,8 +816,9 @@ def _spreadsheet_extraction_user_payload(
             "success_trace": success,
             "skill_format": _spreadsheet_skill_format(skill_format),
             "preferred_for_success": (
-                "If reusable_edit_steps is non-empty, extract at least one narrow executable_tool "
-                "from the reusable edit operation unless an existing artifact already covers it."
+                "If reusable_edit_steps is non-empty, extract at least one narrow, generalized "
+                "skill from the reusable edit operation unless an existing artifact already covers it. "
+                "Parameterize workbook-specific sheets, ranges, headers, keywords, thresholds, and markers."
             ),
             "bash_react_note": (
                 "The trace may contain bash heredocs. Treat bash as an execution wrapper and extract "
@@ -754,8 +827,15 @@ def _spreadsheet_extraction_user_payload(
             ),
             "skill_package_note": (
                 "For bash_react traces, prefer skill_package when a later executor should read a concise "
-                "SKILL.md and run/import a script from skills/<name>/scripts/. Put exact files in "
-                "metadata.package_files and tests in metadata.bundle_files."
+                "SKILL.md and run/import or copy/adapt a script from skills/<name>/scripts/. Put exact files in "
+                "metadata.package_files and tests in metadata.bundle_files. SKILL.md should state when to use, "
+                "when not to use, configurable inputs, workbook assumptions, and copy/adapt guidance."
+            ),
+            "generalization_policy": (
+                "Extract reusable operations, not task answers. Good candidates include keyword/regex marking, "
+                "header-based column move/copy with style preservation, cross-sheet key matching, row insertion "
+                "around detected markers, and date/threshold filtering. Bad candidates hardcode one workbook's "
+                "literal constants without parameters or applicability limits."
             ),
             "format_constraint": _spreadsheet_skill_format_instruction(skill_format),
             "failed_trace_policy": (
@@ -1111,6 +1191,8 @@ def _spreadsheet_body_from_structured_raw(raw: Dict[str, Any]) -> str:
         if isinstance(package_files, dict):
             skill_md = str(package_files.get("SKILL.md") or package_files.get("skill.md") or "").strip()
             if skill_md:
+                if not body or body == skill_md:
+                    return skill_md
                 return body + "\n\nSKILL.md:\n" + skill_md if body else skill_md
         return body
     code_lines = raw.get("code_lines")
@@ -1326,7 +1408,8 @@ async def _extract_spreadsheet_skills_from_detail(
         rubric_failures: List[Dict[str, Any]] | None = None
         for rewrite_round in range(max(1, limits["max_rewrite_rounds"] + 1)):
             payload = await _compat_ask_json(
-                system=SPREADSHEET_EXTRACT_SYSTEM,
+                system=SPREADSHEET_EXTRACT_SYSTEM
+                + _extractor_rule_suffix(_spreadsheet_role_rules(config, "extractor")),
                 user=_spreadsheet_extraction_role_json_block(
                     _spreadsheet_extraction_user_payload(
                         existing=existing,
@@ -1346,6 +1429,7 @@ async def _extract_spreadsheet_skills_from_detail(
                     "task_id": detail.get("task_id"),
                     "task_index": task_index,
                     "rewrite_round": rewrite_round,
+                    "n_extractor_rules": len(_spreadsheet_role_rules(config, "extractor")),
                 },
             )
             raw_artifacts = [dict(item or {}) for item in list(payload.get("artifacts") or [])]
@@ -1556,7 +1640,9 @@ async def _extract_spreadsheet_folder_skills_terminal(
                 ),
                 "limits": {
                     "max_artifacts": limits["max_artifacts"],
-                    "max_skill_md_words": limits["max_body_words"],
+                    "max_skill_md_words": 180,
+                    "recommended_skill_md_words": 160,
+                    "max_report_description_words": 40,
                     "max_skill_md_nonempty_lines": limits["max_body_lines"],
                     "max_script_nonempty_lines": 80,
                 },
@@ -1569,13 +1655,30 @@ async def _extract_spreadsheet_folder_skills_terminal(
                     "If true, create or edit folder-style SpreadsheetBench skills on disk. Do not print JSON. "
                     "Keep scripts concise and reusable; use INPUT_XLSX/OUTPUT_XLSX or argv paths. "
                     "Tests should import or run scripts from the sibling skill folder. "
-                    "The skill must be grounded in reusable_edit_steps or verifier mismatches; do not create unrelated generic Excel skills."
+                    "The skill must be grounded in reusable_edit_steps or verifier mismatches; do not create unrelated generic Excel skills. "
+                    "Extract a reusable operation, not the solved task transcript. Parameterize workbook-specific "
+                    "sheet names, ranges, headers, literal keywords, thresholds, markers, and destination columns "
+                    "unless the package states a narrow applicability contract. SKILL.md must include: When to use, "
+                    "When not to use, Inputs to configure, Workbook assumptions, and How to copy/adapt or run. "
+                    "Keep SKILL.md under 160 words when possible and never over 180 words. Keep the report "
+                    "description under 40 words and put details in the script comments only when necessary. "
+                    "When writing SKILL.md or reports inside a bash heredoc, do not include triple-backtick "
+                    "Markdown code fences; use indented examples or plain text command lines instead. "
+                    "Good packages include keyword/regex marking, header-based column move/copy with style "
+                    "preservation, cross-sheet key filtering/deletion, marker-based row insertion, and date/threshold "
+                    "filtering. Bad packages hardcode one workbook's constants, such as one project name, one fixed "
+                    "keyword list, or one exact D-to-F edit, without configuration."
                 ),
             }
             system = (
                 "You are the folder-skill extractor for SpreadsheetBench. "
                 "You work in a temporary terminal workspace. Read input.json, then write skill package files "
-                "instead of returning JSON. Prefer one narrow package grounded in the trace. "
+                "instead of returning JSON. Prefer one narrow, generalized package grounded in the trace. "
+                "The package should be useful to a future executor as a callable script or as code to copy/adapt. "
+                "Hard constraints: SKILL.md <= 180 words, preferably <= 160; report description <= 40 words; "
+                "no triple-backtick Markdown fences inside heredoc-written files; parameterize sheet/range/header/"
+                "keyword/threshold/marker constants; bad packages hardcode one workbook's constants without "
+                "configuration. "
                 "Return only one fenced bash block."
             )
             prompt = _role_json_block(instruction, preserve_keys={"previous_command_output", "validation_feedback"})
@@ -1781,6 +1884,8 @@ def _spreadsheet_folder_extractor_raw_artifacts(
         report = _parse_spreadsheet_folder_report(reports_root / f"{skill_dir.name}.txt")
         if "SKILL.md" not in package_files:
             failures.append(f"{skill_dir.name}: missing SKILL.md")
+        elif isinstance(package_files.get("SKILL.md"), str):
+            package_files["SKILL.md"] = _compact_spreadsheet_skill_md(package_files["SKILL.md"], max_words=180)
         script_items = [
             (path, content)
             for path, content in package_files.items()
@@ -1829,6 +1934,41 @@ def _spreadsheet_folder_extractor_raw_artifacts(
     if len(raw_artifacts) > limits["max_artifacts"]:
         failures.append(f"too many skill packages: {len(raw_artifacts)} > {limits['max_artifacts']}")
     return raw_artifacts, failures
+
+
+def _compact_spreadsheet_skill_md(text: str, *, max_words: int = 180) -> str:
+    """Shorten generated SKILL.md without changing executable package files."""
+
+    if _word_count(text) <= max_words:
+        return text
+    compact_lines: List[str] = []
+    previous_blank = False
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if compact_lines and not previous_blank:
+                compact_lines.append("")
+            previous_blank = True
+            continue
+        previous_blank = False
+        if stripped.startswith("#"):
+            compact_lines.append(stripped)
+            continue
+        words = stripped.split()
+        limit = 18 if stripped.startswith(("-", "*")) else 24
+        compact_lines.append(" ".join(words[:limit]))
+    compact = "\n".join(compact_lines).strip()
+    if _word_count(compact) <= max_words:
+        return compact
+    kept: List[str] = []
+    total = 0
+    for line in compact.splitlines():
+        words = re.findall(r"\b\w+\b", line)
+        if kept and total + len(words) > max_words:
+            break
+        kept.append(line)
+        total += len(words)
+    return "\n".join(kept).strip()
 
 
 def _parse_spreadsheet_folder_report(path: Path) -> Dict[str, str]:
@@ -2622,6 +2762,7 @@ async def _run_spreadsheet_refiner(
             credit_context=list(credit_context),
             refinement_history=artifact.history[-3:],
             dependency_summaries=summarize_dependency_context(store.all()),
+            refiner_rules=_spreadsheet_role_rules(config, "refiner"),
             llm_config=config.llm_config,
             model_name=config.model_name,
             audit_context={"phase": phase, "benchmark": "spreadsheet"},
@@ -2743,6 +2884,7 @@ async def _run_spreadsheet_package_refiner(
                 "bundle_dir": str(Path("bundles") / _spreadsheet_package_dir_name(artifact.name)),
                 "failure_report_path": "failure_report.json",
                 "credit_context": list(credit_context),
+                "runtime_informed_refiner_rules": _spreadsheet_role_rules(config, "refiner"),
                 "previous_command_output": current_output[-3000:],
                 "instruction": (
                     "Return exactly one fenced bash command. Inspect or edit files under the skill_dir or bundle_dir, "
@@ -2753,7 +2895,7 @@ async def _run_spreadsheet_package_refiner(
                 "You are a lightweight terminal refiner for a SpreadsheetBench folder-style skill package. "
                 "Repair SKILL.md, scripts, or bundle tests so the package is reusable and its tests pass. "
                 "Use concise shell commands and Python snippets. Return only one fenced bash block."
-            )
+            ) + _refiner_rule_suffix(_spreadsheet_role_rules(config, "refiner"))
             prompt = _role_json_block(payload, preserve_keys={"previous_command_output"})
             response = await _ask_spreadsheet_text_role(
                 system=system,
@@ -2765,6 +2907,7 @@ async def _run_spreadsheet_package_refiner(
                     "benchmark": "spreadsheet",
                     "skill_name": artifact.name,
                     "turn_index": turn_index,
+                    "n_refiner_rules": len(_spreadsheet_role_rules(config, "refiner")),
                 },
                 max_request_wall_s=config.extra.get("llm_request_timeout_s") or config.max_task_seconds,
             )
@@ -3394,6 +3537,187 @@ def _filter_spreadsheet_harmful_skills(
         artifact.metadata["disabled_credit_events"] = rows[-5:]
         filtered.append(skill_name)
     return filtered
+
+
+async def _update_spreadsheet_role_feedback_from_window(
+    *,
+    window_details: Sequence[Dict[str, Any]],
+    all_train_details: Sequence[Dict[str, Any]],
+    credit_events: Sequence[Dict[str, Any]],
+    store: ArtifactStore,
+    config: MaintenanceRunConfig,
+    round_index: int,
+    window_index: int,
+    final_window: bool,
+    promotions: Sequence[str],
+    dedupe: Sequence[str],
+    filtered: Sequence[str],
+) -> Dict[str, Any]:
+    enabled = bool(config.extra.get("spreadsheet_trl_enabled"))
+    feedback_rows = _spreadsheet_trl_feedback_rows(
+        window_details=window_details,
+        credit_events=credit_events,
+        store=store,
+        promotions=promotions,
+        dedupe=dedupe,
+        filtered=filtered,
+    )
+    report: Dict[str, Any] = {
+        "enabled": enabled,
+        "ran": False,
+        "round_index": round_index,
+        "window_index": window_index,
+        "final_window": final_window,
+        "n_feedback_rows": len(feedback_rows),
+        "feedback_rows": copy.deepcopy(feedback_rows),
+        "role_updates": {},
+        "role_feedback": copy.deepcopy(_spreadsheet_role_feedback(config)),
+        "n_train_seen": len(all_train_details),
+    }
+    if not enabled or not feedback_rows:
+        return report
+    role_feedback = _spreadsheet_role_feedback(config)
+    max_rules = int(config.extra.get("spreadsheet_trl_max_rules", os.environ.get("SPREADSHEET_TRL_MAX_RULES", "5")) or 5)
+    for role_name in ("extractor", "refiner"):
+        role_rows = [
+            row for row in feedback_rows
+            if role_name in set(row.get("target_roles") or [])
+        ]
+        if not role_rows:
+            continue
+        update = await update_role_rules_from_feedback_llm(
+            role_name=role_name,
+            current_rules=(role_feedback.get(role_name) or {}).get("rules") if isinstance(role_feedback.get(role_name), dict) else [],
+            feedback_rows=role_rows,
+            llm_config=config.llm_config,
+            model_name=config.model_name,
+            max_rules=max_rules,
+            audit_context={
+                "phase": "spreadsheet_macro_trl_feedback",
+                "benchmark": "spreadsheet",
+                "round_index": round_index,
+                "window_index": window_index,
+                "role": role_name,
+            },
+        )
+        existing_role_feedback = (
+            dict(role_feedback.get(role_name) or {})
+            if isinstance(role_feedback.get(role_name), dict)
+            else {}
+        )
+        prior_history = list(existing_role_feedback.get("history") or [])[-4:]
+        role_feedback[role_name] = {
+            **existing_role_feedback,
+            "rules": copy.deepcopy(update.get("rules") or []),
+            "last_update_summary": update.get("summary"),
+            "last_updated_at": update.get("updated_at"),
+            "history": [
+                *prior_history,
+                {
+                    "summary": update.get("summary"),
+                    "n_feedback_rows": len(role_rows),
+                    "rules": copy.deepcopy(update.get("rules") or []),
+                    "round_index": round_index,
+                    "window_index": window_index,
+                },
+            ],
+        }
+        report["role_updates"][role_name] = copy.deepcopy(update)
+    report["ran"] = bool(report["role_updates"])
+    report["role_feedback"] = copy.deepcopy(role_feedback)
+    return report
+
+
+def _spreadsheet_trl_feedback_rows(
+    *,
+    window_details: Sequence[Dict[str, Any]],
+    credit_events: Sequence[Dict[str, Any]],
+    store: ArtifactStore,
+    promotions: Sequence[str],
+    dedupe: Sequence[str],
+    filtered: Sequence[str],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    window_task_ids = {str(item.get("task_id") or "") for item in window_details}
+    credit_by_skill: Dict[str, List[Dict[str, Any]]] = {}
+    for event in credit_events:
+        task_id = str(event.get("task_id") or event.get("source_task_id") or "")
+        if window_task_ids and task_id and task_id not in window_task_ids:
+            continue
+        skill_name = str(event.get("skill_name") or "")
+        if skill_name:
+            credit_by_skill.setdefault(skill_name, []).append(dict(event))
+    for skill_name, events in sorted(credit_by_skill.items()):
+        judgments = [str(item.get("judgment") or "") for item in events]
+        helpful = judgments.count("helpful")
+        harmful = judgments.count("harmful")
+        neutral = judgments.count("neutral")
+        retrieved_only = sum(1 for item in events if item.get("scope") == "retrieved_only" or item.get("retrieved_but_unused"))
+        filter_candidates = [item for item in events if item.get("filter_candidate")]
+        refine_required = [item for item in events if item.get("refine_required")]
+        if not (harmful or retrieved_only or filter_candidates or refine_required):
+            continue
+        artifact = store.get(skill_name)
+        rows.append(
+            {
+                "feedback_type": "spreadsheet_skill_runtime_feedback",
+                "skill_name": skill_name,
+                "target_roles": ["extractor", "refiner"],
+                "task_ids": sorted({str(item.get("task_id") or item.get("source_task_id") or "") for item in events if str(item.get("task_id") or item.get("source_task_id") or "")}),
+                "helpful_count": helpful,
+                "harmful_count": harmful,
+                "neutral_count": neutral,
+                "retrieved_but_unused_count": retrieved_only,
+                "filter_candidate_count": len(filter_candidates),
+                "refine_required_count": len(refine_required),
+                "skill_status": getattr(artifact, "status", None),
+                "skill_kind": getattr(artifact, "kind", None),
+                "skill_description": getattr(artifact, "description", "")[:240] if artifact else "",
+                "lesson": _spreadsheet_trl_lesson(
+                    harmful=harmful,
+                    retrieved_only=retrieved_only,
+                    filter_candidate_count=len(filter_candidates),
+                    refine_required_count=len(refine_required),
+                ),
+                "credit_event_samples": [
+                    {
+                        key: item.get(key)
+                        for key in ("task_id", "judgment", "scope", "confidence", "reason", "refine_required", "filter_candidate")
+                        if item.get(key) not in (None, "", [], {})
+                    }
+                    for item in events[-5:]
+                ],
+            }
+        )
+    for skill_name in sorted(set(promotions) | set(dedupe) | set(filtered)):
+        rows.append(
+            {
+                "feedback_type": "spreadsheet_macro_decision",
+                "skill_name": skill_name,
+                "target_roles": ["extractor", "refiner"],
+                "promoted": skill_name in set(promotions),
+                "deduplicated": skill_name in set(dedupe),
+                "filtered": skill_name in set(filtered),
+                "lesson": "Use macro outcomes to prefer reusable, tested, repeatedly helpful skills and narrow or drop duplicated/harmful ones.",
+            }
+        )
+    return rows[: int(os.environ.get("SPREADSHEET_TRL_MAX_FEEDBACK_ROWS", "24") or "24")]
+
+
+def _spreadsheet_trl_lesson(
+    *,
+    harmful: int,
+    retrieved_only: int,
+    filter_candidate_count: int,
+    refine_required_count: int,
+) -> str:
+    if filter_candidate_count or harmful:
+        return "Future extraction/refinement should narrow applicability and add explicit non-applicability notes for skills that harm or distract executor behavior."
+    if retrieved_only:
+        return "Skills that are repeatedly retrieved but unused should be made more actionable, renamed/described for the right trigger, or split from overbroad operations."
+    if refine_required_count:
+        return "Refiner should preserve useful behavior while repairing the exact failing precondition shown by credit or bundle evidence."
+    return "Use runtime evidence to improve skill scope, trigger, and testability."
 
 
 def _split_sheet_range(answer_range: Optional[str]) -> Tuple[Optional[str], Optional[str]]:

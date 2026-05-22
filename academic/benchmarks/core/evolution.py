@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -442,26 +444,108 @@ class OnlineSkillEvolutionRunner:
         round_index: int,
         micro_step: int,
     ) -> Dict[str, Any]:
+        task_index = _detail_task_index(detail)
+        timeout_s = _micro_maintenance_timeout_s(self.config)
+        started = time.monotonic()
+        print(
+            json.dumps(
+                {
+                    "progress": "micro_maintenance_start",
+                    "benchmark": self.adapter.benchmark,
+                    "task_id": detail.get("task_id"),
+                    "task_index": task_index,
+                    "round_index": round_index,
+                    "timeout_s": timeout_s,
+                },
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
         try:
-            return await self._run_one_task_maintenance(
+            coro = self._run_one_task_maintenance(
                 detail=detail,
                 store=store,
                 round_index=round_index,
                 micro_step=micro_step,
             )
+            report = await asyncio.wait_for(coro, timeout=timeout_s) if timeout_s else await coro
+            print(
+                json.dumps(
+                    {
+                        "progress": "micro_maintenance_done",
+                        "benchmark": self.adapter.benchmark,
+                        "task_id": detail.get("task_id"),
+                        "task_index": task_index,
+                        "round_index": round_index,
+                        "elapsed_s": round(time.monotonic() - started, 3),
+                        "targets": report.get("maintenance_targets") or [],
+                        "reason": report.get("reason"),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            return report
+        except asyncio.TimeoutError:
+            report = {
+                "phase": "micro",
+                "task_id": detail.get("task_id"),
+                "task_index": task_index,
+                "maintenance_targets": [],
+                "maintenance_test_results": [],
+                "refine_decisions": [],
+                "credit_bundle_cases": [],
+                "reason": "maintenance_timeout",
+                "error": f"micro maintenance exceeded {timeout_s} seconds",
+                "elapsed_s": round(time.monotonic() - started, 3),
+                "_credit_events": [],
+            }
+            print(
+                json.dumps(
+                    {
+                        "progress": "micro_maintenance_timeout",
+                        "benchmark": self.adapter.benchmark,
+                        "task_id": detail.get("task_id"),
+                        "task_index": task_index,
+                        "round_index": round_index,
+                        "elapsed_s": report["elapsed_s"],
+                        "timeout_s": timeout_s,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            return report
         except Exception as exc:
             report = {
                 "phase": "micro",
                 "task_id": detail.get("task_id"),
-                "task_index": _detail_task_index(detail),
+                "task_index": task_index,
                 "maintenance_targets": [],
                 "maintenance_test_results": [],
                 "refine_decisions": [],
                 "credit_bundle_cases": [],
                 "reason": f"maintenance_failed:{type(exc).__name__}",
                 "error": str(exc),
+                "elapsed_s": round(time.monotonic() - started, 3),
                 "_credit_events": [],
             }
+            print(
+                json.dumps(
+                    {
+                        "progress": "micro_maintenance_failed",
+                        "benchmark": self.adapter.benchmark,
+                        "task_id": detail.get("task_id"),
+                        "task_index": task_index,
+                        "round_index": round_index,
+                        "elapsed_s": report["elapsed_s"],
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[-500:],
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
             return report
 
     async def _run_one_task_maintenance(
@@ -867,6 +951,22 @@ def _detail_task_index(detail: Dict[str, Any]) -> int:
         return int(detail.get("task_index"))
     except Exception:
         return 0
+
+
+def _micro_maintenance_timeout_s(config: MaintenanceRunConfig) -> float | None:
+    raw = config.extra.get("micro_maintenance_timeout_s")
+    if raw in (None, ""):
+        raw = os.environ.get("MICRO_MAINTENANCE_TIMEOUT_S")
+    if raw in (None, ""):
+        base = config.max_task_seconds
+        if base:
+            return max(60.0, float(base) * 2.0)
+        return None
+    try:
+        value = float(raw)
+    except Exception:
+        return None
+    return value if value > 0 else None
 
 
 def _phase_round_index(phase: str) -> int:

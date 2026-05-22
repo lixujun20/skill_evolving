@@ -31,6 +31,7 @@ from academic.benchmarks.spreadsheet.adapter import (
     run_spreadsheet_task_bash_react,
     run_spreadsheet_task_notebook,
 )
+from academic.benchmarks.spreadsheet.executor import extract_bash_command
 from academic.benchmarks.spreadsheet.maintenance.adapter import (
     _ask_spreadsheet_text_role,
     _extract_spreadsheet_skills_from_detail,
@@ -39,8 +40,10 @@ from academic.benchmarks.spreadsheet.maintenance.adapter import (
     _spreadsheet_extraction_user_payload,
     _spreadsheet_extract_limits,
     _spreadsheet_extraction_rubric_failures,
+    _spreadsheet_folder_extractor_raw_artifacts,
 )
 from academic.benchmarks.spreadsheet.executor import _retrieve_spreadsheet_skills
+from academic.benchmarks.spreadsheet.executor import _spreadsheet_direct_skill_context_enabled
 
 
 def test_spreadsheet_adapter_facade_points_to_maintenance_adapter() -> None:
@@ -158,6 +161,98 @@ PY""",
     assert "python3 <<" not in edit_code
     assert "openpyxl.load_workbook(INPUT_XLSX)" in edit_code
     assert "wb.save(OUTPUT_XLSX)" in edit_code
+
+
+def test_spreadsheet_extractor_payload_requests_generalized_folder_skills(tmp_path: Path) -> None:
+    task = _task(tmp_path, "sheet_extract_generalize", "Mark rows whose text contains requested keywords.", source=9, answer=18)
+    detail = _detail(task, success=True, score=1.0, retrieved=[], code="")
+    payload = _spreadsheet_extraction_user_payload(
+        existing=[],
+        detail=detail,
+        limits={
+            "max_body_words": 120,
+            "max_body_lines": 12,
+            "max_code_lines": 25,
+            "max_artifacts": 3,
+            "max_rewrite_rounds": 1,
+        },
+        skill_format="folder",
+    )
+
+    policy_text = " ".join(str(value) for value in payload["extraction_policy"].values())
+    assert "Parameterize workbook-specific sheets, ranges, headers, keywords, thresholds, and markers" in policy_text
+    assert "copy/adapt" in policy_text
+    assert "when to use" in policy_text.lower()
+    assert "Bad candidates hardcode" in policy_text
+    assert "Return only skill_package artifacts" in payload["extraction_policy"]["format_constraint"]
+
+
+def test_spreadsheet_off_none_modes_are_direct_skill_context() -> None:
+    for mode in ["off", "none", "direct", "direct_full", "preselected", "no_llm"]:
+        assert _spreadsheet_direct_skill_context_enabled(mode) is True
+    for mode in ["full", "compact", "budget", "summary", "", None]:
+        assert _spreadsheet_direct_skill_context_enabled(mode) is False
+
+
+def test_extract_bash_command_tolerates_markdown_fences_inside_heredoc() -> None:
+    text = """```bash
+cat > skills/example/SKILL.md <<'EOF'
+# Example
+```bash
+python scripts/apply.py input.xlsx output.xlsx
+```
+EOF
+cat > skills/example/scripts/apply.py <<'PY'
+print("ok")
+PY
+```"""
+
+    command = extract_bash_command(text)
+
+    assert "cat > skills/example/SKILL.md" in command
+    assert "cat > skills/example/scripts/apply.py" in command
+    assert command.rstrip().endswith("PY")
+
+
+def test_spreadsheet_folder_raw_artifact_does_not_double_count_skill_md(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "skills" / "keyword_marker"
+    bundle_dir = tmp_path / "bundles" / "keyword_marker"
+    reports_dir = tmp_path / "reports"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "scripts").mkdir()
+    bundle_dir.mkdir(parents=True)
+    reports_dir.mkdir()
+    long_skill_md = "\n".join(
+        [
+            "# Keyword Marker",
+            "## When to use",
+            " ".join(["use"] * 90),
+            "## When not to use",
+            " ".join(["avoid"] * 90),
+            "## Inputs to configure",
+            " ".join(["input"] * 90),
+        ]
+    )
+    (skill_dir / "SKILL.md").write_text(long_skill_md)
+    (skill_dir / "scripts" / "apply.py").write_text(
+        "import openpyxl\n\ndef apply(input_xlsx, output_xlsx):\n    wb = openpyxl.Workbook()\n    wb.save(output_xlsx)\n"
+    )
+    (bundle_dir / "run_tests.py").write_text("print('ok')\n")
+    (reports_dir / "keyword_marker.txt").write_text(
+        "# NAME\nkeyword_marker\n# DESCRIPTION\nMark rows by keyword.\n# INTENT_KEYWORDS\nkeyword, marker\n# NON_APPLICABILITY\nExact matching only.\n# SOURCE_TASK_IDS\ncase1\n"
+    )
+
+    raw, failures = _spreadsheet_folder_extractor_raw_artifacts(
+        work_dir=tmp_path,
+        detail={"task_id": "case1"},
+        limits=_spreadsheet_extract_limits(),
+    )
+
+    assert raw
+    skill_md = raw[0]["metadata"]["package_files"]["SKILL.md"]
+    assert len(skill_md.split()) <= 180
+    assert not any("body has" in failure for failure in failures)
+    assert not any("SKILL.md has" in failure for failure in failures)
 
 
 def test_spreadsheet_extractor_payload_uses_full_trace_for_long_bash_edit(tmp_path: Path) -> None:
@@ -292,6 +387,55 @@ async def test_spreadsheet_maintenance_text_role_uses_env_model_override(monkeyp
     assert response.content.startswith("```bash")
     assert captured["llm_config"] == "maintenance_proxy"
     assert captured["model_name"] == "claude-haiku-4-5"
+
+
+async def test_spreadsheet_folder_extractor_prompt_requests_generalized_copy_adapt_packages(monkeypatch, tmp_path: Path) -> None:
+    task = _task(tmp_path, "sheet_folder_prompt", "Mark rows whose text contains requested keywords.", source=9, answer=18)
+    detail = _detail(task, success=True, score=1.0, retrieved=[], code="")
+    captured: Dict[str, str] = {}
+
+    async def fake_text_role(**kwargs: Any) -> TextLLMResponse:
+        captured["system"] = str(kwargs.get("system") or "")
+        captured["prompt"] = str(kwargs.get("prompt") or "")
+        return TextLLMResponse(
+            content="""```bash
+python - <<'PY'
+import json
+data = json.load(open('input.json'))
+print(data['extraction_policy']['generalization_policy'])
+PY
+```""",
+            prompt_tokens=12,
+            completion_tokens=8,
+            model_name="mock-model",
+            api_style="mock",
+        )
+
+    monkeypatch.setattr("academic.benchmarks.spreadsheet.maintenance.adapter._ask_spreadsheet_text_role", fake_text_role)
+    artifacts = await _extract_spreadsheet_skills_from_detail(
+        detail,
+        store=ArtifactStore(),
+        config=MaintenanceRunConfig(
+            llm_config="mock",
+            model_name="mock-model",
+            extra={
+                "spreadsheet_skill_format": "folder",
+                "spreadsheet_folder_extractor_max_turns": 1,
+                "disable_spreadsheet_heuristic_extraction": True,
+            },
+        ),
+        task_index=0,
+    )
+
+    assert artifacts == []
+    assert "generalized package" in captured["system"]
+    assert "copy/adapt" in captured["system"]
+    assert "SKILL.md <= 180 words" in captured["system"]
+    assert "bad packages hardcode" in captured["system"]
+    assert "Parameterize workbook-specific" in captured["prompt"]
+    assert "When to use" in captured["prompt"]
+    assert '"max_skill_md_words": 180' in captured["prompt"]
+    assert "Keep SKILL.md under 160 words" in captured["prompt"]
 
 
 def _detail(

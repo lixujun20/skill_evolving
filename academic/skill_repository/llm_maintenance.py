@@ -279,6 +279,9 @@ Your job:
 9. Do not emit role-management advice like "look at the evidence carefully"; emit concrete extraction behavior rules.
 10. Do not infer quality from zero or low use unless the record explicitly passed the maturity/opportunity gates.
 11. Treat winner_score or summaries as bookkeeping only; ground conclusions in objective exposure_records, credit_records, and bundle_test_records.
+12. If feedback rows are provided, output at least one concrete rule unless
+    the analysis explicitly says the evidence is unusable. In that case, keep
+    any current rules and say why no new rule is justified in SUMMARY.
 
 Return exactly this delimiter format:
 === ANALYSIS ===
@@ -315,6 +318,10 @@ Priorities:
 4. Use group comparisons and positive-credit-per-exposure rates. Do not archive
    or suppress alternatives without positive harmful evidence.
 5. Keep at most {max_rules} active rules.
+6. If feedback rows are provided, output at least one concrete rule unless the
+   analysis explicitly says the evidence is unusable. Mature low-reuse groups
+   are valid evidence for retrieval/scope mismatch, but not for task-specific
+   benchmark shortcuts.
 
 Return exactly this delimiter format:
 === ANALYSIS ===
@@ -347,6 +354,10 @@ Priorities:
 4. Treat positive-credit-per-exposure and harmful-credit-per-exposure as the
    main normalized signals.
 5. Keep at most {max_rules} active rules.
+6. If feedback rows are provided, output at least one concrete rule unless the
+   analysis explicitly says the evidence is unusable. Mature refiner_revision
+   groups with low or zero reuse are evidence about over-specific, poorly
+   retrievable, or non-actionable refinements.
 
 Return exactly this delimiter format:
 === ANALYSIS ===
@@ -1098,14 +1109,16 @@ def _normalize_feedback_rules(
 def _parse_role_rule_update_text(text: str, *, max_rules: int, prefix: str) -> Dict[str, Any]:
     raw = str(text or "").strip()
     if not raw:
-        return {"analysis": "", "summary": "", "rules": []}
+        return {"analysis": "", "summary": "", "rules": [], "raw_response": raw}
+    json_parse_error = ""
     try:
         parsed = json.loads(_extract_json_text(raw))
         if isinstance(parsed, dict):
             parsed["rules"] = _normalize_feedback_rules(parsed.get("rules"), max_rules=max_rules, prefix=prefix)
+            parsed.setdefault("raw_response", raw)
             return parsed
-    except Exception:
-        pass
+    except Exception as exc:
+        json_parse_error = f"{type(exc).__name__}: {str(exc)[-300:]}"
 
     def section(name: str) -> str:
         pattern = rf"===\s*{re.escape(name)}\s*===\s*(.*?)(?=\n===\s*[A-Z_ ]+\s*===|\Z)"
@@ -1118,9 +1131,11 @@ def _parse_role_rule_update_text(text: str, *, max_rules: int, prefix: str) -> D
     rules: List[Dict[str, Any]] = []
     for line in rules_text.splitlines():
         item = line.strip()
-        if not item or item == "=== END ===":
+        if not item or item == "=== END ===" or item in {"```", "```json", "{", "}", "},"}:
             continue
         item = re.sub(r"^\s*[-*]\s*", "", item).strip()
+        if not item or item.startswith('"delimiter"') or item.startswith('"rules"') or item.startswith('"analysis"') or item.startswith('"summary"'):
+            continue
         match = re.match(r"^\[([^\]]+)\]\s*(.+)$", item)
         if match:
             focus = match.group(1).strip().lower() or "evidence"
@@ -1128,12 +1143,15 @@ def _parse_role_rule_update_text(text: str, *, max_rules: int, prefix: str) -> D
         else:
             focus = "evidence"
             text_value = item
+        text_value = text_value.strip().rstrip('",')
         if text_value:
             rules.append({"focus": focus, "text": text_value})
     return {
         "analysis": analysis,
         "summary": summary or (analysis[:180] if analysis else ""),
         "rules": _normalize_feedback_rules(rules, max_rules=max_rules, prefix=prefix),
+        "raw_response": raw,
+        **({"parse_warning": json_parse_error} if json_parse_error else {}),
     }
 
 
@@ -2731,12 +2749,24 @@ async def update_role_rules_from_feedback_llm(
         )
         data = _parse_role_rule_update_text(response_text, max_rules=max_rules, prefix=prefix)
     updated_rules = _normalize_feedback_rules(data.get("rules"), max_rules=max_rules, prefix=prefix)
+    new_rule_count = len(updated_rules)
+    empty_update_reason = ""
     if not updated_rules:
         updated_rules = normalized_current
+        empty_update_reason = "empty_rule_update"
+    parse_warning = str(data.get("parse_warning") or "").strip()
     return {
         "analysis": str(data.get("analysis") or ""),
-        "summary": str(data.get("summary") or ""),
+        "summary": str(data.get("summary") or empty_update_reason),
         "rules": updated_rules,
+        "n_new_rules": new_rule_count,
+        **({"empty_update_reason": empty_update_reason} if empty_update_reason else {}),
+        **({"parse_warning": parse_warning} if parse_warning else {}),
+        **(
+            {"raw_response_preview": str(data.get("raw_response") or "")[:1200]}
+            if empty_update_reason or parse_warning
+            else {}
+        ),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -127,6 +127,22 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _refine_enabled() -> bool:
+    return _env_bool("BFCL_ENABLE_REFINE", True)
+
+
+def _refactor_enabled() -> bool:
+    return _env_bool("BFCL_ENABLE_REFACTOR", True)
+
+
+def _bundle_test_enabled() -> bool:
+    return _env_bool("BFCL_ENABLE_BUNDLE_TEST", True)
+
+
+def _credit_filter_enabled() -> bool:
+    return _env_bool("BFCL_ENABLE_CREDIT_FILTER", True)
+
+
 def _extractor_existing_artifacts_mode() -> str:
     mode = str(os.environ.get("BFCL_EXTRACTOR_EXISTING_ARTIFACTS") or "none").strip().lower()
     if mode in {"full", "full_store", "store", "legacy"}:
@@ -292,10 +308,26 @@ def _merge_role_feedback_update(
         "macro_index": macro_index,
         "summary": update.get("summary") or "",
         "rules": copy.deepcopy(update.get("rules") or []),
+        "n_new_rules": int(update.get("n_new_rules") or 0),
         "n_feedback_rows": n_feedback_rows,
         "n_candidate_group_feedback_rows": n_feedback_rows,
         "trl_enabled": bool(trl_enabled),
         "feedback_scope": feedback_scope,
+        **(
+            {"empty_update_reason": str(update.get("empty_update_reason") or "")}
+            if update.get("empty_update_reason")
+            else {}
+        ),
+        **(
+            {"parse_warning": str(update.get("parse_warning") or "")}
+            if update.get("parse_warning")
+            else {}
+        ),
+        **(
+            {"raw_response_preview": str(update.get("raw_response_preview") or "")[:1200]}
+            if update.get("raw_response_preview")
+            else {}
+        ),
     }
     normalized[role_name] = {
         **current,
@@ -881,6 +913,7 @@ def _apply_skill_credit_filter(
     decisions: List[Dict[str, Any]] = []
     by_name = {artifact.name: artifact for artifact in store.all()}
     positive_protect_threshold = _env_int("BFCL_CREDIT_POSITIVE_PROTECT_THRESHOLD", 2)
+    filter_enabled = _credit_filter_enabled()
     for row in credit_summary:
         name = str(row.get("skill_name") or "").strip()
         artifact = by_name.get(name)
@@ -901,6 +934,24 @@ def _apply_skill_credit_filter(
             and harmful_count >= threshold
             and not protected_by_positive_credit
         )
+        if not filter_enabled:
+            decision = {
+                "skill_name": name,
+                "version": artifact.version,
+                "negative_margin": negative_margin,
+                "harmful_count": harmful_count,
+                "helpful_count": helpful_count,
+                "cross_domain_harmful_count": cross_domain_harmful_count,
+                "positive_protect_threshold": positive_protect_threshold,
+                "threshold": threshold,
+                "disabled_after": bool(artifact.is_disabled()),
+                "action": "filter_disabled",
+                "reason": "BFCL_ENABLE_CREDIT_FILTER=0",
+                "would_disable": bool(should_disable),
+                "would_refine_scope": bool(should_refine_scope),
+            }
+            decisions.append(decision)
+            continue
         if should_disable:
             artifact.status = "disabled"
             artifact.metadata["disabled"] = True
@@ -1868,6 +1919,11 @@ def _select_macro_candidate_group_feedback_rows(
     allow_low_usage_feedback: bool = False,
 ) -> List[Dict[str, Any]]:
     selected: List[Dict[str, Any]] = []
+    low_usage_roles = {
+        role.strip()
+        for role in os.environ.get("BFCL_TRL_LOW_USAGE_FEEDBACK_SOURCE_ROLES", "refactorer,refiner_revision").split(",")
+        if role.strip()
+    }
     seen_groups = {str(row.get("candidate_group_id") or "").strip() for row in raw_rows if isinstance(row, dict)}
     for row in raw_rows:
         if not isinstance(row, dict):
@@ -1931,7 +1987,9 @@ def _select_macro_candidate_group_feedback_rows(
             continue
         group_state["consecutive_low_usage_macros"] = int(group_state.get("consecutive_low_usage_macros") or 0) + 1
         group_state["last_skip_reason"] = "below_usage_threshold"
-        if allow_low_usage_feedback and int(group_state["consecutive_low_usage_macros"]) >= max(1, int(low_usage_patience or 1)):
+        source_role = _source_role_for_candidate_group(row)
+        role_allows_low_usage_feedback = source_role in low_usage_roles
+        if (allow_low_usage_feedback or role_allows_low_usage_feedback) and int(group_state["consecutive_low_usage_macros"]) >= max(1, int(low_usage_patience or 1)):
             if group_state.get("last_low_usage_feedback_macro_index") != macro_index:
                 group_state["n_low_usage_feedback"] = int(group_state.get("n_low_usage_feedback") or 0) + 1
                 group_state["last_low_usage_feedback_macro_index"] = macro_index
@@ -1948,6 +2006,8 @@ def _select_macro_candidate_group_feedback_rows(
                         "age_tasks": age_tasks,
                         "min_age_tasks": max(0, int(min_age_tasks or 0)),
                         "consecutive_low_usage_macros": int(group_state["consecutive_low_usage_macros"]),
+                        "source_role": source_role,
+                        "low_usage_feedback_source_role_allowed": bool(role_allows_low_usage_feedback),
                         "macro_index": macro_index,
                         "objective_record_schema": (
                             "low-usage feedback is emitted only after maturity/patience gates; "
@@ -3271,6 +3331,7 @@ async def _run_round_refine_and_refactor(
 ) -> Dict[str, Any]:
     token_start = maintenance_token_event_count()
     targets = _unique_ordered(artifact_names or select_bfcl_maintenance_targets(store, train_details=train_details))
+    run_bundle_tests = bool(run_bundle_tests and _bundle_test_enabled())
     if run_bundle_builder and targets:
         await build_bfcl_skill_bundles_llm(
             store,
@@ -3317,6 +3378,8 @@ async def _run_round_refine_and_refactor(
         test_results.append(result)
     refine_decisions = []
     if run_refine and test_results:
+        run_refine = _refine_enabled()
+    if run_refine and test_results:
         refine_decisions = await refine_bfcl_skill_store_llm(
             store,
             maintenance_test_results=test_results,
@@ -3329,6 +3392,7 @@ async def _run_round_refine_and_refactor(
             audit_context={"phase": f"{phase}_refine", "round_index": round_index, "experiment": tag},
         )
     overlap_refactor: Dict[str, Any] = {"attempts": [], "refactor_segment_coverage": []}
+    run_overlap_refactor = bool(run_overlap_refactor and _refactor_enabled())
     if run_overlap_refactor and new_segments is not None:
         overlap_refactor = await run_bfcl_overlap_refactor_llm(
             store,
@@ -3401,9 +3465,18 @@ async def _run_bundle_test_and_refine_targets(
     max_repair_rounds: int = 1,
     refiner_candidate_count: int | None = None,
 ) -> Dict[str, Any]:
+    run_refine = bool(run_refine and _refine_enabled())
     target_names = _unique_ordered(targets)
     test_results: List[SkillTestResult] = []
     refine_decisions: List[Dict[str, Any]] = []
+    if not _bundle_test_enabled():
+        return {
+            "maintenance_targets": target_names,
+            "maintenance_test_results": [],
+            "refine_decisions": [],
+            "run_bundle_tests": False,
+            "bundle_tests_disabled_by_env": "BFCL_ENABLE_BUNDLE_TEST=0",
+        }
     for repair_round in range(max(1, int(max_repair_rounds or 1))):
         round_results: List[SkillTestResult] = []
         for artifact in [skill for skill in store.all() if skill.name in set(target_names)]:
@@ -3621,6 +3694,8 @@ async def _run_credit_pre_refine_targets(
     dependency_context_by_skill: Dict[str, List[Dict[str, Any]]] | None = None,
     refiner_rules: Sequence[Dict[str, Any]] | None = None,
 ) -> List[Dict[str, Any]]:
+    if not _refine_enabled():
+        return []
     pre_refine_targets = _credit_pre_refine_target_names(task_credit_events, target_names)
     if not pre_refine_targets:
         return []
@@ -3899,6 +3974,18 @@ async def _run_group_maintenance(
     report["group_refiner_actions"] = copy.deepcopy(group_refiner_actions)
     if group_refiner_action_payload:
         report["group_refiner_action_payload"] = copy.deepcopy(group_refiner_action_payload)
+    if not _refine_enabled():
+        report["group_refiner_actions"] = [
+            {
+                **dict(row or {}),
+                "action_before_refine_ablation": dict(row or {}).get("action"),
+                "action": "backup" if dict(row or {}).get("action") == "refine" else dict(row or {}).get("action"),
+            }
+            for row in group_refiner_actions
+            if isinstance(row, dict)
+        ]
+        report["refine_disabled_by_env"] = "BFCL_ENABLE_REFINE=0"
+        return report
     refine_targets = _unique_ordered(
         row["skill_name"]
         for row in group_refiner_actions
@@ -4031,6 +4118,26 @@ async def _run_macro_maintenance(
     refactorer_rules: Sequence[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     token_start = maintenance_token_event_count()
+    if not _refactor_enabled():
+        return {
+            "phase": phase,
+            "maintenance_targets": [],
+            "maintenance_test_results": [],
+            "refine_decisions": [],
+            "overlap_refactor": {"attempts": [], "refactor_segment_coverage": []},
+            "refactor_segment_coverage": [],
+            "pending_skill_filter_candidates": [],
+            "skill_credit_summary": _aggregate_skill_credit(credit_events or [], store=store),
+            "skill_credit_filter_decisions": [],
+            "extractor_trl_update": {"enabled": bool(extractor_trl_enabled), "ran": False},
+            "static_dependency_validation": validate_skill_static_dependencies(store, []),
+            "run_bundle_builder": False,
+            "run_bundle_tests": False,
+            "run_refine": False,
+            "run_overlap_refactor": False,
+            "disabled_by_env": "BFCL_ENABLE_REFACTOR=0",
+            "token_breakdown": _token_breakdown_delta(token_start),
+        }
     legacy_hook = globals().get("_run_round_refine_and_refactor")
     if legacy_hook is not _ORIGINAL_RUN_ROUND_REFINE_AND_REFACTOR:
         report = await legacy_hook(

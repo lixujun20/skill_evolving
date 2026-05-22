@@ -50,6 +50,8 @@ Spreadsheet 主结果必须使用上述落盘 task id 文件。`shuffled_seed42_
 
 ## BFCL
 
+当前 BFCL 主比较口径改为 fixed heldout test 的 `official_valid` 与 `avg_score`，`success/strict` 只作为记录列保留，不用于当前结论。按该口径，最新 deterministic baseline (`bfcl_baseline_detinj_after_baseline_fixes_20260521_run2.json`) 的 heldout test 为 `official_valid=35/50=0.7000`、`avg_score=0.7993`。对比最新 group-refiner TRL test (`33/50=0.6600`, `avg_score=0.8021`)：baseline 的 official_valid 更高，TRL 的 avg_score 仅高 `+0.0028`。
+
 | run | phase | file | n | success | official_valid | avg_score | recall | precision | avg_tokens | input | output | timeout | 备注 |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | guardfix baseline | test | `academic/results/claude_proxy_related50_50_guardfix_20260517_232531_baseline.json` | 50 | 0.06 | 0.44 | 0.7312 | 0.8099 | 0.6946 | 70323.8 | - | - | 0.0 | 用户记得的 valid 约 0.4 来源 |
@@ -68,7 +70,7 @@ Spreadsheet 主结果必须使用上述落盘 task id 文件。`shuffled_seed42_
 | TRL injector-gate 50/50 | train | `academic/results/bfcl_related50_50_sonnet_trl_injector_gate_20260520_evolve.json` | 50 | 0.22 | 0.6531 | 0.8183 | 0.8744 | 0.7874 | 59604.8 | 58559.2 | 1045.6 | 0.0 | completed；LLM injector gate；candidate_competition_enabled=true |
 | TRL injector-gate 50/50 | test | `academic/results/bfcl_related50_50_sonnet_trl_injector_gate_20260520_evolve.json` | 50 | 0.08 | 0.60 | 0.7530 | 0.8371 | 0.7096 | 74175.7 | 73152.7 | 1023.0 | 0.0 | completed；当前 best official valid；fixed heldout 50 |
 | aligned no-TRL competition deterministic | train | `academic/results/bfcl_align_notrl_compete_detinj_20260520.json` | 50 | 0.26 | 0.62 | 0.8325 | 0.8917 | 0.7982 | 61739.7 | 60635.9 | 1103.8 | 0.0 | ablation；current code role-aligned；extractor TRL off；candidate_competition=true；deterministic injector；every-step retrieval；extractor_existing_artifacts=full_store |
-| aligned no-TRL competition deterministic | test | `academic/results/bfcl_align_notrl_compete_detinj_20260520.json` | 50 | 0.12 | 0.74 | 0.7901 | 0.8938 | 0.7235 | 81663.5 | 80598.2 | 1065.3 | 0.0 | ablation；best current BFCL heldout strict/official；no skill_injector LLM calls |
+| aligned no-TRL competition deterministic | test | `academic/results/bfcl_align_notrl_compete_detinj_20260520.json` | 50 | 0.12 | 0.74 | 0.7901 | 0.8938 | 0.7235 | 81663.5 | 80598.2 | 1065.3 | 0.0 | ablation；best listed heldout official_valid；no skill_injector LLM calls；avg_score below latest baseline by 0.0092 |
 | aligned no-TRL competition LLM injector | train | `academic/results/bfcl_align_notrl_compete_llminj_20260520.json` | 50 | 0.26 | 0.66 | 0.8441 | 0.9035 | 0.8059 | 61484.3 | 60377.7 | 1106.6 | 0.0 | ablation；same as previous but BFCL_SKILL_INJECTOR_GATE=llm；809 total injector calls over train+test |
 | aligned no-TRL competition LLM injector | test | `academic/results/bfcl_align_notrl_compete_llminj_20260520.json` | 50 | 0.10 | 0.60 | 0.7763 | 0.8693 | 0.7139 | 74948.4 | 73896.2 | 1052.3 | 0.0 | ablation；LLM injector improves train valid but hurts heldout vs deterministic |
 | aligned TRL competition deterministic 20/50 | train | `academic/results/bfcl_align_trl_compete_detinj_train20_50_20260520.json` | 20 | 0.45 | 0.80 | 0.9114 | 0.9493 | 0.8972 | 49767.4 | 48747.8 | 1019.5 | 0.0 | debug warm-up；current code role-aligned；TRL on；candidate_competition=true；deterministic injector；checkpoint has completed prefix sidecars for continuation to 50 train |
@@ -81,11 +83,16 @@ Spreadsheet 主结果必须使用上述落盘 task id 文件。`shuffled_seed42_
 | strictmeta TRL 20/50 | test | `academic/results/bfcl_trl_strictmeta_train20_50_20260520.json` | 50 | 0.10 | 0.54 | 0.7602 | 0.8418 | 0.7117 | 71052.2 | 70013.8 | 1038.4 | 0.0 | fixed heldout 50；37 skills；prompt_only；called_skill_tools empty |
 | strictmeta TRL 50/50 | train | `academic/results/bfcl_trl_strictmeta_train50_50_20260520.json` | 50 | 0.22 | 0.64 | 0.8428 | 0.8937 | 0.8128 | 60965.8 | 59874.9 | 1090.9 | 0.0 | full 50 train；candidate rows 15；decisions 71；role feedback rules extractor/refiner/refactorer = 5/5/5 |
 | strictmeta TRL 50/50 | test | `academic/results/bfcl_trl_strictmeta_train50_50_20260520.json` | 50 | 0.10 | 0.66 | 0.7965 | 0.8824 | 0.7423 | 74365.6 | 73309.4 | 1056.2 | 0.0 | fixed heldout 50；161 skills；top injected: symbol binding, brake/start, invoice, order verification |
+| baseline after fixes deterministic | train | `academic/results/bfcl_baseline_detinj_after_baseline_fixes_20260521_run2.json` | 50 | 0.26 | 0.62 | 0.8264 | 0.8882 | 0.7899 | 62233.1 | 61115.8 | 1117.3 | 0.0 | baseline sanity；same aligned no-TRL deterministic setting；extractor TRL off；candidate rows 7；19 skills |
+| baseline after fixes deterministic | test | `academic/results/bfcl_baseline_detinj_after_baseline_fixes_20260521_run2.json` | 50 | 0.12 | 0.70 | 0.7993 | 0.8985 | 0.7330 | 81423.4 | 80334.9 | 1088.6 | 0.0 | latest baseline；主口径 official_valid 35/50、avg_score 0.7993；official_valid above group-refiner TRL 33/50，avg_score below TRL by 0.0028 |
+| group-refiner TRL 50/50 | train | `academic/results/bfcl_trl_group_refiner_50_50_20260521.json` | 50 | 0.22 | 0.70 | 0.8338 | 0.8999 | 0.7978 | 63668.7 | 62561.4 | 1107.3 | 0.0 | extractor-only TRL with LLM group_refiner；candidate rows 9；283 skills；group_refiner fallback once due JSON/max-token ValueError |
+| group-refiner TRL 50/50 | test | `academic/results/bfcl_trl_group_refiner_50_50_20260521.json` | 50 | 0.08 | 0.66 | 0.8021 | 0.8982 | 0.7353 | 78353.5 | 77282.1 | 1071.4 | 0.0 | fixed heldout 50；avg_score best among listed TRL rows and +0.0028 vs latest baseline；official_valid 33/50 below latest baseline 35/50；no skill_injector LLM |
+| SkillX fresh no-memory baseline | test | `academic/results/skillx_bfcl_aligned/skillx_bfcl_no_memory_baseline_50_50_20260521.json` | 50 | 0.08 | 0.50 | 0.7446 | 0.8169 | 0.7066 | 69286.1 | 68271.2 | 1014.9 | 0.0 | same SkillX-aligned manifest；fresh no-skill baseline；all logs show `skill_injection_mode=none` |
 | SkillX aligned 50/50 | test | `academic/results/skillx_bfcl_aligned/skillx_bfcl_50_50_sonnet_hash_embed_20260520/skillx_bfcl_result_with_elapsed.json` | 50 | 0.08 | 0.54 | 0.7679 | 0.8508 | 0.7140 | 78787.6 | 77726.6 | 1061.0 | 0.0 | completed diagnostic；plan_with_skill；max_skills=10；uses hash embedding fallback；caveat `academic/results/skillx_bfcl_aligned/skillx_bfcl_50_50_sonnet_hash_embed_20260520/embedding_caveat.json` |
 
 ### BFCL 2026-05-20 fixed 50/50 完整指标
 
-这些行都使用同一个 fixed manifest：`academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`。`strict` 是 task-level exact success；`official_valid` 是 BFCL official checker 口径；`score/Mtok` 和 `valid/Mtok` 来自 `utility_per_million_tokens`。
+这些行都使用同一个 fixed manifest：`academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`。当前 BFCL 主结论优先比较 `official_valid` 与 `avg_score`；`strict` 是 task-level exact success，作为原始记录列保留但不作为当前主口径。`official_valid` 是 BFCL official checker 口径；`score/Mtok` 和 `valid/Mtok` 来自 `utility_per_million_tokens`。
 
 | run | phase | n | strict | official_valid | avg_score | recall | precision | avg_tokens | input | output | elapsed_s | model_steps | score/Mtok | valid/Mtok | total_tokens |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -104,6 +111,11 @@ Spreadsheet 主结果必须使用上述落盘 task id 文件。`shuffled_seed42_
 | strictmeta TRL 20/50 test | test | 50 | `5/50 = 0.10` | `27/50 = 0.5400` | 0.7602 | 0.8418 | 0.7117 | 71052.2 | 70013.8 | 1038.4 | 38.094 | 9.68 | 10.698579 | 7.600042 | 3552612 |
 | strictmeta TRL 50/50 train | train | 50 | `11/50 = 0.22` | `32/50 = 0.6400` | 0.8428 | 0.8937 | 0.8128 | 60965.8 | 59874.9 | 1090.9 | 46.282 | 9.14 | 13.824828 | 10.497685 | 3048291 |
 | strictmeta TRL 50/50 test | test | 50 | `5/50 = 0.10` | `33/50 = 0.6600` | 0.7965 | 0.8824 | 0.7423 | 74365.6 | 73309.4 | 1056.2 | 48.147 | 9.84 | 10.710818 | 8.875076 | 3718278 |
+| baseline after fixes train | train | 50 | `13/50 = 0.26` | `31/50 = 0.6200` | 0.8264 | 0.8882 | 0.7899 | 62233.1 | 61115.8 | 1117.3 | 34.035 | 9.26 | 13.279075 | 9.962544 | 3111655 |
+| baseline after fixes test | test | 50 | `6/50 = 0.12` | `35/50 = 0.7000` | 0.7993 | 0.8985 | 0.7330 | 81423.4 | 80334.9 | 1088.6 | 35.294 | 10.18 | 9.816019 | 8.597033 | 4071172 |
+| group-refiner TRL train | train | 50 | `11/50 = 0.22` | `35/50 = 0.7000` | 0.8338 | 0.8999 | 0.7978 | 63668.7 | 62561.4 | 1107.3 | 34.666 | 9.24 | 13.095728 | 10.994413 | 3183435 |
+| group-refiner TRL test | test | 50 | `4/50 = 0.08` | `33/50 = 0.6600` | 0.8021 | 0.8982 | 0.7353 | 78353.5 | 77282.1 | 1071.4 | 33.366 | 9.84 | 10.236766 | 8.423368 | 3917673 |
+| SkillX fresh no-memory baseline | test | 50 | `4/50 = 0.08` | `25/50 = 0.5000` | 0.7446 | 0.8169 | 0.7066 | 69286.1 | 68271.2 | 1014.9 | 32.570 | 9.54 | 10.746914 | 7.216453 | 3464306 |
 | SkillX test | test | 50 | `4/50 = 0.08` | `27/50 = 0.5400` | 0.7679 | 0.8508 | 0.7140 | 78787.6 | 77726.6 | 1061.0 | 34.927 | 9.78 | 9.746531 | 6.853869 | 3939381 |
 
 ## Spreadsheet
@@ -147,6 +159,45 @@ Spreadsheet 主结果必须使用上述落盘 task id 文件。`shuffled_seed42_
 | mock smoke | `academic/results/skillsbench_mock_smoke_20260518.json` | 4 | 1.0 | 1.0 | 338.8 | 288.2 | 50.5 | 0.088 | mock harness |
 | baseline fixture3 | `academic/results/skillsbench_baseline_fixture3_20260518.json` | 3 | 1.0 | 1.0 | 702.3 | 448.0 | 254.3 | 19.94 | fixture baseline |
 | curated mock diag | `academic/results/skillsbench_curated_mock_diag_20260518.json` | 5 | 0.2 | 0.3 | 346.4 | 297.4 | 49.0 | 0.21 | curated mock diagnostic |
+
+## 2026-05-22 Overnight Runs
+
+### BFCL Meta5 TRL / Ablations
+
+这些行使用 fixed manifest `academic/experiments/bfcl_case_lists/curated_related_manifest_50_50.json`。主比较仍优先看 `official_valid` 和 `avg_score`；`strict` 是 exact task success。
+
+| run | phase | file | n | strict | official_valid | avg_score | avg_tokens | model_steps | timeout | 备注 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| Meta5 TRL initial | train | `academic/results/bfcl_trl_refiner_candidates_meta5_50_50_20260522.json` | 50 | `13/50 = 0.26` | 0.66 | 0.8251 | 64259.6 | 9.18 | 0.0 | role feedback called but role rules stayed empty; diagnostic predecessor |
+| Meta5 TRL initial | test | `academic/results/bfcl_trl_refiner_candidates_meta5_50_50_20260522.json` | 50 | `7/50 = 0.14` | 0.70 | 0.8083 | 81098.8 | 9.82 | 0.0 | official_valid ties latest deterministic baseline; avg_score higher |
+| Meta5 TRL rulesfix | train | `academic/results/bfcl_trl_refiner_candidates_meta5_rulesfix_50_50_20260522.json` | 50 | `12/50 = 0.24` | 0.68 | 0.8266 | 63693.5 | 9.24 | 0.0 | main successful Meta5 run |
+| Meta5 TRL rulesfix | test | `academic/results/bfcl_trl_refiner_candidates_meta5_rulesfix_50_50_20260522.json` | 50 | `6/50 = 0.12` | 0.76 | 0.8144 | 82875.1 | 10.20 | 0.0 | best current BFCL heldout official_valid and avg_score in this group |
+| Meta5 -refactor | train | `academic/results/bfcl_trl_meta5_ablation_no_refactor_50_50_20260522.json` | 50 | `10/50 = 0.20` | 0.48 | 0.7828 | 62361.3 | 9.32 | 0.0 | clean ablation; refactor disabled |
+| Meta5 -refactor | test | `academic/results/bfcl_trl_meta5_ablation_no_refactor_50_50_20260522.json` | 50 | `3/50 = 0.06` | 0.48 | 0.7461 | 70454.4 | 9.68 | 0.0 | refactor removal collapses heldout official_valid |
+| Meta5 -refine diagnostic | train | `academic/results/bfcl_trl_meta5_ablation_no_refine_50_50_20260522.json` | 50 | `12/50 = 0.24` | 0.70 | 0.8369 | 65198.9 | 9.32 | 0.0 | not clean: one refine path remained active |
+| Meta5 -refine diagnostic | test | `academic/results/bfcl_trl_meta5_ablation_no_refine_50_50_20260522.json` | 50 | `2/50 = 0.04` | 0.74 | 0.7988 | 83481.1 | 10.18 | 0.0 | diagnostic only; do not use as clean ablation |
+| Meta5 -refine clean | train | `academic/results/bfcl_trl_meta5_ablation_no_refine_clean_50_50_20260522.json` | 50 | `12/50 = 0.24` | 0.70 | 0.8293 | 63632.9 | 9.12 | 0.0 | clean refine-disabled ablation |
+| Meta5 -refine clean | test | `academic/results/bfcl_trl_meta5_ablation_no_refine_clean_50_50_20260522.json` | 50 | `7/50 = 0.14` | 0.72 | 0.7949 | 80666.2 | 9.82 | 0.0 | refine contributes about +0.04 official_valid and +0.0195 avg_score vs full |
+
+### Spreadsheet Bash / Folder Skill
+
+这些行使用 fixed Spreadsheet split files `shuffled_seed42_train_200.json` / `shuffled_seed42_test_200.json`，`bash_react` executor，folder skill format。`called` 统计为命令层直接读取/import skill package 文件，不把 prompt metadata 计为使用。
+
+| run | phase | file | n | success | avg_score | avg_tokens | input | output | elapsed_s | skills | called/copy evidence | 备注 |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| folder generalized direct strict | train | `academic/results/spreadsheet_0521-folder-generalized-direct-strict-50_50.json` | 50 | `11/50 = 0.22` | 0.3140 | 37874.3 | 33890.8 | 3983.5 | 19500 observed | 13 total / 12 pending / 1 disabled | not rechecked here | long full run; no TRL |
+| folder generalized direct strict | test | `academic/results/spreadsheet_0521-folder-generalized-direct-strict-50_50.json` | 50 | `17/50 = 0.34` | 0.3782 | 31944.9 | 28852.6 | 3092.3 | 19500 observed | 13 total / 12 pending / 1 disabled | not rechecked here | best strict among these Spreadsheet folder rows |
+| folder + Spreadsheet TRL | train | `academic/results/spreadsheet_trl_folder_bash_50_50_20260522.json` | 50 | `11/50 = 0.22` | 0.3151 | 35483.4 | 31595.4 | 3888.0 | 13920 observed | 8 pending | 0 command-level use | TRL enabled but no feedback rows |
+| folder + Spreadsheet TRL | test | `academic/results/spreadsheet_trl_folder_bash_50_50_20260522.json` | 50 | `15/50 = 0.30` | 0.3755 | 32637.9 | 29390.8 | 3247.1 | 13920 observed | 8 pending | 3 tasks read/import/copy skill package code; 0 callable calls | completed after adding micro-maintenance timeout guard |
+| Spreadsheet SkillX aligned | test | `academic/results/skillx_spreadsheet_aligned/skillx_spreadsheet_bash_react_50_50_20260522/skillx_spreadsheet_test_result.json` | 50 | `17/50 = 0.34` | 0.3969 | 31645.2 | 27946.6 | 3698.6 | - | SkillX library | selected skills on 48/50 tasks | strongest Spreadsheet heldout avg_score among this set |
+| bash fixedsplit baseline | test | `academic/results/spreadsheet_0520-fixedsplit-bash-react-baseline-test50.json` | 50 | `14/50 = 0.28` | 0.3003 | - | - | - | - | 0 | none | paired no-skill baseline |
+| bash promptfix baseline | test | `academic/results/spreadsheet_0520-bash-react-baseline-test50-promptfix.json` | 50 | `15/50 = 0.30` | 0.3582 | - | - | - | - | 0 | none | prompt-fixed baseline |
+
+Diagnostic only:
+
+| run | file | n | result | note |
+|---|---|---:|---|---|
+| Spreadsheet +TRL smoke | `academic/results/spreadsheet_trl_smoke4_2_20260522.json` | train 4 / test 2 | completed; 1 pending skill; TRL enabled but `n_feedback_rows=0` | validated resume + micro-maintenance timeout guard before full 50/50 |
 
 ## 读表注意
 

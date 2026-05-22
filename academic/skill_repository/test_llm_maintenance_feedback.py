@@ -339,6 +339,64 @@ Prefer narrow lookup contracts.
     assert "lookup result id" in parsed["rules"][0]["text"]
 
 
+def test_parse_role_rule_update_text_ignores_fence_and_json_residue() -> None:
+    parsed = _parse_role_rule_update_text(
+        """=== ANALYSIS ===
+Model wrapped the rule section in stray JSON text.
+=== SUMMARY ===
+Keep only actionable rules.
+=== RULES ===
+```json
+[scope] Extract one rule per distinct workflow pattern.",
+"delimiter": "=== END ==="
+}
+```
+=== END ===""",
+        max_rules=5,
+        prefix="extractor_rule",
+    )
+
+    assert len(parsed["rules"]) == 1
+    assert parsed["rules"][0]["focus"] == "scope"
+    assert parsed["rules"][0]["text"] == "Extract one rule per distinct workflow pattern."
+
+
+@pytest.mark.asyncio
+async def test_update_role_rules_keeps_raw_preview_for_empty_rule_update(monkeypatch) -> None:
+    async def fake_ask_text(*, system, user, llm_config, model_name, role, metadata):
+        return """=== ANALYSIS ===
+The evidence is mature but the model failed to write a concrete rule.
+=== SUMMARY ===
+No rule emitted.
+=== RULES ===
+=== END ==="""
+
+    monkeypatch.setattr("academic.skill_repository.llm_maintenance._ask_text", fake_ask_text)
+
+    result = await update_role_rules_from_feedback_llm(
+        role_name="extractor",
+        current_rules=[],
+        feedback_rows=[
+            {
+                "candidate_group_id": "extract:r0:t1:task",
+                "source_role": "extractor",
+                "members": [
+                    {"skill_name": "skill_a", "helpful_count": 1},
+                    {"skill_name": "skill_b", "harmful_count": 1},
+                ],
+            }
+        ],
+        llm_config="mock",
+        model_name="mock-model",
+        max_rules=3,
+    )
+
+    assert result["rules"] == []
+    assert result["n_new_rules"] == 0
+    assert result["empty_update_reason"] == "empty_rule_update"
+    assert "=== RULES ===" in result["raw_response_preview"]
+
+
 @pytest.mark.asyncio
 async def test_update_refiner_rules_prompt_uses_refiner_label_and_empty_list(monkeypatch) -> None:
     captured: dict = {}

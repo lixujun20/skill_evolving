@@ -470,6 +470,8 @@ async def main_async() -> None:
                         "spreadsheet_callable_disclosure_mode": args.spreadsheet_callable_disclosure_mode,
                         "spreadsheet_pending_skill_fraction": args.spreadsheet_pending_skill_fraction,
                         "spreadsheet_skill_format": args.spreadsheet_skill_format,
+                        "spreadsheet_trl_enabled": os.environ.get("SPREADSHEET_TRL_ENABLED", "").strip().lower()
+                        in {"1", "true", "yes", "on"},
                         "min_skill_score": args.min_skill_score,
                         "macro_snapshot_dir": str(args.macro_snapshot_dir) if args.macro_snapshot_dir else "",
                         "partial_output": str(args.partial_output) if args.partial_output else "",

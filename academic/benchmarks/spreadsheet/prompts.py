@@ -119,6 +119,9 @@ evolution system.
 
 You receive one compact SpreadsheetBench task trace. Extract reusable,
 testable spreadsheet skills only when the trace evidence supports them.
+Your main job is to preserve the part of the successful solution that can
+transfer to future SpreadsheetBench tasks. Prefer generalized spreadsheet
+operations over task-specific answer scripts.
 
 Field semantics:
 - `artifacts`: [] when the trace is speculative, too local, already covered by
@@ -169,9 +172,25 @@ Rules:
 3. Prefer reusable openpyxl idioms over task transcripts. Bash heredocs are
    execution wrappers, not skill code: extract the Python/openpyxl logic inside
    them and rewrite it to use INPUT_XLSX and OUTPUT_XLSX.
-4. Do not copy full code. Keep snippets short and parameterized by active sheet,
-   answer range, or detected headers.
-5. Hard size limits per artifact:
+4. Generalize aggressively but honestly:
+   - Replace fixed sheet names, columns, row numbers, literal keywords, and
+     answer ranges with detected headers, configurable inputs, or explicit
+     applicability notes.
+   - Do not bake in workbook-specific constants such as a single project name,
+     one fixed marker list, or one exact source/target range unless the skill is
+     explicitly a narrow contract for that pattern.
+   - A later executor may copy/adapt the script instead of importing it. Make
+     `SKILL.md` explain what to change safely and what must stay invariant.
+   - If the reusable idea is smaller than the original solution, extract only
+     the smaller operation.
+5. For `skill_package`, `SKILL.md` must be concise and operational. Include
+   these sections in plain Markdown: When to use, When not to use, Inputs to
+   configure, Workbook assumptions, How to copy/adapt or run. The scripts can
+   live under `scripts/` and should expose small helpers or a simple CLI-style
+   entrypoint that accepts workbook paths and configurable parameters.
+6. Do not copy full code. Keep snippets short and parameterized by active sheet,
+   answer range, detected headers, marker predicates, or threshold values.
+7. Hard size limits per artifact:
    - body <= 220 words and <= 60 non-empty lines.
    - every executable code block <= 35 non-empty lines. Keep executable code
      blocks complete; never truncate code mid-block.
@@ -180,13 +199,29 @@ Rules:
      non-empty lines, and every test file <= 80 non-empty lines.
    If a candidate exceeds these limits, split it into multiple narrower skills
    or compress it to the reusable contract. Never output an oversized skill.
-6. Do not invent benchmark answers or hidden workbook structure.
-7. If the trace failed or score is below 0.9, extract only when verifier
+8. Do not invent benchmark answers or hidden workbook structure.
+9. If the trace failed or score is below 0.9, extract only when verifier
    mismatches or stderr prove a concrete corrective contract. For example,
    predicted-vs-expected formula mismatches can become a narrow formula-pattern
    skill; do not extract from opaque failures.
-8. Return strict JSON only. End every object and array explicitly. Escape every
+10. Return strict JSON only. End every object and array explicitly. Escape every
    string normally. Prefer `code_lines` arrays over multi-line strings.
+
+Spreadsheet few-shot guidance:
+- Good skill: from a task that scans text cells for requested keywords and
+  writes markers, extract a parameterized keyword-matching helper. Inputs should
+  include sheet/header or search range, keyword list, match mode, and output
+  column/range. Do not hardcode the original keyword list.
+- Good skill: from a task that moves or copies a column selected by header,
+  extract header lookup plus column move/copy while preserving styles, formulas,
+  widths, and merged-cell safety notes. Inputs should include header text or
+  predicate and destination position.
+- Good skill: from a task that deletes rows by cross-sheet match, extract a
+  configurable two-sheet row filter keyed by selected columns. Inputs should
+  include source sheet, reference sheet, key columns, and deletion/copy mode.
+- Bad skill: a script named for one workbook that hardcodes "Core Activation",
+  columns D->F, and a fixed answer sheet without detection or configuration.
+  Return [] or rewrite it as a narrower parameterized helper.
 
 Return schema:
 {
